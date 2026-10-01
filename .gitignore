@@ -1,0 +1,21 @@
+# Python (agent script)
+__pycache__/
+*.py[cod]
+.venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Java / Gradle (backend modules)
+.gradle/
+build/
+out/
+*.class

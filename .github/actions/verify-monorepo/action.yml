@@ -1,0 +1,74 @@
+name: Verify monorepo
+description: >
+  Builds and tests every module that has a build manifest. Modules without one are
+  reported as warnings (visible in the run summary) instead of being skipped silently.
+
+inputs:
+  strict:
+    description: Fail (instead of warn) when a module has no build manifest
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Detect initialized modules
+      id: detect
+      shell: bash
+      run: |
+        has() { [ -f "$1" ] && echo true || echo false; }
+        backend=false
+        if [ -f gradlew ] && { [ -f settings.gradle ] || [ -f settings.gradle.kts ]; }; then backend=true; fi
+        echo "backend=$backend" >> "$GITHUB_OUTPUT"
+        echo "web=$(has admin-console/frontend/package.json)" >> "$GITHUB_OUTPUT"
+        echo "mobile=$(has client-console/mobile/pubspec.yaml)" >> "$GITHUB_OUTPUT"
+
+        level=warning; [ "${{ inputs.strict }}" = "true" ] && level=error
+        [ "$backend" = true ] || echo "::$level title=Backend not verified::No gradlew + settings.gradle(.kts) at repo root, Java modules were NOT compiled."
+        [ -f admin-console/frontend/package.json ] || echo "::$level title=Web not verified::admin-console/frontend/package.json not found."
+        [ -f client-console/mobile/pubspec.yaml ] || echo "::$level title=Mobile not verified::client-console/mobile/pubspec.yaml not found."
+        if [ "$level" = error ] && { [ "$backend" = false ] || [ ! -f admin-console/frontend/package.json ] || [ ! -f client-console/mobile/pubspec.yaml ]; }; then exit 1; fi
+
+    # --- Backend: Java 21 / Spring Boot 4 ---
+    - if: steps.detect.outputs.backend == 'true'
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: temurin
+        cache: gradle
+    - name: Build backend (Gradle)
+      if: steps.detect.outputs.backend == 'true'
+      shell: bash
+      run: |
+        chmod +x ./gradlew
+        ./gradlew build --no-daemon
+
+    # --- Admin web: React + TypeScript ---
+    - if: steps.detect.outputs.web == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: npm
+        cache-dependency-path: admin-console/frontend/package-lock.json
+    - name: Build admin web (typecheck + vite build)
+      if: steps.detect.outputs.web == 'true'
+      shell: bash
+      working-directory: admin-console/frontend
+      run: |
+        npm ci --no-audit --no-fund
+        npm run build
+
+    # --- Mobile: Flutter ---
+    - if: steps.detect.outputs.mobile == 'true'
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        cache: true
+    - name: Analyze & test mobile (Flutter)
+      if: steps.detect.outputs.mobile == 'true'
+      shell: bash
+      working-directory: client-console/mobile
+      run: |
+        flutter pub get
+        flutter analyze
+        flutter test

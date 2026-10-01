@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - lib/**.g.dart
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    # Const-ness hints are auto-fixable with `dart fix --apply`; kept off so they don't fail CI while screens are still evolving.
+    prefer_const_constructors: false
+    prefer_const_literals_to_create_immutables: false

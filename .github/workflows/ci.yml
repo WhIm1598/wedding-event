@@ -1,0 +1,26 @@
+name: CI
+
+# Verifies human-authored changes. Note: PRs opened by the Claude agent use GITHUB_TOKEN and do
+# NOT trigger this workflow (GitHub limitation) — the agent workflow runs the same verify action itself.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/verify-monorepo

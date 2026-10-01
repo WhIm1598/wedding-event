@@ -1,0 +1,108 @@
+name: Claude Spec-to-Code Agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/features/**.md'
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Spec file to implement (default: docs/features/detailed_functional_specification.md)'
+        required: false
+      targets:
+        description: 'Comma-separated targets: web,mobile,backend (default: every initialized module)'
+        required: false
+
+# One agent run at a time; queued runs build on the latest main
+concurrency:
+  group: claude-agent
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to diff the spec against the previous commit
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Anthropic SDK
+        run: pip install "anthropic>=1.11,<2"
+
+      # Inputs are passed via env (not interpolated into the script) to avoid shell injection
+      - name: Generate code from spec
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
+          CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT || 'high' }}
+          ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
+          BEFORE_SHA: ${{ github.event.before }}
+          SPEC_INPUT: ${{ inputs.spec }}
+          TARGETS_INPUT: ${{ inputs.targets }}
+        run: |
+          args=(--report "$RUNNER_TEMP/ai-report.md")
+          [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
+          [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
+          python .github/scripts/claude_coder.py "${args[@]}"
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git status --short
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Agent produced no changes."
+          fi
+
+      - name: Snapshot generated changes
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git add -A
+          git diff --cached > "$RUNNER_TEMP/ai-generated.patch"
+          git reset -q
+
+      - name: Verify (build + test)
+        if: steps.changes.outputs.changed == 'true'
+        uses: ./.github/actions/verify-monorepo
+
+      # Keep the generated code reviewable even when verification fails
+      - name: Upload generated patch
+        if: always() && steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-generated-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ai-generated.patch
+            ${{ runner.temp }}/ai-report.md
+
+      - name: Create draft Pull Request
+        if: success() && steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ai/spec-update-${{ github.run_id }}
+          delete-branch: true
+          draft: true
+          labels: ai-generated
+          # Only module source is committed; build outputs are ignored by each module's .gitignore
+          add-paths: |
+            admin-console/**
+            client-console/**
+            backend-common/**
+          commit-message: 'feat(ai): implement spec changes from ${{ github.sha }}'
+          title: '🤖 [AI Agent] Implement spec update (${{ github.sha }})'
+          body-path: ${{ runner.temp }}/ai-report.md

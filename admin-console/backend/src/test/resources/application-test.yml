@@ -1,0 +1,10 @@
+app:
+  jwt:
+    secret: test-only-secret-0123456789abcdefghijklmnop
+  demo-data:
+    enabled: true
+
+logging:
+  level:
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN
