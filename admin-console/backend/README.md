@@ -47,13 +47,19 @@ backend-common/            (dùng chung với client-console/backend)
   api/ApiResponse          Envelope {success, code, message, data, errors}
   exception/               AppException + GlobalExceptionHandler (mã lỗi theo spec)
   support/CodeGenerator    Mã NV-001 / HD-105 / TRX-001 từ PostgreSQL sequence
+  resources/db/migration/  Flyway migrations — nguồn duy nhất của schema (Hibernate chỉ ddl-auto=validate)
 
 admin-console/backend/
   security/                JWT (access 2h / refresh 30d), RBAC theo URL + @PreAuthorize
   auth/ dashboard/ booking/ packages/ asset/ staff/ crm/ contract/ finance/
   notification/ search/ settings/ demo/
-  resources/db/migration/  Flyway (Hibernate chạy ddl-auto=validate)
 ```
+
+## Database (Flyway)
+
+Khi khởi động, service tự chạy `flyway migrate` với các migration trong `backend-common/src/main/resources/db/migration`
+rồi Hibernate kiểm tra entity khớp schema. Thêm/sửa bảng = tạo file `V{n}__mo_ta.sql` mới, **không** sửa file đã phát hành.
+Quy ước đầy đủ, lệnh xem lịch sử migration và reset DB local: [backend-common/src/main/resources/db/README.md](../../backend-common/src/main/resources/db/README.md).
 
 ## API
 

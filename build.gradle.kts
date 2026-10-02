@@ -35,6 +35,8 @@ subprojects {
         "annotationProcessor"("org.projectlombok:lombok")
         "testCompileOnly"("org.projectlombok:lombok")
         "testAnnotationProcessor"("org.projectlombok:lombok")
+        // Launcher aligned with the BOM's JUnit version (Gradle's bundled one is older)
+        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
 
     tasks.withType<JavaCompile>().configureEach {

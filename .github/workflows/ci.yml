@@ -18,6 +18,32 @@ permissions:
   contents: read
 
 jobs:
+  # Flyway checksums released migrations: editing/renaming/deleting one breaks every existing database.
+  # Only new files may be added under */db/migration/ (see backend-common/src/main/resources/db/README.md).
+  migrations-immutable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject changes to released Flyway migrations
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare against — skipping."; exit 0
+          fi
+          # A = new file (fine). R100 = moved with identical content (fine: Flyway keys on version + checksum,
+          # not on the folder). Anything else (M, D, partial renames) changes a released migration.
+          changed=$(git diff --name-status -M100% "$BASE"...HEAD -- '*/db/migration/*' | grep -vE '^(A|R100)[[:space:]]' || true)
+          if [ -n "$changed" ]; then
+            echo "::error::Released Flyway migrations must not be modified or deleted. Add a new V{n}__*.sql instead:"
+            echo "$changed"
+            exit 1
+          fi
+          echo "OK — only new migrations were added."
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30

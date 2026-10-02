@@ -8,7 +8,8 @@ Hệ sinh thái ứng dụng quản lý sự kiện cưới và vận hành stud
 
 ```
 wedding-event/
-├── backend-common/              # Java 21 / Spring Boot 4 - Entities, DTOs, Repositories dùng chung
+├── CLAUDE.md                    # Bản đồ dự án cho Claude Code (mỗi module có CLAUDE.md riêng: cấu trúc, công thức thêm tính năng, quy tắc)
+├── backend-common/              # Java 21 / Spring Boot 4 - Entities, DTOs, Repositories, Flyway migrations (db/migration) dùng chung
 ├── admin-console/               # Hệ thống Quản trị Vận hành Studio (Lumière Studios)
 │   ├── backend/                 # Java Spring Boot 4 - RESTful API quản lý Studio (RBAC Admin/Staff)
 │   └── frontend/                # React 18 + TypeScript + Tailwind CSS - Web Dashboard Studio
@@ -38,25 +39,25 @@ wedding-event/
 | Phân hệ | Công nghệ chính |
 | :--- | :--- |
 | **Backend Core** | Java 21, Spring Boot 4.x, Spring Data JPA, Spring Security, Hibernate |
-| **Database** | PostgreSQL / MySQL, Redis (Cache & Session) |
+| **Database** | PostgreSQL 16 (schema quản lý bằng Flyway), Redis (Cache & Session) |
 | **Admin Web Portal** | React 18, TypeScript, Tailwind CSS, Lucide React, Vite |
 | **Client Mobile App** | Flutter 3.x, Dart, Firebase Cloud Messaging, WebSocket STOMP |
-| **AI & Automation** | Custom In-House AI Model (FastAPI/PyTorch - Runtime), Claude Opus 5.5 - Anthropic API (CI/CD Agentic Code Gen), GitHub Actions |
+| **AI & Automation** | Custom In-House AI Model (FastAPI/PyTorch - Runtime), Claude Code (`anthropics/claude-code-action`, CI/CD Agentic Code Gen), GitHub Actions |
 
 ---
 
 ## 🚀 3. Quy Trình Phát Triển Tự Động Hóa (AI Agentic Workflow)
 
-Hệ thống ứng dụng mô hình **Spec-Driven Development** kết hợp với **Claude Opus 5.5**:
+Hệ thống ứng dụng mô hình **Spec-Driven Development** kết hợp với **Claude Code** (chạy trong GitHub Actions bằng `anthropics/claude-code-action`):
 
 ```mermaid
 flowchart TD
     PO["1. PO cập nhật yêu cầu<br/>(docs/features/wedding_platform_feature_spec.md)"] --> BA["2. Soạn đặc tả chi tiết Function<br/>(docs/features/detailed_functional_specification.md)"]
     BA --> Push["3. Commit & Push lên branch main"]
     Push --> CI["4. GitHub Actions kích hoạt<br/>(claude-agent.yml)"]
-    CI --> PythonScript["5. claude_coder.py đọc Spec + diff thay đổi & quét mã nguồn các module đã khởi tạo"]
-    PythonScript --> ClaudeAI["6. Claude sinh mã theo quy ước từng module<br/>(structured JSON output, streaming)"]
-    ClaudeAI --> Guard["7. Safety rails: chỉ ghi vào src/lib/test của module đang active<br/>(cấm .github/, docs/, lockfile, dependency manifest)"]
+    CI --> PythonScript["5. claude_coder.py prepare: lập đề bài (spec diff, module đang active, quy ước, phiên bản Flyway kế tiếp)"]
+    PythonScript --> ClaudeAI["6. Claude Code tự đọc spec + mã nguồn và sửa code<br/>(chỉ Read/Edit + git chỉ-đọc)"]
+    ClaudeAI --> Guard["7. claude_coder.py guard: hoàn tác mọi thay đổi ngoài src/lib/test của module đang active<br/>(cấm .github/, docs/, lockfile, dependency manifest, sửa migration đã phát hành)"]
     Guard --> VerifyJava["8.1. Backend: ./gradlew build (khi đã có Gradle)"]
     Guard --> VerifyWeb["8.2. Web: npm ci + npm run build"]
     Guard --> VerifyMobile["8.3. Mobile: flutter analyze + flutter test"]
@@ -129,25 +130,24 @@ flutter analyze && flutter test            # giống CI
 
 #### 4. Chạy thử AI Coder Agent nội bộ
 ```bash
-pip install "anthropic>=1.11,<2"
-python .github/scripts/claude_coder.py --print-prompt   # xem context gửi đi, không gọi API
-export ANTHROPIC_API_KEY="your-anthropic-api-key"
-python .github/scripts/claude_coder.py --dry-run --targets web   # gọi model, không ghi file
-python .github/scripts/claude_coder.py --report report.md        # ghi file + báo cáo
+python .github/scripts/claude_coder.py prepare --targets web --out task.md   # xem đề bài gửi cho Claude Code
+claude -p "$(cat task.md)"                                                    # chạy bằng Claude Code CLI trên máy
+python .github/scripts/claude_coder.py guard --dry-run --targets web          # kiểm tra thay đổi (không hoàn tác)
 ```
+> ⚠️ `guard` không có `--dry-run` sẽ **hoàn tác** mọi thay đổi chưa commit nằm ngoài phạm vi cho phép — chỉ chạy trên working tree sạch.
 
 ---
 
 ## 🔐 6. Cấu Hình GitHub Actions & Secrets
 
 Để quy trình tự động mở Pull Request hoạt động trên GitHub Repository:
-1. **Thêm Secret**: Vào `Settings > Secrets and variables > Actions`, thêm `ANTHROPIC_API_KEY` với API key lấy từ Claude Console (platform.claude.com).
+1. **Thêm Secret**: Trên máy đã cài Claude Code, chạy `claude setup-token` (đăng nhập bằng tài khoản Claude Pro/Max) để lấy OAuth token. Vào `Settings > Secrets and variables > Actions > New repository secret`, đặt tên `CLAUDE_CODE_OAUTH_TOKEN` và dán token. Lượt chạy của agent tính vào hạn mức sử dụng của tài khoản Claude đó.
 2. **Cấp quyền Workflow**: Vào `Settings > Actions > General > Workflow permissions`:
    * Chọn **"Read and write permissions"**.
    * Đánh dấu tích vào **"Allow GitHub Actions to create and approve pull requests"**.
 3. **Biến tùy chọn** (`Settings > Secrets and variables > Actions > Variables`):
    * `CLAUDE_MODEL` — mặc định `claude-opus-5-5`.
-   * `CLAUDE_EFFORT` — `low` / `medium` / `high` / `xhigh` / `max` (mặc định `high`; cao hơn = kỹ hơn nhưng tốn token hơn).
+   * `CLAUDE_MAX_TURNS` — số lượt tối đa của Claude Code trong một lần chạy (mặc định `150`); hết lượt thì job dừng, không mở PR.
    * `ALLOW_DEPENDENCY_CHANGES` — `true` để agent được sửa `package.json` / `pubspec.yaml` / `build.gradle` (mặc định `false`).
 
 ---

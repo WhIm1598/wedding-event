@@ -201,7 +201,7 @@ erDiagram
 
 ### 6.2. Đặc tả các trường dữ liệu chính
 
-> Mọi bảng có `created_at`, `updated_at` (TIMESTAMPTZ). Tiền là `NUMERIC(15,0)`. Enum lưu dạng chuỗi. 🆕 = cột/bảng thêm ở v1.1, chưa có trong migration hiện tại. Nguồn chuẩn của schema đã triển khai: `admin-console/backend/src/main/resources/db/migration/`.
+> Mọi bảng có `created_at`, `updated_at` (TIMESTAMPTZ). Tiền là `NUMERIC(15,0)`. Enum lưu dạng chuỗi. 🆕 = cột/bảng thêm ở v1.1, chưa có trong migration hiện tại. Nguồn chuẩn của schema đã triển khai: Flyway migration trong `backend-common/src/main/resources/db/migration/` (quy ước: `backend-common/src/main/resources/db/README.md`).
 
 1. **User (`users`)**:
    * `id` (UUID, PK), `email` (String, Unique), `password_hash` (String), `full_name` (String), `phone` (String, Nullable), `avatar_url` (String, Nullable), `role` (Enum: `ROLE_COUPLE`, `ROLE_VENDOR`, `ROLE_STAFF`, `ROLE_ADMIN`), `is_active` (Boolean), `is_verified` (Boolean — OTP email, phía mobile), `staff_member_id` (UUID, FK `staff_members`, Nullable — tài khoản Web Admin gắn hồ sơ nhân sự), 🆕 `must_change_password` (Boolean), 🆕 `failed_login_count` (Integer), 🆕 `locked_until` (Timestamp, Nullable), 🆕 `last_login_at` (Timestamp, Nullable). *(Cột `has_plan` của mobile được suy ra từ `wedding_plans`, không lưu.)*

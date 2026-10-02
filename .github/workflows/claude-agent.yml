@@ -28,36 +28,85 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # GitHub passes an empty string when the secret doesn't exist (or for runs from forks).
+      # Spec pushes then skip generation with a warning instead of failing; a manual run fails loudly.
+      - name: Check Claude Code token
+        id: key
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          msg="Repository secret CLAUDE_CODE_OAUTH_TOKEN is not set (run 'claude setup-token', then Settings → Secrets and variables → Actions → New repository secret)."
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "::error::$msg"
+            exit 1
+          fi
+          echo "::warning::$msg Skipping code generation."
+          echo "present=false" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
+        if: steps.key.outputs.present == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # needed to diff the spec against the previous commit
 
       - name: Set up Python
+        if: steps.key.outputs.present == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install Anthropic SDK
-        run: pip install "anthropic>=1.11,<2"
-
       # Inputs are passed via env (not interpolated into the script) to avoid shell injection
-      - name: Generate code from spec
+      - name: Prepare task prompt
+        if: steps.key.outputs.present == 'true'
+        id: prepare
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
-          CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT || 'high' }}
           ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
           BEFORE_SHA: ${{ github.event.before }}
           SPEC_INPUT: ${{ inputs.spec }}
           TARGETS_INPUT: ${{ inputs.targets }}
         run: |
-          args=(--report "$RUNNER_TEMP/ai-report.md")
+          args=(--out "$RUNNER_TEMP/claude-task.md")
           [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
           [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
-          python .github/scripts/claude_coder.py "${args[@]}"
+          python .github/scripts/claude_coder.py prepare "${args[@]}"
+          delimiter="EOF_$(openssl rand -hex 16)"
+          { echo "prompt<<$delimiter"; cat "$RUNNER_TEMP/claude-task.md"; echo; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
+
+      # Claude Code edits the working tree; it may only read the repo, edit files and run read-only git.
+      # Committing, branching and the PR are done by the steps below, after the guard and the build check.
+      - name: Implement spec with Claude Code
+        if: steps.key.outputs.present == 'true'
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: ${{ steps.prepare.outputs.prompt }}
+          claude_args: >-
+            --model ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
+            --max-turns ${{ vars.CLAUDE_MAX_TURNS || '150' }}
+            --allowedTools "Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)"
+
+      # Reverts anything outside the safety rails and writes the PR description
+      - name: Guard changes
+        if: steps.key.outputs.present == 'true'
+        env:
+          ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
+          SPEC_INPUT: ${{ inputs.spec }}
+          TARGETS_INPUT: ${{ inputs.targets }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          args=(--report "$RUNNER_TEMP/ai-report.md" --execution-file "$EXECUTION_FILE")
+          [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
+          [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
+          python .github/scripts/claude_coder.py guard "${args[@]}"
 
       - name: Detect changes
+        if: steps.key.outputs.present == 'true'
         id: changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then

@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-Spec-to-code agent: reads the PO specs in docs/features/, sends them together with the
-current module source to Claude, and writes the returned files back into the repo.
+Spec-to-code agent helper around Claude Code (anthropic/claude-code-action).
 
-Safety rails:
-  * Writes/deletes are only allowed inside the source folders of *initialized* modules
-    (a module is initialized when its build manifest exists), never in .github/ or docs/.
-  * Dependency manifests (package.json, pubspec.yaml, build.gradle) are read-only unless
-    ALLOW_DEPENDENCY_CHANGES=true.
-  * Every rejected path is listed in the report so reviewers can see what the model tried.
+The workflow runs three steps:
+  1. `prepare`  — builds the task prompt: what changed in the PO spec, which modules are active, their
+                  conventions and the rules (Claude Code then reads the spec and the code itself).
+  2. Claude Code edits the working tree (authenticated with CLAUDE_CODE_OAUTH_TOKEN).
+  3. `guard`    — checks every file Claude changed against the safety rails, reverts anything not allowed
+                  and writes the Markdown report used as the PR description.
+
+Safety rails (enforced by `guard`, also stated in the prompt):
+  * Changes are only kept inside the source folders of *initialized* modules (a module is initialized when
+    its build manifest exists), never in .github/, docs/, lock files or build output.
+  * Dependency manifests (package.json, pubspec.yaml, build.gradle) are read-only unless ALLOW_DEPENDENCY_CHANGES=true.
+  * Released Flyway migrations are immutable; new ones must be V{highest+1}__lower_snake_case.sql in backend-common.
+  * Every reverted path is listed in the report so reviewers can see what the agent tried.
 
 Local usage:
-  python .github/scripts/claude_coder.py --print-prompt          # inspect prompt, no API call
-  ANTHROPIC_API_KEY=... python .github/scripts/claude_coder.py --dry-run
+  python .github/scripts/claude_coder.py prepare --out task.md         # inspect the prompt
+  python .github/scripts/claude_coder.py guard --dry-run               # check uncommitted changes, revert nothing
 
 Environment:
-  ANTHROPIC_API_KEY         required for real runs
-  CLAUDE_MODEL              default claude-opus-5-5
-  CLAUDE_EFFORT             low | medium | high | xhigh | max (default high)
-  ALLOW_DEPENDENCY_CHANGES  true to let the model edit package.json / pubspec.yaml / build.gradle
-  CONTEXT_CHAR_BUDGET       max characters of source sent as context (default 700000)
+  BEFORE_SHA                previous commit of the push (spec diff base; default HEAD~1)
+  ALLOW_DEPENDENCY_CHANGES  true to let the agent edit package.json / pubspec.yaml / build.gradle
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ import fnmatch
 import json
 import os
 import posixpath
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -39,12 +43,9 @@ DETAILED_SPEC = f'{SPEC_DIR}/detailed_functional_specification.md'
 OVERVIEW_SPEC = f'{SPEC_DIR}/wedding_platform_feature_spec.md'
 TEMPLATES_DIR = 'docs/templates'
 
-DEFAULT_MODEL = 'claude-opus-5-5'
-DEFAULT_EFFORT = 'high'
-EFFORT_LEVELS = ('low', 'medium', 'high', 'xhigh', 'max')
-CONTEXT_CHAR_BUDGET = int(os.environ.get('CONTEXT_CHAR_BUDGET', '700000'))
 MAX_FILE_CHARS = 200_000
-MAX_OUTPUT_TOKENS = 128_000  # model maximum; streaming keeps long generations under HTTP timeouts
+# Larger spec diffs are not inlined; Claude Code reads them with `git diff` instead
+MAX_INLINE_DIFF_CHARS = 60_000
 
 
 # --------------------------------------------------------------------------------------
@@ -53,11 +54,10 @@ MAX_OUTPUT_TOKENS = 128_000  # model maximum; streaming keeps long generations u
 @dataclass(frozen=True)
 class Target:
     key: str
-    roots: tuple[str, ...]          # folders scanned for context
     manifests: tuple[str, ...]      # any of these existing => module initialized
-    writable: tuple[str, ...]       # glob patterns the agent may create/modify/delete
+    writable: tuple[str, ...]       # glob patterns the agent may create/modify/delete (incl. the module guides)
     dependency_files: tuple[str, ...]
-    conventions: str
+    guides: tuple[str, ...]         # CLAUDE.md files with the module's structure & conventions
 
     def initialized(self) -> bool:
         return any((REPO_ROOT / m).is_file() for m in self.manifests)
@@ -66,73 +66,38 @@ class Target:
 TARGETS: tuple[Target, ...] = (
     Target(
         key='web',
-        roots=('admin-console/frontend',),
         manifests=('admin-console/frontend/package.json',),
-        writable=('admin-console/frontend/src/*', 'admin-console/frontend/index.html'),
+        writable=('admin-console/frontend/src/*', 'admin-console/frontend/index.html', 'admin-console/frontend/CLAUDE.md'),
         dependency_files=('admin-console/frontend/package.json',),
-        conventions="""\
-admin-console/frontend — React 18 + TypeScript (strict) + Vite + Tailwind CSS 3 + React Router 6 + lucide-react.
-- Domain types live in src/types/index.ts and mirror the detailed spec (enums as string unions, money = number VND, dates = ISO strings).
-- One API module per spec module in src/api/<module>.api.ts. EVERY function has two branches:
-  `if (!env.useMock) return http.<verb>('/admin/...')` (real endpoint from the spec) and a mock branch that reads/mutates
-  the in-memory db in src/api/mock/db.ts and returns `delay(...)`. Keep mock mode working: add seed data for new entities.
-- Business errors from the spec are thrown as `new ApiError(status, CODE, message)` in mock mode too.
-- Screens live in src/features/<module>/ (page + components/). Shared UI: src/components/ui (Badge, Button, Card, Field/Input/Select/Textarea, Modal/SlideOver, PageHeader, Spinner/ErrorState/EmptyState).
-- Enum -> Vietnamese label/badge colour mappings go in src/constants/labels.ts. Formatting helpers: src/lib/format.ts, src/lib/date.ts.
-- New pages: add a route in src/app/router.tsx (wrap admin-only pages with adminOnly) and a menu entry in src/app/navigation.ts.
-- Data loading via the useAsync hook; forms read values with FormData; feedback via useToast(). UI text is Vietnamese.
-- Code must pass `tsc --noEmit` with noUnusedLocals/noUnusedParameters.""",
+        guides=('admin-console/frontend/CLAUDE.md',),
     ),
     Target(
         key='mobile',
-        roots=('client-console/mobile',),
         manifests=('client-console/mobile/pubspec.yaml',),
-        writable=('client-console/mobile/lib/*', 'client-console/mobile/test/*'),
+        writable=('client-console/mobile/lib/*', 'client-console/mobile/test/*', 'client-console/mobile/CLAUDE.md'),
         dependency_files=('client-console/mobile/pubspec.yaml',),
-        conventions="""\
-client-console/mobile — Flutter (Dart 3.5+), go_router, provider, dio. Package name: wedplanner.
-- Models in lib/data/models (immutable, const constructors, fromJson/toJson matching the spec JSON).
-- One repository per API module in lib/data/repositories. EVERY method branches on `Env.useMock`:
-  mock branch uses lib/data/mock/mock_data.dart + `mockDelay(...)`, real branch calls `_api.get/post/put/patch(path, parse: ...)`
-  against the client backend (/client/**, /auth/**). Spec error codes are thrown as ApiException(code:, message:).
-- Repositories are provided in lib/app.dart (MultiProvider); session/role state is SessionController (lib/state).
-- Screens in lib/features/<feature>/; register new routes in lib/core/router/app_router.dart (Routes constants).
-- Use AppColors / shared widgets from lib/core/widgets/common.dart (AppCard, ScreenHeader, TabHeader, PrimaryButton, AsyncView, StatusChip, IconBubble, showAppSnack).
-  Money/date formatting via Fmt, validation via Validators (lib/core/utils). UI text is Vietnamese.
-- Must pass `flutter analyze` (flutter_lints) with zero issues: do NOT use deprecated APIs (Color.withOpacity, MaterialStateProperty,
-  DropdownButtonFormField(value:), Switch(activeColor:)); check `mounted` after every await before using context;
-  never call context.read inside build (use context.watch); always pass super.key; dispose controllers.
-- Add/extend unit tests in test/ for new pure logic (formatters, validators, calculations).""",
+        guides=('client-console/mobile/CLAUDE.md',),
     ),
     Target(
         key='backend',
-        roots=('backend-common', 'admin-console/backend', 'client-console/backend'),
         manifests=('settings.gradle', 'settings.gradle.kts'),
-        writable=('backend-common/src/*', 'admin-console/backend/src/*', 'client-console/backend/src/*'),
+        # client-console/backend is not a Gradle module yet (see its CLAUDE.md): code there would never be compiled or
+        # tested, so it isn't writable until the module is set up.
+        writable=('backend-common/src/*', 'admin-console/backend/src/*', 'backend-common/CLAUDE.md', 'admin-console/backend/CLAUDE.md'),
         dependency_files=(
             'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts',
             'backend-common/build.gradle', 'backend-common/build.gradle.kts',
             'admin-console/backend/build.gradle', 'admin-console/backend/build.gradle.kts',
-            'client-console/backend/build.gradle', 'client-console/backend/build.gradle.kts',
         ),
-        conventions="""\
-Backend — Java 21, Spring Boot 4, jakarta.* (Persistence, Validation), Gradle multi-module.
-- backend-common: JPA entities, enums, repositories, ApiResponse<T> envelope {success, code, message, data, errors}, AppException hierarchy.
-- admin-console/backend: controllers under /api/v1/admin/** (ROLE_ADMIN / ROLE_STAFF). client-console/backend: /api/v1/client/** and /api/v1/auth/**.
-- Request DTOs carry Bean Validation annotations matching the spec's validation rules; error codes exactly as in the spec.
-- Response JSON field names must match the TypeScript/Dart models already used by the web and mobile apps.""",
+        guides=('backend-common/CLAUDE.md', 'admin-console/backend/CLAUDE.md', 'client-console/backend/CLAUDE.md'),
     ),
 )
-
 # Never writable, even if a writable pattern would match (defense in depth)
 FORBIDDEN = ('.github/*', 'docs/*', '*/.env', '*/.env.*', '*.lock', '*/package-lock.json', '*/node_modules/*', '*/build/*', '*/dist/*')
 
-CONTEXT_EXTENSIONS = {'.ts', '.tsx', '.js', '.json', '.html', '.css', '.dart', '.yaml', '.yml', '.java', '.gradle', '.kts', '.properties', '.xml'}
-CONTEXT_SKIP_DIRS = {'node_modules', 'dist', 'build', '.dart_tool', '.git', '.gradle', '.idea', '.vscode', 'ios', 'android', '__pycache__', '.antigravity'}
-CONTEXT_SKIP_FILES = {'package-lock.json', 'pubspec.lock'}
-
-# Contract-like files are sent first so they survive the context budget
-PRIORITY_HINTS = ('types/', '/models/', '/api/', '/repositories/', 'router', 'navigation', '/config/', '/theme/', 'labels', 'mock', 'app.dart', 'main.')
+# Flyway migrations: existing files are immutable, new ones must continue the version sequence
+MIGRATION_DIR = 'backend-common/src/main/resources/db/migration'
+MIGRATION_NAME = re.compile(r'^V(\d+)__[a-z0-9]+(?:_[a-z0-9]+)*\.sql$')
 
 
 # --------------------------------------------------------------------------------------
@@ -143,12 +108,9 @@ def log(msg: str) -> None:
 
 
 def git(*args: str) -> str:
-    res = subprocess.run(['git', *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True)
+    # Explicit UTF-8: specs are Vietnamese and the Windows default code page can't decode them
+    res = subprocess.run(['git', *args], cwd=REPO_ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace', check=True)
     return res.stdout
-
-
-def read(rel: str) -> str:
-    return (REPO_ROOT / rel).read_text(encoding='utf-8')
 
 
 def matches(path: str, patterns: tuple[str, ...]) -> bool:
@@ -169,298 +131,249 @@ def normalize_path(raw: str) -> str | None:
     return p
 
 
+def allow_dependency_changes() -> bool:
+    return os.environ.get('ALLOW_DEPENDENCY_CHANGES', 'false').lower() == 'true'
+
+
+def select_targets(raw: str) -> tuple[list[Target], list[Target]] | None:
+    """(active, skipped) for a comma-separated --targets value; None when invalid (already logged)."""
+    requested = {k.strip() for k in raw.split(',') if k.strip()}
+    unknown = requested - {t.key for t in TARGETS}
+    if unknown:
+        log(f'❌ Unknown targets: {", ".join(sorted(unknown))}')
+        return None
+    selected = [t for t in TARGETS if not requested or t.key in requested]
+    active = [t for t in selected if t.initialized()]
+    skipped = [t for t in selected if not t.initialized()]
+    for t in skipped:
+        log(f'⚠️  Target "{t.key}" skipped: none of {t.manifests} exists.')
+    if not active:
+        log('❌ No initialized target modules to work on.')
+        return None
+    return active, skipped
+
+
+def head_migration_versions() -> set[int]:
+    """Flyway versions committed at HEAD (what is already released from this branch's point of view)."""
+    try:
+        names = git('ls-tree', '--name-only', 'HEAD', f'{MIGRATION_DIR}/').splitlines()
+    except subprocess.CalledProcessError:
+        return set()
+    return {int(m.group(1)) for n in names if (m := MIGRATION_NAME.match(posixpath.basename(n)))}
+
+
 # --------------------------------------------------------------------------------------
-# Spec & context
+# prepare: build the task prompt
 # --------------------------------------------------------------------------------------
-def spec_diff(before_sha: str | None) -> str:
-    """Diff of docs/features between the previous push state and HEAD (empty for manual runs)."""
-    base = before_sha if before_sha and set(before_sha) != {'0'} else 'HEAD~1'
+def spec_diff_base(before_sha: str | None) -> str:
+    return before_sha if before_sha and set(before_sha) != {'0'} else 'HEAD~1'
+
+
+def spec_diff(base: str) -> str:
+    """Diff of docs/features between the previous push state and HEAD ('' when unavailable)."""
     try:
         return git('diff', '--unified=5', base, 'HEAD', '--', SPEC_DIR)
     except subprocess.CalledProcessError:
         return ''
 
 
-def gather_context(targets: list[Target]) -> tuple[list[dict[str, str]], list[str]]:
-    candidates: list[str] = []
-    for target in targets:
-        for root in target.roots:
-            base = REPO_ROOT / root
-            if not base.is_dir():
-                continue
-            for path in base.rglob('*'):
-                rel_parts = path.relative_to(REPO_ROOT).parts
-                if not path.is_file() or CONTEXT_SKIP_DIRS.intersection(rel_parts):
-                    continue
-                if path.suffix not in CONTEXT_EXTENSIONS or path.name in CONTEXT_SKIP_FILES:
-                    continue
-                candidates.append(path.relative_to(REPO_ROOT).as_posix())
-
-    # UI templates are reference material, lowest priority
-    templates = sorted(p.relative_to(REPO_ROOT).as_posix() for p in (REPO_ROOT / TEMPLATES_DIR).glob('*') if p.is_file())
-
-    def priority(rel: str) -> tuple[int, str]:
-        return (0 if any(h in rel for h in PRIORITY_HINTS) else 1, rel)
-
-    ordered = sorted(set(candidates), key=priority) + templates
-    included: list[dict[str, str]] = []
-    omitted: list[str] = []
-    used = 0
-    for rel in ordered:
-        try:
-            content = read(rel)
-        except (UnicodeDecodeError, OSError):
-            continue
-        if used + len(content) > CONTEXT_CHAR_BUDGET:
-            omitted.append(rel)
-            continue
-        included.append({'path': rel, 'content': content})
-        used += len(content)
-    return included, omitted
-
-
-def build_prompt(spec_path: str, diff: str, targets: list[Target], skipped: list[Target], context: list[dict[str, str]], omitted: list[str]) -> tuple[str, str]:
+def build_prompt(spec_path: str, base: str, diff: str, targets: list[Target], skipped: list[Target]) -> str:
     writable = [p for t in targets for p in t.writable]
-    system = f"""You are a senior full-stack engineer working on the Wedding Event monorepo.
-Your job: implement the product-owner spec changes in the existing code base, following its conventions exactly.
+    deps = 'ALLOWED (call them out in the summary)' if allow_dependency_changes() else 'NOT allowed'
+    next_migration = max(head_migration_versions(), default=0) + 1
+    if not diff.strip():
+        diff_section = ('No spec diff is available (manual run or first commit): implement anything in the spec that the code '
+                        'does not implement yet, prioritising items marked 🆕/⚠️ in the order given in the spec\'s section 2.')
+    elif len(diff) <= MAX_INLINE_DIFF_CHARS:
+        diff_section = f'What changed in the specs (focus on this):\n```diff\n{diff.strip()}\n```'
+    else:
+        diff_section = (f'The spec diff is large ({len(diff):,} chars). Read it with `git diff {base} HEAD -- {SPEC_DIR}` '
+                        'and focus on what changed.')
 
-ACTIVE TARGETS (you may only modify files matching these patterns): {json.dumps(writable)}
-{"INACTIVE TARGETS (do NOT generate files for them, module not initialized): " + ", ".join(t.key for t in skipped) if skipped else ""}
-Never touch .github/, docs/, lock files or dependency manifests ({'allowed' if allow_dependency_changes() else 'NOT allowed'} to change dependencies).
+    return f"""You are a senior full-stack engineer working on the Wedding Event monorepo, running unattended in CI.
+Implement the product-owner spec changes in the existing code base, following its conventions exactly.
 
-MODULE CONVENTIONS
-{chr(10).join(t.conventions for t in targets)}
+## Inputs
+- Detailed functional spec (source of truth for schemas, validation rules, error codes, formulas): `{spec_path}`
+- Product overview spec (context): `{OVERVIEW_SPEC}`
+- UI reference templates (look & feel only): `{TEMPLATES_DIR}/`
+- {diff_section}
 
-RULES
-1. The detailed functional spec is the source of truth for schemas, validation rules, error codes and formulas;
-   the overview spec gives product context. The "SPEC DIFF" shows what just changed — focus on it.
-2. Keep web and mobile consistent with each other and with the spec JSON field names.
-3. Return ONLY files you create or change, each with its COMPLETE final content (no placeholders, no "..." elisions).
-   List files to remove in `deletions`. Do not return unchanged files.
-4. Keep changes minimal and focused; reuse existing helpers/components instead of duplicating them.
-5. If the spec is ambiguous or contradicts itself, choose the safest interpretation and explain it in `notes`.
-6. `summary` is a short Markdown description of what you implemented (used as the PR description).
+## Scope
+- Active modules: {', '.join(t.key for t in targets)}.{f" Inactive (do NOT create files for them): {', '.join(t.key for t in skipped)}." if skipped else ''}
+- You may only create, modify or delete files matching: {json.dumps(writable)}.
+- Never touch .github/, docs/, lock files or build output. Dependency manifests are {deps}.
+- Anything outside these rules is automatically reverted after you finish, so don't rely on it.
+
+## Module guides — read these first
+Project structure, where each kind of code goes, step-by-step recipes and module rules are in `CLAUDE.md` (repo root) and:
+{chr(10).join(f'- `{g}`' for t in targets for g in t.guides)}
+Use them to go straight to the files you need instead of exploring the whole tree.
+
+## Rules
+1. Read the relevant spec sections and the files you will change before editing; reuse existing helpers/components.
+2. Keep web, mobile and backend consistent with each other and with the spec JSON field names.
+3. Write complete code — no placeholders, TODO stubs or "..." elisions. Keep changes focused on the spec change.
+4. The next Flyway migration, if the schema changes, is `{MIGRATION_DIR}/V{next_migration}__<description>.sql`.
+5. Do not commit, push, create branches or open PRs — the workflow verifies the build and opens a draft PR.
+6. If the spec is ambiguous or contradicts itself, choose the safest interpretation and say so.
+7. If you add a new folder, pattern or shared helper, update that module's `CLAUDE.md` in the same change (keep it short).
+
+## Final answer
+End with a short Markdown summary for the PR description: what you implemented (by spec function id),
+then a "### Notes" section listing spec ambiguities and anything left undone.
 """
-    prompt = f"""SPEC DIFF (what changed since the previous version; empty = implement anything in the spec not yet implemented):
-```diff
-{diff.strip() or '(no diff available)'}
-```
-
-DETAILED FUNCTIONAL SPEC ({spec_path}):
----
-{read(spec_path)}
----
-
-OVERVIEW SPEC ({OVERVIEW_SPEC}):
----
-{read(OVERVIEW_SPEC) if spec_path != OVERVIEW_SPEC else '(same as above)'}
----
-
-CURRENT SOURCE ({len(context)} files, JSON array of {{path, content}}):
-{json.dumps(context, ensure_ascii=False)}
-
-FILES THAT EXIST BUT WERE OMITTED FOR SIZE (do not recreate them; ask for them in notes if needed):
-{json.dumps(omitted)}
-"""
-    return system, prompt
 
 
-# Structured output schema (output_config.format): every object needs additionalProperties=false
-RESPONSE_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'summary': {'type': 'string'},
-        'files': {
-            'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {'path': {'type': 'string'}, 'content': {'type': 'string'}},
-                'required': ['path', 'content'],
-                'additionalProperties': False,
-            },
-        },
-        'deletions': {'type': 'array', 'items': {'type': 'string'}},
-        'notes': {'type': 'array', 'items': {'type': 'string'}},
-    },
-    'required': ['summary', 'files', 'deletions', 'notes'],
-    'additionalProperties': False,
-}
+def cmd_prepare(args: argparse.Namespace) -> int:
+    spec = normalize_path(args.spec)
+    if not spec or not spec.startswith(f'{SPEC_DIR}/') or not (REPO_ROOT / spec).is_file():
+        log(f'❌ Spec not found under {SPEC_DIR}/: {args.spec}')
+        return 1
+    selection = select_targets(args.targets)
+    if selection is None:
+        return 1
+    targets, skipped = selection
 
-
-def allow_dependency_changes() -> bool:
-    return os.environ.get('ALLOW_DEPENDENCY_CHANGES', 'false').lower() == 'true'
+    base = spec_diff_base(os.environ.get('BEFORE_SHA'))
+    diff = spec_diff(base)
+    prompt = build_prompt(spec, base, diff, targets, skipped)
+    log(f'📖 Spec: {spec} | diff: {len(diff):,} chars | targets: {", ".join(t.key for t in targets)} | prompt: {len(prompt):,} chars')
+    if args.out:
+        Path(args.out).write_text(prompt, encoding='utf-8')
+    else:
+        log(prompt)
+    return 0
 
 
 # --------------------------------------------------------------------------------------
-# Claude call
+# guard: validate Claude's changes, revert what's not allowed, write the report
 # --------------------------------------------------------------------------------------
 @dataclass
-class CallInfo:
-    requested_model: str
-    served_model: str
-    fallback_used: bool
-    input_tokens: int
-    output_tokens: int
-    request_id: str | None
-
-
-def call_claude(system: str, prompt: str, model: str, effort: str) -> tuple[dict, CallInfo]:
-    import anthropic  # imported lazily so --print-prompt works without the SDK
-
-    # The SDK retries 408/409/429/5xx and connection errors on the initial request (max_retries).
-    # Generations here can run for many minutes, so a long timeout + streaming is required.
-    log(f'🤖 Calling {model} (effort={effort}, max_tokens={MAX_OUTPUT_TOKENS})...')
-    try:
-        client = anthropic.Anthropic(max_retries=4, timeout=60 * 60)
-        with client.beta.messages.stream(
-            model=model,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            system=system,
-            messages=[{'role': 'user', 'content': prompt}],
-            # Thinking is always on for Opus 5.5; effort controls depth (its default is medium).
-            output_config={
-                'effort': effort,
-                'format': {'type': 'json_schema', 'schema': RESPONSE_SCHEMA},
-            },
-            # On a safety-classifier decline, re-run on Anthropic's recommended fallback model
-            # instead of failing the CI run.
-            betas=['server-side-fallback-2026-07-01'],
-            fallbacks='default',
-        ) as stream:
-            response = stream.get_final_message()
-            request_id = stream.request_id  # log it when reporting failures to Anthropic
-    except anthropic.AuthenticationError as e:
-        raise RuntimeError('Invalid ANTHROPIC_API_KEY.') from e
-    except anthropic.PermissionDeniedError as e:
-        raise RuntimeError(f'API key lacks permission for {model}: {e.message}') from e
-    except anthropic.NotFoundError as e:
-        raise RuntimeError(f'Unknown model "{model}" — check the CLAUDE_MODEL variable.') from e
-    except anthropic.BadRequestError as e:
-        raise RuntimeError(f'Request rejected (400): {e.message}') from e
-    except anthropic.RateLimitError as e:
-        raise RuntimeError(f'Rate limited after retries (request-id: {e.request_id}). Re-run the workflow later.') from e
-    except anthropic.APIStatusError as e:
-        raise RuntimeError(f'API error {e.status_code} after retries (request-id: {e.request_id}): {e.message}') from e
-    except anthropic.APIConnectionError as e:
-        raise RuntimeError(f'Connection to the Claude API failed: {e}') from e
-    except anthropic.AnthropicError as e:  # e.g. no credentials configured
-        raise RuntimeError(f'Claude client error: {e}') from e
-
-    if response.stop_reason == 'refusal':
-        details = response.stop_details
-        category = getattr(details, 'category', None) if details else None
-        raise RuntimeError(f'Model declined the request (category: {category}). Review the spec content.')
-    if response.stop_reason == 'max_tokens':
-        raise RuntimeError(
-            f'Response truncated at {MAX_OUTPUT_TOKENS} output tokens. '
-            'Split the spec change into smaller commits or run with fewer --targets.'
-        )
-
-    # output_config.format guarantees the text block is JSON matching RESPONSE_SCHEMA
-    text = next((b.text for b in response.content if b.type == 'text'), '')
-    try:
-        result = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f'Could not parse model output as JSON: {e}') from e
-
-    fallback_used = any(getattr(it, 'type', None) == 'fallback_message' for it in (response.usage.iterations or []))
-    info = CallInfo(
-        requested_model=model,
-        served_model=response.model,
-        fallback_used=fallback_used,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-        request_id=request_id,
-    )
-    log(f'✅ {info.served_model} | in={info.input_tokens} out={info.output_tokens} tokens | request-id={info.request_id}')
-    return result, info
-
-
-# --------------------------------------------------------------------------------------
-# Apply result
-# --------------------------------------------------------------------------------------
-@dataclass
-class ApplyResult:
+class GuardResult:
     written: list[str] = field(default_factory=list)
     deleted: list[str] = field(default_factory=list)
     rejected: list[tuple[str, str]] = field(default_factory=list)
     dependency_changes: list[str] = field(default_factory=list)
 
 
-def check_path(raw: str, targets: list[Target]) -> tuple[str | None, str]:
-    path = normalize_path(raw)
-    if path is None:
-        return None, 'unsafe path'
+def changed_paths() -> list[tuple[str, bool, bool]]:
+    """(path, existed_at_HEAD, exists_now) for every file that differs from HEAD, including untracked files."""
+    tracked = [p for p in git('diff', '--name-only', '--no-renames', 'HEAD').splitlines() if p]
+    untracked = [p for p in git('ls-files', '--others', '--exclude-standard').splitlines() if p]
+    result = [(p, True, (REPO_ROOT / p).exists()) for p in tracked]
+    result += [(p, False, True) for p in untracked]
+    return sorted(set(result))
+
+
+def check_change(path: str, existed: bool, exists: bool, targets: list[Target], migrations: set[int]) -> str:
+    """'' when the change is allowed, otherwise the reason it is reverted."""
+    if normalize_path(path) is None:
+        return 'unsafe path'
     if matches(path, FORBIDDEN):
-        return None, 'forbidden location'
+        return 'forbidden location'
+    if '/db/migration/' in path and not path.startswith(MIGRATION_DIR + '/'):
+        return f'Flyway migrations belong in {MIGRATION_DIR}/'
+    if path.startswith(MIGRATION_DIR + '/'):
+        if existed:
+            return 'released Flyway migration is immutable — add a new V{n}__*.sql instead'
+        name = posixpath.basename(path)
+        m = MIGRATION_NAME.match(name)
+        if not m:
+            return f'migration name must be V{{n}}__lower_snake_case.sql, got {name}'
+        expected = max(migrations, default=0) + 1
+        if int(m.group(1)) != expected:
+            return f'migration version must be V{expected} (next in sequence), got V{m.group(1)}'
     dep_files = tuple(f for t in targets for f in t.dependency_files)
     if path in dep_files:
-        return (path, 'dependency manifest') if allow_dependency_changes() else (None, 'dependency changes disabled')
+        return '' if allow_dependency_changes() else 'dependency changes disabled'
     if not matches(path, tuple(p for t in targets for p in t.writable)):
-        return None, 'outside active target source folders'
-    return path, ''
+        return 'outside active target source folders'
+    if exists and (REPO_ROOT / path).is_file() and (REPO_ROOT / path).stat().st_size > MAX_FILE_CHARS * 4:
+        return 'file too large'
+    return ''
 
 
-def apply_result(result: dict, targets: list[Target], dry_run: bool) -> ApplyResult:
-    out = ApplyResult()
-    for item in result.get('files', []):
-        path, reason = check_path(item.get('path', ''), targets)
-        content = item.get('content', '')
-        if path is None:
-            out.rejected.append((item.get('path', ''), reason))
-            continue
-        if len(content) > MAX_FILE_CHARS:
-            out.rejected.append((path, f'file too large ({len(content)} chars)'))
-            continue
-        if reason == 'dependency manifest':
-            out.dependency_changes.append(path)
-        if not dry_run:
-            dest = REPO_ROOT / path
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(content if content.endswith('\n') else content + '\n', encoding='utf-8')
-        out.written.append(path)
+def revert(path: str, existed: bool) -> None:
+    if existed:
+        git('checkout', 'HEAD', '--', path)
+    else:
+        (REPO_ROOT / path).unlink(missing_ok=True)
 
-    for raw in result.get('deletions', []) or []:
-        path, reason = check_path(raw, targets)
-        if path is None or reason == 'dependency manifest':
-            out.rejected.append((raw, f'delete refused: {reason or "dependency manifest"}'))
-            continue
-        if (REPO_ROOT / path).is_file():
+
+def guard(targets: list[Target], dry_run: bool) -> GuardResult:
+    out = GuardResult()
+    migrations = head_migration_versions()
+
+    # New migrations first, lowest version first, so several in one run are checked in sequence
+    def order(change: tuple[str, bool, bool]) -> tuple[int, int, str]:
+        m = MIGRATION_NAME.match(posixpath.basename(change[0]))
+        return (0, int(m.group(1)), change[0]) if m and change[0].startswith(MIGRATION_DIR + '/') else (1, 0, change[0])
+
+    for path, existed, exists in sorted(changed_paths(), key=order):
+        reason = check_change(path, existed, exists, targets, migrations)
+        if reason:
+            out.rejected.append((path, reason))
             if not dry_run:
-                (REPO_ROOT / path).unlink()
-            out.deleted.append(path)
+                revert(path, existed)
+            continue
+        if path.startswith(MIGRATION_DIR + '/') and (m := MIGRATION_NAME.match(posixpath.basename(path))):
+            migrations.add(int(m.group(1)))
+        if path in {f for t in targets for f in t.dependency_files}:
+            out.dependency_changes.append(path)
+        (out.written if exists else out.deleted).append(path)
     return out
 
 
-def write_report(path: str | None, *, spec: str, call: CallInfo, effort: str, targets: list[Target], skipped: list[Target], result: dict, applied: ApplyResult, omitted: list[str]) -> None:
-    model_line = f'- Model: `{call.served_model}` (effort `{effort}`)'
-    if call.fallback_used:
-        model_line += f' — ⚠️ fallback from `{call.requested_model}` after a safety decline'
+def read_execution(path: str | None) -> dict:
+    """Summary text, model and turn count from the claude-code-action execution file (best effort)."""
+    info: dict = {}
+    if not path or not Path(path).is_file():
+        return info
+    try:
+        data = json.loads(Path(path).read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return info
+    messages = data if isinstance(data, list) else [data]
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        if msg.get('type') == 'system' and msg.get('subtype') == 'init' and msg.get('model'):
+            info['model'] = msg['model']
+        if msg.get('type') == 'result':
+            info['summary'] = msg.get('result') or ''
+            info['turns'] = msg.get('num_turns')
+            info['subtype'] = msg.get('subtype')
+    return info
+
+
+def write_report(path: str | None, *, spec: str, targets: list[Target], skipped: list[Target], run: dict, result: GuardResult) -> None:
+    agent = 'Claude Code'
+    if run.get('model'):
+        agent += f' (`{run["model"]}`)'
+    if run.get('turns'):
+        agent += f', {run["turns"]} turns'
+    if run.get('subtype') not in (None, 'success'):
+        agent += f' — ⚠️ ended with `{run["subtype"]}` (e.g. turn limit): the implementation may be incomplete'
     lines = [
         '## 🤖 AI-generated implementation',
         '',
-        result.get('summary', '').strip() or '_No summary returned._',
+        (run.get('summary') or '').strip() or '_Claude Code returned no summary._',
         '',
         '### Run details',
         f'- Spec: `{spec}`',
-        model_line,
-        f'- Tokens: {call.input_tokens:,} in / {call.output_tokens:,} out (request-id `{call.request_id}`)',
+        f'- Agent: {agent}',
         f'- Active targets: {", ".join(t.key for t in targets) or "none"}',
     ]
     if skipped:
         lines.append(f'- ⚠️ Skipped (module not initialized): {", ".join(t.key for t in skipped)}')
-    if omitted:
-        lines.append(f'- ⚠️ {len(omitted)} file(s) omitted from model context due to size budget')
-    lines += ['', f'### Files written ({len(applied.written)})', *[f'- `{p}`' for p in applied.written]]
-    if applied.deleted:
-        lines += ['', '### Files deleted', *[f'- `{p}`' for p in applied.deleted]]
-    if applied.dependency_changes:
-        lines += ['', '### ⚠️ Dependency manifests changed — review carefully', *[f'- `{p}`' for p in applied.dependency_changes]]
-    if applied.rejected:
-        lines += ['', '### 🚫 Rejected by safety rails', *[f'- `{p}` — {why}' for p, why in applied.rejected]]
-    notes = result.get('notes') or []
-    if notes:
-        lines += ['', '### Model notes / spec ambiguities', *[f'- {n}' for n in notes]]
+    lines += ['', f'### Files changed ({len(result.written)})', *[f'- `{p}`' for p in result.written]]
+    if result.deleted:
+        lines += ['', '### Files deleted', *[f'- `{p}`' for p in result.deleted]]
+    if result.dependency_changes:
+        lines += ['', '### ⚠️ Dependency manifests changed — review carefully', *[f'- `{p}`' for p in result.dependency_changes]]
+    if result.rejected:
+        lines += ['', '### 🚫 Reverted by safety rails', *[f'- `{p}` — {why}' for p, why in result.rejected]]
     lines += ['', '---', '_Draft PR: verified by build/analyze/test in CI. Human review required before merge._']
     report = '\n'.join(lines) + '\n'
 
@@ -473,62 +386,42 @@ def write_report(path: str | None, *, spec: str, call: CallInfo, effort: str, ta
     log(report)
 
 
+def cmd_guard(args: argparse.Namespace) -> int:
+    selection = select_targets(args.targets)
+    if selection is None:
+        return 1
+    targets, skipped = selection
+    result = guard(targets, args.dry_run)
+    for p, why in result.rejected:
+        log(f'🚫 {"would revert" if args.dry_run else "reverted"} {p}: {why}')
+    write_report(args.report, spec=normalize_path(args.spec) or args.spec, targets=targets, skipped=skipped,
+                 run=read_execution(args.execution_file), result=result)
+    return 0
+
+
 # --------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--spec', default=DETAILED_SPEC, help='spec file to implement (repo-relative)')
-    parser.add_argument('--targets', default='', help='comma-separated subset of: ' + ','.join(t.key for t in TARGETS))
-    parser.add_argument('--report', help='write the Markdown report (PR body) to this path')
-    parser.add_argument('--dry-run', action='store_true', help='call the model but do not write files')
-    parser.add_argument('--print-prompt', action='store_true', help='print prompt statistics and exit (no API call)')
+    sub = parser.add_subparsers(dest='command', required=True)
+
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument('--spec', default=DETAILED_SPEC, help='spec file to implement (repo-relative)')
+    common.add_argument('--targets', default='', help='comma-separated subset of: ' + ','.join(t.key for t in TARGETS))
+
+    p = sub.add_parser('prepare', parents=[common], help='write the task prompt for Claude Code')
+    p.add_argument('--out', help='write the prompt to this file (default: print it)')
+    p.set_defaults(func=cmd_prepare)
+
+    g = sub.add_parser('guard', parents=[common], help='validate/revert Claude\'s changes and write the PR report')
+    g.add_argument('--report', help='write the Markdown report (PR body) to this path')
+    g.add_argument('--execution-file', help='claude-code-action execution_file output (for the summary)')
+    g.add_argument('--dry-run', action='store_true', help='report what would be reverted without reverting')
+    g.set_defaults(func=cmd_guard)
+
     args = parser.parse_args()
-
-    spec = normalize_path(args.spec)
-    if not spec or not spec.startswith(f'{SPEC_DIR}/') or not (REPO_ROOT / spec).is_file():
-        log(f'❌ Spec not found under {SPEC_DIR}/: {args.spec}')
-        return 1
-
-    requested = {k.strip() for k in args.targets.split(',') if k.strip()}
-    unknown = requested - {t.key for t in TARGETS}
-    if unknown:
-        log(f'❌ Unknown targets: {", ".join(sorted(unknown))}')
-        return 1
-    selected = [t for t in TARGETS if not requested or t.key in requested]
-    targets = [t for t in selected if t.initialized()]
-    skipped = [t for t in selected if not t.initialized()]
-    for t in skipped:
-        log(f'⚠️  Target "{t.key}" skipped: none of {t.manifests} exists.')
-    if not targets:
-        log('❌ No initialized target modules to work on.')
-        return 1
-
-    diff = spec_diff(os.environ.get('BEFORE_SHA'))
-    context, omitted = gather_context(targets)
-    system, prompt = build_prompt(spec, diff, targets, skipped, context, omitted)
-    log(f'📖 Spec: {spec} | diff: {len(diff)} chars | context: {len(context)} files, {len(prompt)} chars | omitted: {len(omitted)}')
-
-    if args.print_prompt:
-        for f in context:
-            log(f'   - {f["path"]} ({len(f["content"])} chars)')
-        return 0
-
-    model = os.environ.get('CLAUDE_MODEL') or DEFAULT_MODEL
-    effort = (os.environ.get('CLAUDE_EFFORT') or DEFAULT_EFFORT).lower()
-    if effort not in EFFORT_LEVELS:
-        log(f'❌ CLAUDE_EFFORT must be one of {", ".join(EFFORT_LEVELS)} (got "{effort}").')
-        return 1
-
-    try:
-        result, call = call_claude(system, prompt, model, effort)
-    except RuntimeError as e:
-        log(f'❌ {e}')
-        return 1
-
-    applied = apply_result(result, targets, args.dry_run)
-    write_report(args.report, spec=spec, call=call, effort=effort, targets=targets, skipped=skipped, result=result, applied=applied, omitted=omitted)
-    return 0
+    return args.func(args)
 
 
 if __name__ == '__main__':

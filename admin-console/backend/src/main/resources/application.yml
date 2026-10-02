@@ -20,8 +20,16 @@ spring:
       ddl-auto: validate
     properties:
       hibernate.jdbc.time_zone: UTC
+  # Flyway owns the schema; migrations ship in backend-common (shared with client-console/backend).
+  # Every service applies the same set on startup — Flyway's lock on flyway_schema_history serializes them.
   flyway:
     locations: classpath:db/migration
+    fail-on-missing-locations: true
+    validate-on-migrate: true
+    validate-migration-naming: true
+    out-of-order: false
+    baseline-on-migrate: false
+    clean-disabled: true
 
 management:
   endpoints:

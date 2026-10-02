@@ -842,7 +842,7 @@ flowchart LR
 ## 2. QUY TRÌNH PHÁT TRIỂN & CHUYỂN GIAO (AGENT EXECUTION INSTRUCTIONS)
 
 Khi Agent thực hiện viết mã nguồn theo tài liệu này:
-* **Phiên bản Framework Backend chuẩn:** **Spring Boot 4.x** (chạy trên nền Java 21+, sử dụng chuẩn package `jakarta.*` cho Persistence và Validation). Schema DB thay đổi **chỉ** qua Flyway migration mới (`V{n}__mo_ta.sql`), không sửa migration đã phát hành; Hibernate chạy `ddl-auto=validate`.
+* **Phiên bản Framework Backend chuẩn:** **Spring Boot 4.x** (chạy trên nền Java 21+, sử dụng chuẩn package `jakarta.*` cho Persistence và Validation). Schema DB do **Flyway** quản lý: mọi thay đổi bảng/cột là một migration mới `backend-common/src/main/resources/db/migration/V{n}__mo_ta_snake_case.sql` (`n` = phiên bản lớn nhất + 1), sửa entity trong cùng PR; **không** sửa/đổi tên/xóa migration đã phát hành (CI và agent đều chặn); thay đổi phải tương thích ngược (thêm cột nullable → backfill → `NOT NULL` ở migration sau); không đưa dữ liệu demo vào migration. Hibernate chạy `ddl-auto=validate`. Chi tiết: `backend-common/src/main/resources/db/README.md`.
 * **Ưu tiên triển khai Phần B (v1.1):** (1) Nhóm A: FN-ADM-AUTH-01..04, §1.6 trạng thái hợp đồng, FN-ADM-ASSET-01 điều kiện hai chiều (đã đúng trong code), bổ sung phân trang. (2) FN-ADM-ASSET-03/04, FN-ADM-CRM-03, FN-ADM-FIN-02. (3) FN-ADM-CAL-03, FN-ADM-CONTR-02 sửa/hủy, FN-ADM-USER-01. (4) FN-PUB-CONTR-01, FN-ADM-STAFF-03, FN-ADM-SEARCH-01 điều hướng.
 1. **Bước 1 (Backend Common - Spring Boot 4):**
    * Định nghĩa các JPA Entities tương ứng với các bảng ở §6 của tài liệu tổng quan.
