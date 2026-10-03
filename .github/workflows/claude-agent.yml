@@ -1,5 +1,7 @@
 name: Claude Spec-to-Code Agent
 
+# Code is generated ONLY from changes to the specs in docs/features/. A run without spec changes
+# (pushes elsewhere don't even start it; a manual run with no diff) stops before calling Claude.
 on:
   push:
     branches: [main]
@@ -7,6 +9,9 @@ on:
       - 'docs/features/**.md'
   workflow_dispatch:
     inputs:
+      base:
+        description: 'Compare the specs against this commit/tag (default: previous commit). Only spec changes since then are implemented.'
+        required: false
       spec:
         description: 'Spec file to implement (default: docs/features/detailed_functional_specification.md)'
         required: false
@@ -26,7 +31,8 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Large spec changes can keep Claude Code busy for a long time; the build check still has to fit after it
+    timeout-minutes: 120
     steps:
       # GitHub passes an empty string when the secret doesn't exist (or for runs from forks).
       # Spec pushes then skip generation with a warning instead of failing; a manual run fails loudly.
@@ -66,47 +72,58 @@ jobs:
         env:
           ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
           BEFORE_SHA: ${{ github.event.before }}
+          BASE_INPUT: ${{ inputs.base }}
           SPEC_INPUT: ${{ inputs.spec }}
           TARGETS_INPUT: ${{ inputs.targets }}
         run: |
+          # Sets the step output has_changes=true|false
           args=(--out "$RUNNER_TEMP/claude-task.md")
+          [ -n "$BASE_INPUT" ] && args+=(--base "$BASE_INPUT")
           [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
           [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
           python .github/scripts/claude_coder.py prepare "${args[@]}"
-          delimiter="EOF_$(openssl rand -hex 16)"
-          { echo "prompt<<$delimiter"; cat "$RUNNER_TEMP/claude-task.md"; echo; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
 
-      # Claude Code edits the working tree; it may only read the repo, edit files and run read-only git.
-      # Committing, branching and the PR are done by the steps below, after the guard and the build check.
-      - name: Implement spec with Claude Code
-        if: steps.key.outputs.present == 'true'
-        id: claude
-        uses: anthropics/claude-code-action@v1
+      - name: Set up Node.js
+        if: steps.prepare.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: ${{ steps.prepare.outputs.prompt }}
-          claude_args: >-
-            --model ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
-            --max-turns ${{ vars.CLAUDE_MAX_TURNS || '150' }}
-            --allowedTools "Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)"
+          node-version: '22'
+
+      # The Claude Code CLI is called directly: anthropics/claude-code-action does not support `push` events.
+      # Claude may only read the repo, edit files and run read-only git; committing, branching and the PR are
+      # done by the steps below, after the guard and the build check.
+      - name: Implement spec with Claude Code
+        if: steps.prepare.outputs.has_changes == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
+          CLAUDE_MAX_TURNS: ${{ vars.CLAUDE_MAX_TURNS || '150' }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+          # stream-json: progress shows in the log; the guard step reads the final "result" event for the PR summary
+          claude -p "$(cat "$RUNNER_TEMP/claude-task.md")" \
+            --model "$CLAUDE_MODEL" \
+            --max-turns "$CLAUDE_MAX_TURNS" \
+            --allowedTools "Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)" \
+            --output-format stream-json --verbose \
+            | tee "$RUNNER_TEMP/claude-execution.jsonl"
 
       # Reverts anything outside the safety rails and writes the PR description
       - name: Guard changes
-        if: steps.key.outputs.present == 'true'
+        if: steps.prepare.outputs.has_changes == 'true'
         env:
           ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
           SPEC_INPUT: ${{ inputs.spec }}
           TARGETS_INPUT: ${{ inputs.targets }}
-          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
-          args=(--report "$RUNNER_TEMP/ai-report.md" --execution-file "$EXECUTION_FILE")
+          args=(--report "$RUNNER_TEMP/ai-report.md" --execution-file "$RUNNER_TEMP/claude-execution.jsonl")
           [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
           [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
           python .github/scripts/claude_coder.py guard "${args[@]}"
 
       - name: Detect changes
-        if: steps.key.outputs.present == 'true'
+        if: steps.prepare.outputs.has_changes == 'true'
         id: changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then

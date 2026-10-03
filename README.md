@@ -42,13 +42,13 @@ wedding-event/
 | **Database** | PostgreSQL 16 (schema quản lý bằng Flyway), Redis (Cache & Session) |
 | **Admin Web Portal** | React 18, TypeScript, Tailwind CSS, Lucide React, Vite |
 | **Client Mobile App** | Flutter 3.x, Dart, Firebase Cloud Messaging, WebSocket STOMP |
-| **AI & Automation** | Custom In-House AI Model (FastAPI/PyTorch - Runtime), Claude Code (`anthropics/claude-code-action`, CI/CD Agentic Code Gen), GitHub Actions |
+| **AI & Automation** | Custom In-House AI Model (FastAPI/PyTorch - Runtime), Claude Code CLI (`claude -p` trong GitHub Actions, CI/CD Agentic Code Gen), GitHub Actions |
 
 ---
 
 ## 🚀 3. Quy Trình Phát Triển Tự Động Hóa (AI Agentic Workflow)
 
-Hệ thống ứng dụng mô hình **Spec-Driven Development** kết hợp với **Claude Code** (chạy trong GitHub Actions bằng `anthropics/claude-code-action`):
+Hệ thống ứng dụng mô hình **Spec-Driven Development** kết hợp với **Claude Code** (CLI `claude -p` chạy trong GitHub Actions, xác thực bằng `CLAUDE_CODE_OAUTH_TOKEN`):
 
 ```mermaid
 flowchart TD

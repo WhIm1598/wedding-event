@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Spec-to-code agent helper around Claude Code (anthropic/claude-code-action).
+Spec-to-code agent helper around the Claude Code CLI (`claude -p`, run by .github/workflows/claude-agent.yml).
 
 The workflow runs three steps:
   1. `prepare`  — builds the task prompt: what changed in the PO spec, which modules are active, their
                   conventions and the rules (Claude Code then reads the spec and the code itself).
+                  No change under docs/features since the base commit => has_changes=false, nothing is generated.
   2. Claude Code edits the working tree (authenticated with CLAUDE_CODE_OAUTH_TOKEN).
   3. `guard`    — checks every file Claude changed against the safety rails, reverts anything not allowed
                   and writes the Markdown report used as the PR description.
@@ -165,30 +166,48 @@ def head_migration_versions() -> set[int]:
 # --------------------------------------------------------------------------------------
 # prepare: build the task prompt
 # --------------------------------------------------------------------------------------
-def spec_diff_base(before_sha: str | None) -> str:
-    return before_sha if before_sha and set(before_sha) != {'0'} else 'HEAD~1'
+def is_commit(ref: str) -> bool:
+    try:
+        git('rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def spec_diff_base(explicit: str | None, before_sha: str | None) -> str | None:
+    """Commit the specs are compared against: an explicit --base (manual runs), else the commit before the push,
+    else HEAD~1. None when no usable base exists (explicit base unknown, or first commit)."""
+    if explicit:
+        return explicit if is_commit(explicit) else None
+    if before_sha and set(before_sha) != {'0'} and is_commit(before_sha):
+        return before_sha
+    # New branch, or a force-push whose previous head is no longer in the clone
+    return 'HEAD~1' if is_commit('HEAD~1') else None
 
 
 def spec_diff(base: str) -> str:
-    """Diff of docs/features between the previous push state and HEAD ('' when unavailable)."""
-    try:
-        return git('diff', '--unified=5', base, 'HEAD', '--', SPEC_DIR)
-    except subprocess.CalledProcessError:
-        return ''
+    """Diff of docs/features between `base` and HEAD."""
+    return git('diff', '--unified=5', base, 'HEAD', '--', SPEC_DIR)
+
+
+def set_output(name: str, value: str) -> None:
+    """Expose a value to later workflow steps (no-op outside GitHub Actions)."""
+    output = os.environ.get('GITHUB_OUTPUT')
+    if output:
+        with open(output, 'a', encoding='utf-8') as f:
+            f.write(f'{name}={value}\n')
 
 
 def build_prompt(spec_path: str, base: str, diff: str, targets: list[Target], skipped: list[Target]) -> str:
     writable = [p for t in targets for p in t.writable]
     deps = 'ALLOWED (call them out in the summary)' if allow_dependency_changes() else 'NOT allowed'
     next_migration = max(head_migration_versions(), default=0) + 1
-    if not diff.strip():
-        diff_section = ('No spec diff is available (manual run or first commit): implement anything in the spec that the code '
-                        'does not implement yet, prioritising items marked 🆕/⚠️ in the order given in the spec\'s section 2.')
-    elif len(diff) <= MAX_INLINE_DIFF_CHARS:
-        diff_section = f'What changed in the specs (focus on this):\n```diff\n{diff.strip()}\n```'
+    # Only spec *changes* are implemented (prepare stops earlier when there are none)
+    if len(diff) <= MAX_INLINE_DIFF_CHARS:
+        diff_section = f'What changed in the specs — implement exactly this:\n```diff\n{diff.strip()}\n```'
     else:
         diff_section = (f'The spec diff is large ({len(diff):,} chars). Read it with `git diff {base} HEAD -- {SPEC_DIR}` '
-                        'and focus on what changed.')
+                        'and implement exactly what changed.')
 
     return f"""You are a senior full-stack engineer working on the Wedding Event monorepo, running unattended in CI.
 Implement the product-owner spec changes in the existing code base, following its conventions exactly.
@@ -213,7 +232,9 @@ Use them to go straight to the files you need instead of exploring the whole tre
 ## Rules
 1. Read the relevant spec sections and the files you will change before editing; reuse existing helpers/components.
 2. Keep web, mobile and backend consistent with each other and with the spec JSON field names.
-3. Write complete code — no placeholders, TODO stubs or "..." elisions. Keep changes focused on the spec change.
+3. Write complete code — no placeholders, TODO stubs or "..." elisions. Only change code that the spec diff requires:
+   don't implement other unbuilt spec items, refactor, or "fix" unrelated code. If the diff needs no code change
+   (wording, typos, formatting), change nothing and say so.
 4. The next Flyway migration, if the schema changes, is `{MIGRATION_DIR}/V{next_migration}__<description>.sql`.
 5. Do not commit, push, create branches or open PRs — the workflow verifies the build and opens a draft PR.
 6. If the spec is ambiguous or contradicts itself, choose the safest interpretation and say so.
@@ -235,9 +256,22 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         return 1
     targets, skipped = selection
 
-    base = spec_diff_base(os.environ.get('BEFORE_SHA'))
+    base = spec_diff_base(args.base, os.environ.get('BEFORE_SHA'))
+    if base is None:
+        if args.base:
+            log(f'❌ --base "{args.base}" is not a commit in this repository.')
+            return 1
+        log('ℹ️  No previous commit to compare the specs with — nothing to generate.')
+        set_output('has_changes', 'false')
+        return 0
     diff = spec_diff(base)
+    if not diff.strip():
+        log(f'ℹ️  No changes under {SPEC_DIR}/ between {base} and HEAD — nothing to generate.')
+        set_output('has_changes', 'false')
+        return 0
+
     prompt = build_prompt(spec, base, diff, targets, skipped)
+    set_output('has_changes', 'true')
     log(f'📖 Spec: {spec} | diff: {len(diff):,} chars | targets: {", ".join(t.key for t in targets)} | prompt: {len(prompt):,} chars')
     if args.out:
         Path(args.out).write_text(prompt, encoding='utf-8')
@@ -326,15 +360,27 @@ def guard(targets: list[Target], dry_run: bool) -> GuardResult:
 
 
 def read_execution(path: str | None) -> dict:
-    """Summary text, model and turn count from the claude-code-action execution file (best effort)."""
+    """Summary text, model and turn count from Claude Code's output (best effort).
+
+    Accepts `claude -p --output-format stream-json` (one JSON event per line) as well as a single JSON
+    document (`--output-format json`, or an array of events)."""
     info: dict = {}
     if not path or not Path(path).is_file():
         return info
     try:
-        data = json.loads(Path(path).read_text(encoding='utf-8'))
-    except (OSError, json.JSONDecodeError):
+        text = Path(path).read_text(encoding='utf-8')
+    except OSError:
         return info
-    messages = data if isinstance(data, list) else [data]
+    try:
+        data = json.loads(text)
+        messages = data if isinstance(data, list) else [data]
+    except json.JSONDecodeError:
+        messages = []
+        for line in text.splitlines():
+            try:
+                messages.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue  # non-JSON noise in the log
     for msg in messages:
         if not isinstance(msg, dict):
             continue
@@ -412,11 +458,12 @@ def main() -> int:
 
     p = sub.add_parser('prepare', parents=[common], help='write the task prompt for Claude Code')
     p.add_argument('--out', help='write the prompt to this file (default: print it)')
+    p.add_argument('--base', help='compare the specs against this commit/tag/branch (default: BEFORE_SHA, else HEAD~1)')
     p.set_defaults(func=cmd_prepare)
 
     g = sub.add_parser('guard', parents=[common], help='validate/revert Claude\'s changes and write the PR report')
     g.add_argument('--report', help='write the Markdown report (PR body) to this path')
-    g.add_argument('--execution-file', help='claude-code-action execution_file output (for the summary)')
+    g.add_argument('--execution-file', help='output of `claude -p --output-format stream-json` (for the PR summary)')
     g.add_argument('--dry-run', action='store_true', help='report what would be reverted without reverting')
     g.set_defaults(func=cmd_guard)
 
