@@ -30,3 +30,43 @@ dependencies {
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     archiveFileName.set("admin-backend.jar")
 }
+
+// ---- Test coverage gate (TDD) ----------------------------------------------------------------------------------
+// backend-common is exercised through this service's tests, so its classes are measured here too.
+// `./gradlew build` (check) fails when LINE coverage drops below the minimum; override with -PcoverageMinimum=0.90
+val coverageMinimum = (findProperty("coverageMinimum") as String? ?: "0.85").toBigDecimal()
+val commonProject = project(":backend-common")
+val coverageExcludes = listOf("com/weddingevent/AdminConsoleApplication*") // bootstrap main() only
+
+fun JacocoReportBase.coverageScope() {
+    sourceDirectories.setFrom(files("src/main/java", commonProject.file("src/main/java")))
+    classDirectories.setFrom(
+        files(
+            layout.buildDirectory.dir("classes/java/main"),
+            commonProject.layout.buildDirectory.dir("classes/java/main"),
+        ).asFileTree.matching { exclude(coverageExcludes.map { "$it.class" }) }
+    )
+}
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.test, ":backend-common:classes")
+    coverageScope()
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.test, ":backend-common:classes")
+    coverageScope()
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = coverageMinimum
+            }
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn("jacocoTestCoverageVerification")
+}

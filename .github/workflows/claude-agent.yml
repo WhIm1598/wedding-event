@@ -27,6 +27,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  issues: write # create/update the PR labels
 
 jobs:
   generate:
@@ -134,6 +135,73 @@ jobs:
             echo "::notice::Agent produced no changes."
           fi
 
+      # Second opinion: the code-reviewer agent (.claude/agents/code-reviewer.md) reviews the guarded changes read-only.
+      # Disable with the repository variable CLAUDE_REVIEW=false. A reviewer that fails or times out gives verdict UNKNOWN.
+      - name: Review generated code
+        if: steps.changes.outputs.changed == 'true' && vars.CLAUDE_REVIEW != 'false'
+        id: review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_REVIEW_MODEL || vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
+          CLAUDE_MAX_TURNS: ${{ vars.CLAUDE_REVIEW_MAX_TURNS || '60' }}
+        run: |
+          python .github/scripts/claude_coder.py review-prompt --task "$RUNNER_TEMP/claude-task.md" \
+            --out "$RUNNER_TEMP/review-task.md" --system-out "$RUNNER_TEMP/reviewer-system.md"
+          claude -p "$(cat "$RUNNER_TEMP/review-task.md")" \
+            --append-system-prompt "$(cat "$RUNNER_TEMP/reviewer-system.md")" \
+            --model "$CLAUDE_MODEL" \
+            --max-turns "$CLAUDE_MAX_TURNS" \
+            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)" \
+            --output-format stream-json --verbose \
+            | tee "$RUNNER_TEMP/review-execution.jsonl" \
+            || echo "::warning::The code review did not complete; continuing with verdict UNKNOWN."
+          # Sets step outputs verdict / blocking / critical / high
+          python .github/scripts/claude_coder.py review-result \
+            --execution-file "$RUNNER_TEMP/review-execution.jsonl" --out "$RUNNER_TEMP/review.md"
+
+      # One automatic fix round for CRITICAL/HIGH findings (disable with CLAUDE_AUTO_FIX=false). Its edits go through
+      # the same guard and build check below; the findings are not re-reviewed, the PR description says so.
+      - name: Fix review findings
+        if: fromJSON(steps.review.outputs.blocking || '0') > 0 && vars.CLAUDE_AUTO_FIX != 'false'
+        id: fix
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5-5' }}
+          CLAUDE_MAX_TURNS: ${{ vars.CLAUDE_MAX_TURNS || '150' }}
+        run: |
+          python .github/scripts/claude_coder.py fix-prompt --task "$RUNNER_TEMP/claude-task.md" \
+            --review "$RUNNER_TEMP/review.md" --out "$RUNNER_TEMP/fix-task.md"
+          claude -p "$(cat "$RUNNER_TEMP/fix-task.md")" \
+            --model "$CLAUDE_MODEL" \
+            --max-turns "$CLAUDE_MAX_TURNS" \
+            --allowedTools "Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)" \
+            --output-format stream-json --verbose \
+            | tee "$RUNNER_TEMP/fix-execution.jsonl" \
+            || echo "::warning::The fix pass did not complete; its partial edits are still guarded and build-checked."
+          echo "ran=true" >> "$GITHUB_OUTPUT"
+
+      - name: Guard changes after fix
+        if: steps.fix.outputs.ran == 'true'
+        env:
+          ALLOW_DEPENDENCY_CHANGES: ${{ vars.ALLOW_DEPENDENCY_CHANGES || 'false' }}
+          SPEC_INPUT: ${{ inputs.spec }}
+          TARGETS_INPUT: ${{ inputs.targets }}
+        run: |
+          args=(--report "$RUNNER_TEMP/ai-report.md" --execution-file "$RUNNER_TEMP/claude-execution.jsonl")
+          [ -n "$SPEC_INPUT" ] && args+=(--spec "$SPEC_INPUT")
+          [ -n "$TARGETS_INPUT" ] && args+=(--targets "$TARGETS_INPUT")
+          python .github/scripts/claude_coder.py guard "${args[@]}"
+
+      - name: Add review to PR description
+        if: steps.review.outputs.verdict != ''
+        env:
+          VERDICT: ${{ steps.review.outputs.verdict }}
+          FIX_RAN: ${{ steps.fix.outputs.ran }}
+        run: |
+          args=(--report "$RUNNER_TEMP/ai-report.md" --review "$RUNNER_TEMP/review.md" --verdict "$VERDICT")
+          [ "$FIX_RAN" = "true" ] && args+=(--fix-execution-file "$RUNNER_TEMP/fix-execution.jsonl")
+          python .github/scripts/claude_coder.py append-review "${args[@]}"
+
       - name: Snapshot generated changes
         if: steps.changes.outputs.changed == 'true'
         run: |
@@ -154,6 +222,18 @@ jobs:
           path: |
             ${{ runner.temp }}/ai-generated.patch
             ${{ runner.temp }}/ai-report.md
+            ${{ runner.temp }}/review.md
+
+      # Idempotent: creates the labels on first use and keeps their colour/description in sync afterwards
+      - name: Ensure PR labels exist
+        if: success() && steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create ai-generated --force --color 7057ff \
+            --description "Code generated by the Claude spec-to-code agent (draft, needs human review)"
+          gh label create ai-review-findings --force --color d93f0b \
+            --description "AI code review found CRITICAL/HIGH issues or could not decide; check the review in the PR description"
 
       - name: Create draft Pull Request
         if: success() && steps.changes.outputs.changed == 'true'
@@ -163,7 +243,10 @@ jobs:
           branch: ai/spec-update-${{ github.run_id }}
           delete-branch: true
           draft: true
-          labels: ai-generated
+          # ai-review-findings: the reviewer blocked (CRITICAL/HIGH found, possibly auto-fixed) or couldn't decide
+          labels: |
+            ai-generated
+            ${{ (steps.review.outputs.verdict == 'BLOCK' || steps.review.outputs.verdict == 'UNKNOWN') && 'ai-review-findings' || '' }}
           # Only module source is committed; build outputs are ignored by each module's .gitignore
           add-paths: |
             admin-console/**

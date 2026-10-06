@@ -22,6 +22,9 @@ Profile `dev` tự tạo dữ liệu demo khi database trống:
 
 ```bash
 ./gradlew build                     # unit + integration tests, PostgreSQL 16 qua Testcontainers (cần Docker)
+                                    # + cổng coverage JaCoCo ≥ 85% dòng (admin backend + backend-common);
+                                    #   báo cáo: admin-console/backend/build/reports/jacoco/test/html/index.html
+                                    #   (quy trình TDD: viết test JUnit 5 từ spec trước, rồi mới viết code)
 
 # Không có Docker: chỉ định một database PostgreSQL trống
 TEST_DATABASE_URL=jdbc:postgresql://localhost:5432/wedding_test \

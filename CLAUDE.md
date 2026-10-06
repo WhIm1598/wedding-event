@@ -13,8 +13,10 @@ Two products share one PostgreSQL database and one Java domain library:
 | `client-console/backend/` | Planned Spring Boot API `/api/v1/client/**`, `/api/v1/auth/**` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
+| `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml`); maintained with the `api-documenter` agent | |
 | `docs/templates/` | UI reference mock-ups only (look & feel, not code to copy) | |
 | `.github/` | CI (`ci.yml`), spec-to-code agent (`claude-agent.yml`, `scripts/claude_coder.py`) | |
+| `.claude/agents/` | Project subagents: `backend-architect` (read-only design proposal before backend work), `java-architect` (backend Java/Spring implementation + code-level design), `frontend-developer` (admin web implementation), `api-documenter` (OpenAPI `docs/api/*.yml` from the code), `code-reviewer` (read-only review; also runs in CI after code generation) | |
 
 ## How a feature flows
 Spec function (e.g. `FN-ADM-CAL-02`) → entity/enum/migration in `backend-common` → DTO + service + controller + security rule
@@ -30,11 +32,12 @@ on mobile). JSON field names are identical at every layer; the spec's names win.
 - Don't change dependency manifests (`package.json`, `pubspec.yaml`, `*.gradle.kts`) or lock files unless asked.
 - Keep demo/mock modes working: web `npm run dev` and mobile `USE_MOCK=true` run without any backend.
 - When you add a new folder or pattern, update the module's `CLAUDE.md` in the same change.
+- Backend work is **test-driven with JUnit 5**: tests from the spec/design first, then code. Coverage gate: 85% lines.
 
 ## Commands (repo root unless noted)
 | Check | Command |
 |---|---|
-| Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL) |
+| Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo) |
 | Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun` |
 | Web type-check + build | `cd admin-console/frontend && npm run build` |
 | Web dev (mock / real API) | `npm run dev` / `npm run dev:api` |

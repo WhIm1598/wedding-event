@@ -1,0 +1,2787 @@
+openapi: 3.1.0
+info:
+  title: Lumière Studios Admin API
+  version: 0.1.0
+  summary: REST API of admin-console/backend (web admin for studio staff).
+  description: |
+    Contract of `admin-console/backend` as implemented in the code. The source of truth for business rules is
+    `docs/features/detailed_functional_specification.md` (Part B); each operation links its spec function via
+    `x-spec-function`. Where code and spec differ, this file follows the code.
+
+    **Conventions**
+    * Every response uses the envelope of spec §1.2 (`ApiSuccess` / `ApiError`). `data` and `errors` are omitted
+      when null (operations without payload return no `data`).
+    * Money is integer VND, dates `YYYY-MM-DD`, times `HH:mm` (24h), timestamps ISO 8601 UTC. "Today" and "this month"
+      are evaluated in the business time zone `Asia/Ho_Chi_Minh`.
+    * Authentication: `Authorization: Bearer <accessToken>` (JWT HS256, 2 h). Only tokens with `typ=access` are
+      accepted; refresh tokens (30 days) can only be used on `POST /auth/refresh`.
+    * Authorization (spec §1.5) is enforced twice: URL rules in `SecurityConfig` (evaluated before body parsing, so
+      `ROLE_STAFF` receives `403` instead of `400` on admin-only routes) and `@PreAuthorize` on the controllers.
+      Each operation lists its roles in `x-roles`.
+    * Generic errors not repeated on every operation: `405 METHOD_NOT_ALLOWED` (unsupported HTTP method) and
+      `500 INTERNAL_SERVER_ERROR` (unexpected failure), both in the `ApiError` envelope.
+    * User-facing messages are Vietnamese.
+servers:
+  - url: http://localhost:8082
+    description: Local admin backend (`./gradlew :admin-console:backend:bootRun`)
+  - url: https://{host}
+    description: Through the nginx gateway (forwards `/api/v1/admin/**` to this service)
+    variables:
+      host:
+        default: localhost
+        description: Public host name of the gateway
+security:
+  - bearerAuth: []
+tags:
+  - name: auth
+    description: Admin console login, token refresh and current user (Module 5A).
+  - name: dashboard
+    description: Executive KPIs and revenue chart (Module 5). Admin only.
+  - name: bookings
+    description: Smart booking calendar and appointment dispatch (Module 6).
+  - name: packages
+    description: Studio service packages (Module 9).
+  - name: assets
+    description: Wardrobe & equipment with the maintenance-buffer lock (Module 8).
+  - name: staff
+    description: Staff members and task assignment (Module 9).
+  - name: crm
+    description: CRM pipeline (Kanban) of leads (Module 7).
+  - name: contracts
+    description: Contracts, A4 preview/PDF export and Zalo sharing (Module 7).
+  - name: financials
+    description: Cash book (Module 5). Admin only.
+  - name: notifications
+    description: In-app notifications of the studio team (Module 9).
+  - name: search
+    description: Global header search (Ctrl+K) (Module 9).
+  - name: settings
+    description: Studio profile printed as party B on contracts (Module 9).
+
+paths:
+  # ---------------------------------------------------------------- auth
+  /api/v1/admin/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Log in to the admin console
+      description: |
+        Looks the user up by email (case-insensitive). Unknown email, wrong password or a role other than
+        `ROLE_ADMIN`/`ROLE_STAFF` all return `401 INVALID_CREDENTIALS` with the same message (no account
+        enumeration). An inactive account returns `403 ACCOUNT_LOCKED`. On success returns an access token (2 h)
+        and a refresh token (30 days) with claims `sub`, `email`, `name`, `roles`, `staffId` (when the account is
+        linked to a staff member) and `typ`.
+      x-spec-function: FN-ADM-AUTH-01
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: admin@lumiere.vn
+              password: MatKhau@2026
+      responses:
+        '200':
+          description: Logged in.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đăng nhập thành công
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiJ9.ACCESS-TOKEN-PLACEHOLDER.signature
+                  refreshToken: eyJhbGciOiJIUzI1NiJ9.REFRESH-TOKEN-PLACEHOLDER.signature
+                  user:
+                    id: 0c9a7f4e-2b1d-4c3e-9f8a-1b2c3d4e5f60
+                    name: Quản Lý Studio
+                    email: admin@lumiere.vn
+                    role: ROLE_ADMIN
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '`INVALID_CREDENTIALS` — wrong email or password, or not a console account.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_CREDENTIALS
+                message: Email hoặc mật khẩu không chính xác
+        '403':
+          description: '`ACCOUNT_LOCKED` — the account is deactivated.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: ACCOUNT_LOCKED
+                message: Tài khoản đã bị khóa, vui lòng liên hệ quản lý
+
+  /api/v1/admin/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: Exchange a refresh token for a new token pair
+      description: |
+        The refresh token must be a valid, unexpired JWT with `typ=refresh` (otherwise `401 INVALID_REFRESH_TOKEN`).
+        The user must still exist, be active and have a console role (otherwise `401 UNAUTHORIZED`).
+        Returns a new access + refresh token pair (no rotation/revocation of the old refresh token yet).
+      x-spec-function: FN-ADM-AUTH-02
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refreshToken: eyJhbGciOiJIUzI1NiJ9.REFRESH-TOKEN-PLACEHOLDER.signature
+      responses:
+        '200':
+          description: New token pair.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiJ9.ACCESS-TOKEN-PLACEHOLDER.signature
+                  refreshToken: eyJhbGciOiJIUzI1NiJ9.REFRESH-TOKEN-PLACEHOLDER.signature
+                  user:
+                    id: 5d6e7f80-91a2-4b3c-8d4e-5f6a7b8c9d0e
+                    name: Hương Sale
+                    email: staff@lumiere.vn
+                    role: ROLE_STAFF
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            `INVALID_REFRESH_TOKEN` — token invalid, expired or not a refresh token;
+            `UNAUTHORIZED` — the user no longer exists, is inactive or lost the console role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                invalidRefreshToken:
+                  value:
+                    success: false
+                    code: INVALID_REFRESH_TOKEN
+                    message: Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại
+                userInactive:
+                  value:
+                    success: false
+                    code: UNAUTHORIZED
+                    message: Phiên đăng nhập không hợp lệ
+
+  /api/v1/admin/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Get the logged-in user
+      description: Returns the user of the access token. `401 UNAUTHORIZED` when the user is no longer active or lost the console role.
+      x-spec-function: FN-ADM-AUTH-03
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AuthUserDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  id: 0c9a7f4e-2b1d-4c3e-9f8a-1b2c3d4e5f60
+                  name: Quản Lý Studio
+                  email: admin@lumiere.vn
+                  role: ROLE_ADMIN
+        '401':
+          description: Missing/invalid/expired access token, or the user is inactive / no longer a console user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                invalidToken:
+                  value:
+                    success: false
+                    code: UNAUTHORIZED
+                    message: Phiên đăng nhập không hợp lệ hoặc đã hết hạn
+                userInactive:
+                  value:
+                    success: false
+                    code: UNAUTHORIZED
+                    message: Phiên đăng nhập không hợp lệ
+
+  # ---------------------------------------------------------------- dashboard
+  /api/v1/admin/dashboard/stats:
+    get:
+      tags: [dashboard]
+      operationId: getDashboardStats
+      summary: Executive KPIs
+      description: |
+        "This month" vs "last month" are calendar months in `Asia/Ho_Chi_Minh`.
+        * `monthlyRevenue.amount` — sum of `INCOME` transactions dated this month; `formatted` is the VND display string.
+        * `activeContractsCount.value` — contracts currently `DEPOSITED` or `IN_PROGRESS`; trend compares contracts
+          signed (`contractDate`) this month vs last month.
+        * `pendingLeadsCount.value` — leads in `NEW_LEAD` or `IN_CONSULTATION`; trend compares such leads created this
+          month vs last month.
+        * `costumeRentalRate.percentage` — dresses + suits `IN_USE` today / all dresses + suits × 100 (0 when there are
+          none); its `trendPercentage` is the percentage-point difference with the same day last month.
+        * `trendPercentage` (first three) = (current − previous) / previous × 100; 100 when previous is 0 and current
+          > 0, 0 when both are 0. All percentages rounded to 1 decimal (HALF_UP); `isIncrease = trendPercentage >= 0`
+          (rental rate: `percentage >= lastMonthPercentage`).
+      x-spec-function: FN-ADM-DASH-01
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: KPIs.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/StatsDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  monthlyRevenue: { amount: 245000000, formatted: 245.000.000đ, trendPercentage: 12.5, isIncrease: true }
+                  activeContractsCount: { value: 42, trendPercentage: 5.0, isIncrease: true }
+                  pendingLeadsCount: { value: 8, trendPercentage: -2.0, isIncrease: false }
+                  costumeRentalRate: { percentage: 78.0, trendPercentage: 15.0, isIncrease: true }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/dashboard/revenue-chart:
+    get:
+      tags: [dashboard]
+      operationId: getRevenueChart
+      summary: Monthly revenue of a year
+      description: Always 12 points (months 1–12); months without `INCOME` transactions have `amount = 0`.
+      x-spec-function: FN-ADM-DASH-02
+      x-roles: [ROLE_ADMIN]
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Calendar year; defaults to the current year (Asia/Ho_Chi_Minh).
+          schema:
+            type: integer
+            format: int32
+          example: 2026
+      responses:
+        '200':
+          description: 12 monthly totals.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        minItems: 12
+                        maxItems: 12
+                        items:
+                          $ref: '#/components/schemas/RevenuePoint'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - { month: 1, amount: 40000000 }
+                  - { month: 2, amount: 70000000 }
+                  - { month: 3, amount: 45000000 }
+                  - { month: 4, amount: 90000000 }
+                  - { month: 5, amount: 65000000 }
+                  - { month: 6, amount: 85000000 }
+                  - { month: 7, amount: 100000000 }
+                  - { month: 8, amount: 50000000 }
+                  - { month: 9, amount: 75000000 }
+                  - { month: 10, amount: 12500000 }
+                  - { month: 11, amount: 0 }
+                  - { month: 12, amount: 0 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- bookings
+  /api/v1/admin/bookings/calendar:
+    get:
+      tags: [bookings]
+      operationId: getBookingCalendar
+      summary: Bookings of a day, week or month
+      description: |
+        Range: `day` = that date; `week` = Monday–Sunday containing `date`; `month` = the calendar month containing
+        `date`. Sorted by `date`, `time`. `CANCELLED` bookings are hidden unless `includeCancelled=true`.
+        `ROLE_STAFF` always sees only the bookings assigned to their own staff member (the `staffId` claim of the
+        JWT) and the `staffId` parameter is ignored; a staff account not linked to a staff member gets an empty list.
+      x-spec-function: FN-ADM-CAL-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: view
+          in: query
+          required: false
+          description: Calendar view (case-insensitive). Any other value → `400 BAD_REQUEST`.
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+        - name: date
+          in: query
+          required: false
+          description: Anchor date; defaults to today (Asia/Ho_Chi_Minh).
+          schema:
+            type: string
+            format: date
+          example: '2026-10-03'
+        - name: staffId
+          in: query
+          required: false
+          description: Only bookings assigned to this staff member (admins only; ignored for staff).
+          schema:
+            type: string
+            format: uuid
+        - name: includeCancelled
+          in: query
+          required: false
+          description: Include `CANCELLED` bookings.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Bookings in the range.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BookingDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 7b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d
+                    date: '2026-10-03'
+                    time: '09:00'
+                    clientName: Lan & Hoàng
+                    phone: null
+                    type: Chụp Pre-wedding
+                    packageName: Gói Tiêu Chuẩn (Pre-wedding)
+                    venueAddress: Studio Lumière chi nhánh 1
+                    status: IN_PROGRESS
+                    assignedStaff:
+                      - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                        name: Tuấn Photo
+                        role: Thợ Chụp Chính
+        '400':
+          description: '`BAD_REQUEST` — invalid `view`, `date`, `staffId` or `includeCancelled`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                invalidView:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: view phải là day, week hoặc month
+                malformed:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Yêu cầu không hợp lệ
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/bookings:
+    post:
+      tags: [bookings]
+      operationId: createBooking
+      summary: Create an appointment and assign staff
+      description: |
+        Creates a booking with status `UPCOMING` and a "Lịch hẹn mới" notification.
+        Checks, in order: `eventDate` not before today (`400 BAD_REQUEST`); every `staffIds` entry exists
+        (duplicates ignored, `400 STAFF_NOT_FOUND`); no assigned staff member already has another non-cancelled
+        booking at exactly the same `eventDate` + `eventTime` (`409 STAFF_SCHEDULE_CONFLICT`, message lists the
+        names); `servicePackageId`, when given, exists (`404 NOT_FOUND`). Blank `phone`/`venueAddress` are stored as
+        null. Inactive packages are not rejected.
+      x-spec-function: FN-ADM-CAL-02
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+            example:
+              clientName: Trang & Hiếu
+              phone: '0900000001'
+              servicePackageId: 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f
+              type: Chụp Pre-wedding
+              eventDate: '2026-10-05'
+              eventTime: '08:00'
+              venueAddress: Studio Lumière chi nhánh 1
+              staffIds:
+                - 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                - 4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d
+      responses:
+        '201':
+          description: Booking created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã thêm lịch trình
+                data:
+                  id: 9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a
+                  date: '2026-10-05'
+                  time: '08:00'
+                  clientName: Trang & Hiếu
+                  phone: '0900000001'
+                  type: Chụp Pre-wedding
+                  packageName: Gói Kim Cương (Ngày Cưới)
+                  venueAddress: Studio Lumière chi nhánh 1
+                  status: UPCOMING
+                  assignedStaff:
+                    - { id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d, name: Tuấn Photo, role: Thợ Chụp Chính }
+                    - { id: 4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d, name: Trang Makeup, role: Chuyên Viên Trang Điểm }
+        '400':
+          description: '`BAD_REQUEST` (field validation, malformed body, `eventDate` in the past) or `STAFF_NOT_FOUND`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: eventTime, message: Giờ hẹn phải có dạng HH:mm }
+                pastDate:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Ngày hẹn không được ở trong quá khứ
+                staffNotFound:
+                  value:
+                    success: false
+                    code: STAFF_NOT_FOUND
+                    message: Có nhân sự không tồn tại trong danh sách phân công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`STAFF_SCHEDULE_CONFLICT` — an assigned staff member is already booked at that date and time.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: STAFF_SCHEDULE_CONFLICT
+                message: Nhân sự Tuấn Photo đã có lịch vào khung giờ này
+
+  # ---------------------------------------------------------------- packages
+  /api/v1/admin/packages:
+    get:
+      tags: [packages]
+      operationId: listPackages
+      summary: List studio service packages
+      description: Packages of the studio (`vendor_id IS NULL`), active and inactive, sorted by price descending.
+      x-spec-function: FN-ADM-PKG-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Packages.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PackageDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f
+                    name: Gói Kim Cương (Ngày Cưới)
+                    type: Trọn gói
+                    price: 25000000
+                    features: [2 Thợ Phóng sự, 1 Quay Phim, 1 Album Photobook 30x30, Makeup & Làm tóc trọn ngày, Tặng 2 Ảnh Cổng]
+                    isActive: true
+                  - id: 3d4e5f6a-7b8c-4d9e-8f0a-2b3c4d5e6f7a
+                    name: Gói Lễ Ăn Hỏi
+                    type: Lễ Ăn Hỏi
+                    price: 6000000
+                    features: [1 Thợ Chụp truyền thống, Giao toàn bộ file gốc, Chỉnh sửa 50 file]
+                    isActive: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [packages]
+      operationId: createPackage
+      summary: Create a service package
+      description: Creates an active studio package. Names, type and features are trimmed.
+      x-spec-function: FN-ADM-PKG-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePackageRequest'
+            example:
+              name: Gói Tiêu Chuẩn (Pre-wedding)
+              type: Pre-wedding
+              price: 12500000
+              features: [1 Thợ Chụp, 2 Địa điểm nội thành, 2 Váy + 2 Vest, Makeup & Làm tóc đi kèm]
+      responses:
+        '201':
+          description: Package created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PackageDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã tạo gói dịch vụ
+                data:
+                  id: 4e5f6a7b-8c9d-4e0f-9a1b-3c4d5e6f7a8b
+                  name: Gói Tiêu Chuẩn (Pre-wedding)
+                  type: Pre-wedding
+                  price: 12500000
+                  features: [1 Thợ Chụp, 2 Địa điểm nội thành, 2 Váy + 2 Vest, Makeup & Làm tóc đi kèm]
+                  isActive: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/packages/{id}/active:
+    patch:
+      tags: [packages]
+      operationId: setPackageActive
+      summary: Activate or deactivate a package
+      description: Toggles `isActive`. Existing contracts are not affected.
+      x-spec-function: FN-ADM-PKG-01
+      x-roles: [ROLE_ADMIN]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Package id.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetActiveRequest'
+            example:
+              isActive: false
+      responses:
+        '200':
+          description: Updated package.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PackageDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  id: 3d4e5f6a-7b8c-4d9e-8f0a-2b3c4d5e6f7a
+                  name: Gói Lễ Ăn Hỏi
+                  type: Lễ Ăn Hỏi
+                  price: 6000000
+                  features: [1 Thợ Chụp truyền thống, Giao toàn bộ file gốc, Chỉnh sửa 50 file]
+                  isActive: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- assets
+  /api/v1/admin/assets:
+    get:
+      tags: [assets]
+      operationId: listAssets
+      summary: List wardrobe & equipment
+      description: |
+        Sorted by `code`. `status` is derived for today: inside `[start, end]` of a confirmed rental → `IN_USE`;
+        inside `(end, lockEnd]` → `MAINTENANCE`; otherwise the manually set status. `nextBookingDate` = earliest
+        rental start ≥ today among active reservations, or null.
+      x-spec-function: FN-ADM-ASSET-02
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Filter by category (exact constant; anything else → `400 BAD_REQUEST`).
+          schema:
+            $ref: '#/components/schemas/AssetCategory'
+      responses:
+        '200':
+          description: Assets.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AssetDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 5f6a7b8c-9d0e-4f1a-8b2c-4d5e6f7a8b9c
+                    code: VAY-001
+                    name: Vera Wang đuôi cá đính đá
+                    category: DRESS
+                    size: M
+                    status: AVAILABLE
+                    nextBookingDate: '2026-10-14'
+                    maintenanceBufferDays: 3
+                  - id: 6a7b8c9d-0e1f-4a2b-9c3d-5e6f7a8b9c0d
+                    code: VST-002
+                    name: Vest đen Hàn Quốc
+                    category: SUIT
+                    size: 42R
+                    status: IN_USE
+                    nextBookingDate: null
+                    maintenanceBufferDays: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [assets]
+      operationId: createAsset
+      summary: Add a dress, suit or equipment item
+      description: |
+        `code` is stored upper-case and must be unique (case-insensitive, `409 ASSET_CODE_EXISTS`). A blank or
+        missing `size` is stored as `"N/A"`. A missing `maintenanceBufferDays` means 0. New items are `AVAILABLE`.
+      x-spec-function: FN-ADM-ASSET-02
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRequest'
+            example:
+              code: VAY-005
+              name: Váy cưới ren Pháp tay dài
+              category: DRESS
+              size: S
+              maintenanceBufferDays: 3
+      responses:
+        '201':
+          description: Asset created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AssetDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã thêm sản phẩm
+                data:
+                  id: 7b8c9d0e-1f2a-4b3c-8d4e-6f7a8b9c0d1e
+                  code: VAY-005
+                  name: Váy cưới ren Pháp tay dài
+                  category: DRESS
+                  size: S
+                  status: AVAILABLE
+                  nextBookingDate: null
+                  maintenanceBufferDays: 3
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: '`ASSET_CODE_EXISTS` — the code is already used.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: ASSET_CODE_EXISTS
+                message: Mã sản phẩm VAY-005 đã tồn tại
+
+  /api/v1/admin/assets/conflicts:
+    get:
+      tags: [assets]
+      operationId: listAssetConflicts
+      summary: Overlapping rentals of the same item
+      description: |
+        For each item, consecutive active (`CONFIRMED`, `lockEndDate >= today`) reservations whose lock windows
+        overlap (next start ≤ previous lock end) — legacy/imported data — for the red warning banner. `date` is the
+        start date of the later reservation.
+      x-spec-function: FN-ADM-ASSET-02
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Conflicts (empty when none).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AssetConflictDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - assetCode: VAY-001
+                    assetName: Vera Wang đuôi cá đính đá
+                    date: '2026-10-17'
+                    message: 'Sản phẩm "VAY-001 (Vera Wang đuôi cá đính đá)" đang được xếp cho 2 lịch thuê chồng lấn: 14/10/2026 và 17/10/2026 (bảo dưỡng đến 18/10/2026). Vui lòng kiểm tra lại lịch.'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/assets/booking:
+    post:
+      tags: [assets]
+      operationId: reserveAsset
+      summary: Reserve an item for a rental period (maintenance-buffer lock)
+      description: |
+        `assetId` accepts the UUID or the asset code (e.g. `VAY-001`, case-insensitive). The asset row is locked
+        (`SELECT … FOR UPDATE`) so concurrent requests are serialized. Lock window =
+        `[rentalStartDate, rentalEndDate + maintenanceBufferDays]`; it conflicts with any `CONFIRMED` reservation of
+        the same item where `startDate <= lockEnd AND lockEndDate >= rentalStartDate` → `409 ASSET_NOT_AVAILABLE`
+        naming the latest busy date. `rentalEndDate < rentalStartDate` → `400 BAD_REQUEST`. Unknown asset or
+        `bookingId` → `404 NOT_FOUND`. Creates a `CONFIRMED` reservation.
+      x-spec-function: FN-ADM-ASSET-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+            example:
+              assetId: VAY-001
+              rentalStartDate: '2026-10-20'
+              rentalEndDate: '2026-10-22'
+              bookingId: 9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a
+      responses:
+        '201':
+          description: Reservation created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ReservationDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Khóa lịch thành công
+                data:
+                  id: 8c9d0e1f-2a3b-4c4d-9e5f-7a8b9c0d1e2f
+                  assetCode: VAY-001
+                  startDate: '2026-10-20'
+                  endDate: '2026-10-22'
+                  lockEndDate: '2026-10-25'
+        '400':
+          description: '`BAD_REQUEST` — field validation, malformed body or `rentalEndDate` before `rentalStartDate`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: rentalStartDate, message: must not be null }
+                endBeforeStart:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Ngày trả phải sau hoặc bằng ngày nhận
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`ASSET_NOT_AVAILABLE` — the lock window overlaps an existing rental or its cleaning buffer.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: ASSET_NOT_AVAILABLE
+                message: Trang phục VAY-001 đang vướng lịch bảo dưỡng giặt hấp đến ngày 17/10/2026, vui lòng chọn ngày khác hoặc trang phục khác.
+
+  # ---------------------------------------------------------------- staff
+  /api/v1/admin/staff:
+    get:
+      tags: [staff]
+      operationId: listStaff
+      summary: List staff members
+      description: |
+        Sorted by `code`. `completedThisMonth` = non-cancelled bookings assigned to the member with `eventDate` from
+        the 1st of the current month up to and including today (commission/KPI basis).
+      x-spec-function: FN-ADM-STAFF-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Staff members.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StaffDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    code: NV-001
+                    name: Tuấn Photo
+                    position: Thợ Chụp Chính
+                    phone: '0900000011'
+                    workStatus: WORKING
+                    completedThisMonth: 2
+                  - id: 3c4d5e6f-7081-4a2b-9c3d-4e5f6a7b8c9d
+                    code: NV-003
+                    name: Minh Video
+                    position: Thợ Quay Phim
+                    phone: '0900000013'
+                    workStatus: ON_LEAVE
+                    completedThisMonth: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [staff]
+      operationId: createStaff
+      summary: Add a staff member
+      description: Generates the next `NV-xxx` code; `workStatus = WORKING`, `completedThisMonth = 0`.
+      x-spec-function: FN-ADM-STAFF-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+            example:
+              name: Phương Retouch
+              phone: '0900000015'
+              position: Chuyên Viên Hậu Kỳ
+      responses:
+        '201':
+          description: Staff member created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/StaffDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã thêm nhân sự
+                data:
+                  id: 9e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b
+                  code: NV-005
+                  name: Phương Retouch
+                  position: Chuyên Viên Hậu Kỳ
+                  phone: '0900000015'
+                  workStatus: WORKING
+                  completedThisMonth: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/staff/{staffId}/tasks:
+    parameters:
+      - name: staffId
+        in: path
+        required: true
+        description: Staff member id.
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [staff]
+      operationId: listStaffTasks
+      summary: List the tasks of a staff member
+      description: Sorted by `dueDate`, then creation time. Unknown staff member → `404 NOT_FOUND`.
+      x-spec-function: FN-ADM-STAFF-02
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: Tasks.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TaskDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d
+                    staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    title: Chuẩn bị trang phục cho khách Lan & Hoàng
+                    dueDate: '2026-10-03'
+                    notes: null
+                    completed: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [staff]
+      operationId: createStaffTask
+      summary: Assign a task to a staff member
+      description: Creates an open task (`completed = false`). Blank `notes` are stored as null. Unknown staff member → `404 NOT_FOUND`.
+      x-spec-function: FN-ADM-STAFF-02
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+            example:
+              title: Kiểm tra pin và thẻ nhớ máy Sony A7IV
+              dueDate: '2026-10-04'
+              notes: Mang thêm 2 thẻ 128GB
+      responses:
+        '201':
+          description: Task created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TaskDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã giao việc
+                data:
+                  id: 1b2c3d4e-5f6a-4b7c-9d8e-9f0a1b2c3d4e
+                  staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  title: Kiểm tra pin và thẻ nhớ máy Sony A7IV
+                  dueDate: '2026-10-04'
+                  notes: Mang thêm 2 thẻ 128GB
+                  completed: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/staff/tasks/{taskId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        description: Task id.
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [staff]
+      operationId: updateStaffTask
+      summary: Mark a task done or open
+      description: Sets `completed`. Unknown task → `404 NOT_FOUND`.
+      x-spec-function: FN-ADM-STAFF-02
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+            example:
+              completed: true
+      responses:
+        '200':
+          description: Updated task.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TaskDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  id: 1b2c3d4e-5f6a-4b7c-9d8e-9f0a1b2c3d4e
+                  staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  title: Kiểm tra pin và thẻ nhớ máy Sony A7IV
+                  dueDate: '2026-10-04'
+                  notes: Mang thêm 2 thẻ 128GB
+                  completed: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [staff]
+      operationId: deleteStaffTask
+      summary: Delete a task
+      description: Hard-deletes the task. Unknown task → `404 NOT_FOUND`. Returns `200` with no `data`.
+      x-spec-function: FN-ADM-STAFF-02
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: Task deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- crm
+  /api/v1/admin/crm/pipeline:
+    get:
+      tags: [crm]
+      operationId: getCrmPipeline
+      summary: All leads for the Kanban board
+      description: All leads, newest first (no paging); the client groups them by `stage` into 5 columns.
+      x-spec-function: FN-ADM-CRM-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Leads.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/LeadDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+                    name: Minh & Châu
+                    phone: '0900000021'
+                    hasZalo: true
+                    interest: Gói Lễ Ăn Hỏi
+                    stage: NEW_LEAD
+                    createdAt: '2026-10-02'
+                  - id: 3e4f5a6b-7c8d-4e9f-8a0b-2c3d4e5f6a7b
+                    name: Thảo & Đạt
+                    phone: '0900000023'
+                    hasZalo: false
+                    interest: null
+                    stage: AWAITING_DEPOSIT
+                    createdAt: '2026-09-28'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/crm/customers:
+    post:
+      tags: [crm]
+      operationId: createLead
+      summary: Add a lead (CRM customer)
+      description: Creates a lead in stage `NEW_LEAD`. `hasZalo` defaults to false; blank `interest` is stored as null. Duplicate phone numbers are not checked.
+      x-spec-function: FN-ADM-CRM-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLeadRequest'
+            example:
+              name: Quốc & Anh
+              phone: '0900000022'
+              hasZalo: true
+              interest: Gói Kim Cương
+      responses:
+        '201':
+          description: Lead created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LeadDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã lưu khách hàng
+                data:
+                  id: 4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c
+                  name: Quốc & Anh
+                  phone: '0900000022'
+                  hasZalo: true
+                  interest: Gói Kim Cương
+                  stage: NEW_LEAD
+                  createdAt: '2026-10-03'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/crm/customers/{id}/stage:
+    patch:
+      tags: [crm]
+      operationId: updateLeadStage
+      summary: Move a lead to another pipeline stage
+      description: |
+        Free movement between stages, except that moving a lead **into** `IN_PROGRESS` or `COMPLETED` (from another
+        stage) requires at least one contract linked to the lead → otherwise `409 INVALID_STATUS_TRANSITION`.
+        Setting the current stage again is always allowed.
+      x-spec-function: FN-ADM-CRM-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Lead id.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStageRequest'
+            example:
+              stage: AWAITING_DEPOSIT
+      responses:
+        '200':
+          description: Updated lead.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LeadDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  id: 4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c
+                  name: Quốc & Anh
+                  phone: '0900000022'
+                  hasZalo: true
+                  interest: Gói Kim Cương
+                  stage: AWAITING_DEPOSIT
+                  createdAt: '2026-10-03'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`INVALID_STATUS_TRANSITION` — target stage needs a contract.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Khách hàng chưa có hợp đồng, hãy tạo hợp đồng trước khi chuyển sang giai đoạn này
+
+  # ---------------------------------------------------------------- contracts
+  /api/v1/admin/contracts:
+    get:
+      tags: [contracts]
+      operationId: listContracts
+      summary: List contracts
+      description: All contracts (no paging), newest `contractDate` first, then newest created.
+      x-spec-function: FN-ADM-CONTR-02
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Contracts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ContractDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 5a6b7c8d-9e0f-4a1b-8c2d-4e5f6a7b8c9d
+                    contractNumber: HD-102
+                    customerName: Nguyễn Thị Lan
+                    phone: '0900000024'
+                    hasZalo: true
+                    packageName: Gói Kim Cương (Ngày Cưới)
+                    totalAmount: 25000000
+                    paidAmount: 10000000
+                    remainingAmount: 15000000
+                    contractDate: '2026-09-13'
+                    status: IN_PROGRESS
+                    notes: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [contracts]
+      operationId: createContract
+      summary: Create a contract
+      description: |
+        `depositAmount > totalAmount` → `400 DEPOSIT_EXCEEDS_TOTAL`; unknown `servicePackageId` → `404 NOT_FOUND`
+        (inactive packages are accepted). Generates `HD-xxx`, `contractDate = today`, snapshots the package name,
+        links the newest lead with the same phone. `hasZalo` defaults to that lead's `hasZalo` (true when no lead
+        matches). When `depositAmount > 0` an `INCOME` transaction "Doanh thu HĐ" is recorded (status becomes
+        `DEPOSITED`, otherwise the contract stays `DRAFT`). A matching lead in `NEW_LEAD`/`IN_CONSULTATION`/
+        `AWAITING_DEPOSIT` moves to `IN_PROGRESS`. Creates a "Hợp đồng mới" notification.
+      x-spec-function: FN-ADM-CONTR-02
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContractRequest'
+            example:
+              customerName: Lê Hoàng C
+              phone: '0900000026'
+              servicePackageId: 4e5f6a7b-8c9d-4e0f-9a1b-3c4d5e6f7a8b
+              totalAmount: 12500000
+              depositAmount: 2500000
+              hasZalo: false
+              notes: Tặng thêm 1 album mini
+      responses:
+        '201':
+          description: Contract created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ContractDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã tạo hợp đồng
+                data:
+                  id: 6b7c8d9e-0f1a-4b2c-9d3e-5f6a7b8c9d0e
+                  contractNumber: HD-105
+                  customerName: Lê Hoàng C
+                  phone: '0900000026'
+                  hasZalo: false
+                  packageName: Gói Tiêu Chuẩn (Pre-wedding)
+                  totalAmount: 12500000
+                  paidAmount: 2500000
+                  remainingAmount: 10000000
+                  contractDate: '2026-10-03'
+                  status: DEPOSITED
+                  notes: Tặng thêm 1 album mini
+        '400':
+          description: '`BAD_REQUEST` (field validation / malformed body) or `DEPOSIT_EXCEEDS_TOTAL`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: phone, message: Số điện thoại không hợp lệ }
+                depositExceedsTotal:
+                  value:
+                    success: false
+                    code: DEPOSIT_EXCEEDS_TOTAL
+                    message: Tiền cọc không được lớn hơn tổng giá trị hợp đồng
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/contracts/{id}/preview-html:
+    get:
+      tags: [contracts]
+      operationId: previewContractHtml
+      summary: A4 contract as HTML (preview)
+      description: |
+        XHTML document of the A4 contract (party A, party B from studio settings, package features, 30/50/20 payment
+        schedule computed on the total, paid/remaining amounts, bank info). All user-entered text is HTML-escaped.
+        Errors are returned as JSON envelopes.
+      x-spec-function: FN-ADM-CONTR-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Contract HTML.
+          content:
+            text/html:
+              schema:
+                type: string
+              example: '<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml">…<h1>HỢP ĐỒNG DỊCH VỤ CƯỚI</h1>…</html>'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/contracts/{id}/export-pdf:
+    get:
+      tags: [contracts]
+      operationId: exportContractPdf
+      summary: A4 contract as PDF
+      description: Binary A4 (210 × 297 mm) PDF with an embedded Vietnamese-capable font, downloaded as `<contractNumber>.pdf`. Rendered on every call (not stored).
+      x-spec-function: FN-ADM-CONTR-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: PDF file.
+          headers:
+            Content-Disposition:
+              description: Attachment with the file name, e.g. `attachment; filename="HD-102.pdf"`.
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/contracts/{id}/share-zalo:
+    post:
+      tags: [contracts]
+      operationId: shareContractZalo
+      summary: Send the contract link via Zalo
+      description: |
+        Sends the contract link (`{PUBLIC_BASE_URL}/contracts/{id}`) to `phoneNumber`, or to the contract phone when
+        the body/`phoneNumber` is missing or blank. Without `phoneNumber` and with `hasZalo = false` →
+        `400 ZALO_NOT_AVAILABLE`. The Zalo client is currently a logging stub (no message is actually sent).
+      x-spec-function: FN-ADM-CONTR-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareZaloRequest'
+            example:
+              phoneNumber: '0900000024'
+      responses:
+        '200':
+          description: Sent. No `data`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã gửi hợp đồng qua Zalo
+        '400':
+          description: '`BAD_REQUEST` (invalid `phoneNumber`, malformed body or id) or `ZALO_NOT_AVAILABLE`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: phoneNumber, message: Số điện thoại không hợp lệ }
+                zaloNotAvailable:
+                  value:
+                    success: false
+                    code: ZALO_NOT_AVAILABLE
+                    message: Số điện thoại của khách chưa đăng ký Zalo
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- financials
+  /api/v1/admin/financials/transactions:
+    get:
+      tags: [financials]
+      operationId: listTransactions
+      summary: Cash book
+      description: All transactions (no paging, no filters), newest `transactionDate` first, then newest created.
+      x-spec-function: FN-ADM-FIN-03
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: Transactions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TransactionDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 7c8d9e0f-1a2b-4c3d-8e4f-6a7b8c9d0e1f
+                    code: TRX-012
+                    transactionDate: '2026-10-03'
+                    description: Thanh toán cọc hợp đồng Lê Hoàng C
+                    type: INCOME
+                    amount: 2500000
+                    category: Doanh thu HĐ
+                    contractId: 6b7c8d9e-0f1a-4b2c-9d3e-5f6a7b8c9d0e
+                  - id: 8d9e0f1a-2b3c-4d4e-9f5a-7b8c9d0e1f2a
+                    code: TRX-011
+                    transactionDate: '2026-10-02'
+                    description: In album photobook khách Mai Huy
+                    type: EXPENSE
+                    amount: 1200000
+                    category: Chi phí in ấn
+                    contractId: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [financials]
+      operationId: createTransaction
+      summary: Record an income or expense
+      description: |
+        `transactionDate` after today → `400 BAD_REQUEST`; unknown `contractId` → `404 NOT_FOUND`. Generates
+        `TRX-xxx`. For an `INCOME` linked to a contract: contract `COMPLETED` → `409 CONTRACT_NOT_PAYABLE`;
+        `amount > remainingAmount` → `400 PAYMENT_EXCEEDS_REMAINING`; otherwise adds to `paidAmount`, recomputes
+        `remainingAmount`, moves `DRAFT → DEPOSITED`, and to `COMPLETED` when nothing remains (notification
+        "Hợp đồng đã tất toán", else "Đã thu tiền"). An `EXPENSE` with `contractId` does not change the debt.
+        Concurrent updates of the same contract → `409 CONCURRENT_MODIFICATION` (optimistic lock).
+      x-spec-function: FN-ADM-FIN-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+            example:
+              type: INCOME
+              amount: 2500000
+              category: Doanh thu HĐ
+              description: Thanh toán cọc hợp đồng Lê Hoàng C
+              contractId: 6b7c8d9e-0f1a-4b2c-9d3e-5f6a7b8c9d0e
+              transactionDate: '2026-10-03'
+      responses:
+        '201':
+          description: Transaction recorded.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TransactionDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã ghi nhận giao dịch
+                data:
+                  id: 7c8d9e0f-1a2b-4c3d-8e4f-6a7b8c9d0e1f
+                  code: TRX-012
+                  transactionDate: '2026-10-03'
+                  description: Thanh toán cọc hợp đồng Lê Hoàng C
+                  type: INCOME
+                  amount: 2500000
+                  category: Doanh thu HĐ
+                  contractId: 6b7c8d9e-0f1a-4b2c-9d3e-5f6a7b8c9d0e
+        '400':
+          description: '`BAD_REQUEST` (field validation, malformed body, future `transactionDate`) or `PAYMENT_EXCEEDS_REMAINING`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: amount, message: must be greater than 0 }
+                futureDate:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Ngày giao dịch không được sau ngày hôm nay
+                paymentExceedsRemaining:
+                  value:
+                    success: false
+                    code: PAYMENT_EXCEEDS_REMAINING
+                    message: Số tiền thu vượt quá công nợ còn lại của hợp đồng (10.000.000đ)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`CONTRACT_NOT_PAYABLE` (contract already `COMPLETED`) or `CONCURRENT_MODIFICATION`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                contractNotPayable:
+                  value:
+                    success: false
+                    code: CONTRACT_NOT_PAYABLE
+                    message: Hợp đồng HD-103 đã hoàn tất, không thể ghi thêm khoản thu
+                concurrentModification:
+                  value:
+                    success: false
+                    code: CONCURRENT_MODIFICATION
+                    message: Dữ liệu vừa được người khác cập nhật, vui lòng tải lại
+
+  /api/v1/admin/financials/summary:
+    get:
+      tags: [financials]
+      operationId: getFinancialSummary
+      summary: Totals of the current month
+      description: Current calendar month (Asia/Ho_Chi_Minh). `netProfit = totalIncome − totalExpense` (may be negative).
+      x-spec-function: FN-ADM-FIN-03
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: Monthly summary.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/SummaryDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  periodLabel: Tháng 10
+                  totalIncome: 12500000
+                  totalExpense: 2000000
+                  netProfit: 10500000
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- notifications
+  /api/v1/admin/notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: Latest notifications
+      description: The 30 most recent notifications, newest first. Shared by the whole team (no per-user recipients or read state).
+      x-spec-function: FN-ADM-NOTI-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Notifications (at most 30).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        maxItems: 30
+                        items:
+                          $ref: '#/components/schemas/NotificationDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 9e0f1a2b-3c4d-4e5f-8a6b-8c9d0e1f2a3b
+                    title: Hợp đồng mới 📄
+                    description: Đã tạo hợp đồng HD-105 cho Lê Hoàng C (12.500.000đ).
+                    createdAt: '2026-10-03T02:15:30Z'
+                    read: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/notifications/{id}/read:
+    patch:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark a notification as read
+      description: Unknown id → `404 NOT_FOUND`. No request body; returns no `data`.
+      x-spec-function: FN-ADM-NOTI-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Notification id.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Marked as read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/notifications/read-all:
+    patch:
+      tags: [notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark all notifications as read
+      description: No request body; returns no `data`.
+      x-spec-function: FN-ADM-NOTI-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: All marked as read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------- search
+  /api/v1/admin/search:
+    get:
+      tags: [search]
+      operationId: globalSearch
+      summary: Global search across contracts and leads
+      description: |
+        Case-insensitive `LIKE` on contract customer name, phone and contract number (`kind = contract`, label
+        `HD-102 (Tên khách) • SĐT`) and on lead name and phone (`kind = lead`, label `Tên • SĐT`). User-typed `%`,
+        `_` and `\` are escaped. Up to 4 results per kind (contracts first, by `contractDate` desc; leads by creation
+        desc); empty `q` → the 2 newest contracts + 2 newest leads.
+      x-spec-function: FN-ADM-SEARCH-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Keyword (trimmed); empty by default.
+          schema:
+            type: string
+            default: ''
+          example: lan
+      responses:
+        '200':
+          description: At most 8 results.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        maxItems: 8
+                        items:
+                          $ref: '#/components/schemas/SearchResult'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  - id: 5a6b7c8d-9e0f-4a1b-8c2d-4e5f6a7b8c9d
+                    label: HD-102 (Nguyễn Thị Lan) • 0900000024
+                    kind: contract
+                  - id: 0b1c2d3e-4f5a-4b6c-9d7e-8f9a0b1c2d3e
+                    label: Nguyễn Thị Lan • 0900000024
+                    kind: lead
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------- settings
+  /api/v1/admin/settings/studio:
+    get:
+      tags: [settings]
+      operationId: getStudioSettings
+      summary: Get the studio profile
+      description: Single-row studio profile (party B of contracts). `404 NOT_FOUND` if the row is missing.
+      x-spec-function: FN-ADM-SET-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: Studio profile.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/StudioSettingsDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  name: LUMIÈRE STUDIOS
+                  address: 123 Nguyễn Văn Linh, Q7, TP.HCM
+                  taxCode: '0312345678'
+                  legalRepresentative: Nguyễn Văn A
+                  bankInfo: "Vietcombank - Chi nhánh HCM\nSTK: 0000000000\nChủ TK: NGUYEN VAN A"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [settings]
+      operationId: updateStudioSettings
+      summary: Update the studio profile
+      description: Replaces all five fields (trimmed). `404 NOT_FOUND` if the row is missing.
+      x-spec-function: FN-ADM-SET-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudioSettingsDto'
+            example:
+              name: LUMIÈRE STUDIOS
+              address: 123 Nguyễn Văn Linh, Q7, TP.HCM
+              taxCode: '0312345678'
+              legalRepresentative: Nguyễn Văn A
+              bankInfo: "Vietcombank - Chi nhánh HCM\nSTK: 0000000000\nChủ TK: NGUYEN VAN A"
+      responses:
+        '200':
+          description: Saved profile.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/StudioSettingsDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã lưu cấu hình
+                data:
+                  name: LUMIÈRE STUDIOS
+                  address: 123 Nguyễn Văn Linh, Q7, TP.HCM
+                  taxCode: '0312345678'
+                  legalRepresentative: Nguyễn Văn A
+                  bankInfo: "Vietcombank - Chi nhánh HCM\nSTK: 0000000000\nChủ TK: NGUYEN VAN A"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from `POST /api/v1/admin/auth/login` or `/refresh` (HS256, `typ=access`, 2 hours).
+
+  parameters:
+    ContractId:
+      name: id
+      in: path
+      required: true
+      description: Contract id.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: |
+        `BAD_REQUEST` — body validation failed (`errors[]` lists each field), or the request is malformed
+        (unparsable JSON, wrong type of a path/query parameter such as a non-UUID id).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            validation:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Dữ liệu không hợp lệ
+                errors:
+                  - { field: name, message: must not be blank }
+            malformed:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Yêu cầu không hợp lệ
+    Unauthorized:
+      description: '`UNAUTHORIZED` — missing, invalid or expired access token (or a refresh token used as access token).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: UNAUTHORIZED
+            message: Phiên đăng nhập không hợp lệ hoặc đã hết hạn
+    Forbidden:
+      description: '`FORBIDDEN` — the caller''s role may not perform this operation (admin-only route called by `ROLE_STAFF`).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: FORBIDDEN
+            message: Bạn không có quyền thực hiện thao tác này
+    NotFound:
+      description: '`NOT_FOUND` — a referenced record does not exist. Message: `Không tìm thấy <tài nguyên> (<id>)`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: NOT_FOUND
+            message: Không tìm thấy hợp đồng (6b7c8d9e-0f1a-4b2c-9d3e-5f6a7b8c9d0e)
+
+  schemas:
+    # ------------------------------------------------------------ envelope
+    ApiSuccess:
+      type: object
+      description: Success envelope (`ApiResponse` with `success = true`). `data` is omitted when the operation has no payload.
+      required: [success, code, message]
+      properties:
+        success:
+          type: boolean
+          const: true
+        code:
+          type: string
+          const: SUCCESS
+        message:
+          type: string
+          description: Vietnamese user-facing message.
+          examples: [Thao tác thành công]
+        data:
+          description: Operation payload.
+    ApiError:
+      type: object
+      description: Error envelope (`ApiResponse` with `success = false`). `errors` only on field validation failures.
+      required: [success, code, message]
+      properties:
+        success:
+          type: boolean
+          const: false
+        code:
+          type: string
+          description: Error code from spec §1.3.
+          examples: [BAD_REQUEST]
+        message:
+          type: string
+          description: Vietnamese user-facing message.
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Request field (or parameter) name.
+        message:
+          type: string
+
+    # ------------------------------------------------------------ shared types
+    Uuid:
+      type: string
+      format: uuid
+    LocalDate:
+      type: string
+      format: date
+      examples: ['2026-10-03']
+    Money:
+      type: integer
+      format: int64
+      description: Amount in VND (integer, no decimals).
+      examples: [25000000]
+    VnPhone:
+      type: string
+      pattern: '^0(3|5|7|8|9)[0-9]{8}$'
+      description: Vietnamese mobile number (spec §1.1).
+      examples: ['0900000001']
+
+    # ------------------------------------------------------------ enums
+    Role:
+      type: string
+      description: Console roles (a login is only possible with these two).
+      enum: [ROLE_ADMIN, ROLE_STAFF]
+    BookingStatus:
+      type: string
+      enum: [UPCOMING, IN_PROGRESS, CONFIRMED, COMPLETED, CANCELLED]
+    AssetCategory:
+      type: string
+      enum: [DRESS, SUIT, CAMERA_EQUIPMENT]
+    AssetStatus:
+      type: string
+      enum: [AVAILABLE, IN_USE, MAINTENANCE]
+    StaffWorkStatus:
+      type: string
+      enum: [WORKING, ON_LEAVE]
+    LeadStage:
+      type: string
+      enum: [NEW_LEAD, IN_CONSULTATION, AWAITING_DEPOSIT, IN_PROGRESS, COMPLETED]
+    ContractStatus:
+      type: string
+      enum: [DRAFT, DEPOSITED, IN_PROGRESS, COMPLETED]
+    TransactionType:
+      type: string
+      enum: [INCOME, EXPENSE]
+
+    # ------------------------------------------------------------ auth
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+    AuthUserDto:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          description: Full name.
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT, 2 hours, `typ=access`.
+        refreshToken:
+          type: string
+          description: JWT, 30 days, `typ=refresh`.
+        user:
+          $ref: '#/components/schemas/AuthUserDto'
+
+    # ------------------------------------------------------------ dashboard
+    MoneyMetric:
+      type: object
+      required: [amount, formatted, trendPercentage, isIncrease]
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        formatted:
+          type: string
+          description: VND display string, e.g. `245.000.000đ`.
+        trendPercentage:
+          type: number
+          format: double
+        isIncrease:
+          type: boolean
+    CountMetric:
+      type: object
+      required: [value, trendPercentage, isIncrease]
+      properties:
+        value:
+          type: integer
+          format: int64
+          minimum: 0
+        trendPercentage:
+          type: number
+          format: double
+        isIncrease:
+          type: boolean
+    RateMetric:
+      type: object
+      required: [percentage, trendPercentage, isIncrease]
+      properties:
+        percentage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        trendPercentage:
+          type: number
+          format: double
+          description: Percentage-point difference with the same day last month.
+        isIncrease:
+          type: boolean
+    StatsDto:
+      type: object
+      required: [monthlyRevenue, activeContractsCount, pendingLeadsCount, costumeRentalRate]
+      properties:
+        monthlyRevenue:
+          $ref: '#/components/schemas/MoneyMetric'
+        activeContractsCount:
+          $ref: '#/components/schemas/CountMetric'
+        pendingLeadsCount:
+          $ref: '#/components/schemas/CountMetric'
+        costumeRentalRate:
+          $ref: '#/components/schemas/RateMetric'
+    RevenuePoint:
+      type: object
+      required: [month, amount]
+      properties:
+        month:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 12
+        amount:
+          $ref: '#/components/schemas/Money'
+
+    # ------------------------------------------------------------ bookings
+    StaffRefDto:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        role:
+          type: string
+          description: The staff member's position (job title), not a security role.
+    BookingDto:
+      type: object
+      required: [id, date, time, clientName, phone, type, packageName, venueAddress, status, assignedStaff]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        time:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: Event time `HH:mm` (24h).
+        clientName:
+          type: string
+        phone:
+          type: [string, 'null']
+        type:
+          type: string
+          description: Appointment type, e.g. "Chụp Pre-wedding".
+        packageName:
+          type: string
+          description: Name of the service package, or `—` when none.
+        venueAddress:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        assignedStaff:
+          type: array
+          description: Sorted by staff code.
+          items:
+            $ref: '#/components/schemas/StaffRefDto'
+    CreateBookingRequest:
+      type: object
+      required: [clientName, type, eventDate, eventTime]
+      properties:
+        clientName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: [string, 'null']
+          pattern: '^$|^0(3|5|7|8|9)[0-9]{8}$'
+          description: Empty or a Vietnamese mobile number.
+        servicePackageId:
+          type: [string, 'null']
+          format: uuid
+        type:
+          type: string
+          minLength: 1
+          maxLength: 100
+        eventDate:
+          type: string
+          format: date
+          description: Not before today.
+        eventTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          description: '`HH:mm` (24h).'
+        venueAddress:
+          type: [string, 'null']
+          maxLength: 255
+        staffIds:
+          type: [array, 'null']
+          items:
+            type: string
+            format: uuid
+
+    # ------------------------------------------------------------ packages
+    PackageDto:
+      type: object
+      required: [id, name, type, price, features, isActive]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        type:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        features:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+    CreatePackageRequest:
+      type: object
+      required: [name, type, price]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        type:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          description: VND.
+        features:
+          type: [array, 'null']
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 255
+    SetActiveRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
+
+    # ------------------------------------------------------------ assets
+    AssetDto:
+      type: object
+      required: [id, code, name, category, size, status, nextBookingDate, maintenanceBufferDays]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          examples: [VAY-001]
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/AssetCategory'
+        size:
+          type: [string, 'null']
+          description: '`N/A` when not applicable (column is nullable for legacy rows).'
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        nextBookingDate:
+          type: [string, 'null']
+          format: date
+        maintenanceBufferDays:
+          type: integer
+          format: int32
+          minimum: 0
+    AssetConflictDto:
+      type: object
+      required: [assetCode, assetName, date, message]
+      properties:
+        assetCode:
+          type: string
+        assetName:
+          type: string
+        date:
+          $ref: '#/components/schemas/LocalDate'
+        message:
+          type: string
+    ReservationDto:
+      type: object
+      required: [id, assetCode, startDate, endDate, lockEndDate]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        assetCode:
+          type: string
+        startDate:
+          $ref: '#/components/schemas/LocalDate'
+        endDate:
+          $ref: '#/components/schemas/LocalDate'
+        lockEndDate:
+          type: string
+          format: date
+          description: '`endDate + maintenanceBufferDays`.'
+    CreateAssetRequest:
+      type: object
+      required: [code, name, category]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          pattern: '^[A-Za-z]{2,5}-\d{3,}$'
+          description: Stored upper-case, e.g. `VAY-001`.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          $ref: '#/components/schemas/AssetCategory'
+        size:
+          type: [string, 'null']
+          maxLength: 20
+          description: Blank or missing → `N/A`.
+        maintenanceBufferDays:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 30
+          default: 0
+    ReserveRequest:
+      type: object
+      required: [assetId, rentalStartDate, rentalEndDate]
+      properties:
+        assetId:
+          type: string
+          minLength: 1
+          description: Asset UUID or asset code (e.g. `VAY-001`).
+        rentalStartDate:
+          type: string
+          format: date
+        rentalEndDate:
+          type: string
+          format: date
+          description: Must be ≥ `rentalStartDate`.
+        bookingId:
+          type: [string, 'null']
+          format: uuid
+
+    # ------------------------------------------------------------ staff
+    StaffDto:
+      type: object
+      required: [id, code, name, position, phone, workStatus, completedThisMonth]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          examples: [NV-001]
+        name:
+          type: string
+        position:
+          type: string
+        phone:
+          type: string
+        workStatus:
+          $ref: '#/components/schemas/StaffWorkStatus'
+        completedThisMonth:
+          type: integer
+          format: int64
+          minimum: 0
+    TaskDto:
+      type: object
+      required: [id, staffId, title, dueDate, notes, completed]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        staffId:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        dueDate:
+          $ref: '#/components/schemas/LocalDate'
+        notes:
+          type: [string, 'null']
+        completed:
+          type: boolean
+    CreateStaffRequest:
+      type: object
+      required: [name, phone, position]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          $ref: '#/components/schemas/VnPhone'
+        position:
+          type: string
+          minLength: 1
+          maxLength: 100
+    CreateTaskRequest:
+      type: object
+      required: [title, dueDate]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        dueDate:
+          type: string
+          format: date
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+    UpdateTaskRequest:
+      type: object
+      required: [completed]
+      properties:
+        completed:
+          type: boolean
+
+    # ------------------------------------------------------------ crm
+    LeadDto:
+      type: object
+      required: [id, name, phone, hasZalo, interest, stage, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        phone:
+          type: string
+        hasZalo:
+          type: boolean
+        interest:
+          type: [string, 'null']
+        stage:
+          $ref: '#/components/schemas/LeadStage'
+        createdAt:
+          type: string
+          format: date
+          description: Creation date (Asia/Ho_Chi_Minh), date only.
+    CreateLeadRequest:
+      type: object
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          $ref: '#/components/schemas/VnPhone'
+        hasZalo:
+          type: [boolean, 'null']
+          description: Null/missing → false.
+        interest:
+          type: [string, 'null']
+          maxLength: 200
+    UpdateStageRequest:
+      type: object
+      required: [stage]
+      properties:
+        stage:
+          $ref: '#/components/schemas/LeadStage'
+
+    # ------------------------------------------------------------ contracts
+    ContractDto:
+      type: object
+      required: [id, contractNumber, customerName, phone, hasZalo, packageName, totalAmount, paidAmount, remainingAmount, contractDate, status, notes]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        contractNumber:
+          type: string
+          examples: [HD-102]
+        customerName:
+          type: string
+        phone:
+          type: string
+        hasZalo:
+          type: boolean
+        packageName:
+          type: string
+          description: Package name captured when the contract was created.
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+        paidAmount:
+          $ref: '#/components/schemas/Money'
+        remainingAmount:
+          $ref: '#/components/schemas/Money'
+        contractDate:
+          $ref: '#/components/schemas/LocalDate'
+        status:
+          $ref: '#/components/schemas/ContractStatus'
+        notes:
+          type: [string, 'null']
+    CreateContractRequest:
+      type: object
+      required: [customerName, phone, servicePackageId, totalAmount, depositAmount]
+      properties:
+        customerName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          $ref: '#/components/schemas/VnPhone'
+        servicePackageId:
+          type: string
+          format: uuid
+        totalAmount:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          description: VND.
+        depositAmount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: VND, must not exceed `totalAmount`.
+        hasZalo:
+          type: [boolean, 'null']
+          description: Null → taken from the matching CRM lead (true when there is none).
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+    ShareZaloRequest:
+      type: object
+      properties:
+        phoneNumber:
+          type: [string, 'null']
+          pattern: '^$|^0(3|5|7|8|9)[0-9]{8}$'
+          description: Recipient; empty/missing → the contract phone.
+
+    # ------------------------------------------------------------ financials
+    TransactionDto:
+      type: object
+      required: [id, code, transactionDate, description, type, amount, category, contractId]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          examples: [TRX-001]
+        transactionDate:
+          $ref: '#/components/schemas/LocalDate'
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount:
+          $ref: '#/components/schemas/Money'
+        category:
+          type: string
+        contractId:
+          type: [string, 'null']
+          format: uuid
+    SummaryDto:
+      type: object
+      required: [periodLabel, totalIncome, totalExpense, netProfit]
+      properties:
+        periodLabel:
+          type: string
+          examples: [Tháng 10]
+        totalIncome:
+          $ref: '#/components/schemas/Money'
+        totalExpense:
+          $ref: '#/components/schemas/Money'
+        netProfit:
+          type: integer
+          format: int64
+          description: VND, `totalIncome − totalExpense` (may be negative).
+    CreateTransactionRequest:
+      type: object
+      required: [type, amount, category, description, transactionDate]
+      properties:
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          description: VND.
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contractId:
+          type: [string, 'null']
+          format: uuid
+        transactionDate:
+          type: string
+          format: date
+          description: Not after today.
+
+    # ------------------------------------------------------------ notifications / search / settings
+    NotificationDto:
+      type: object
+      required: [id, title, description, createdAt, read]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+    SearchResult:
+      type: object
+      required: [id, label, kind]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [contract, lead]
+    StudioSettingsDto:
+      type: object
+      required: [name, address, taxCode, legalRepresentative, bankInfo]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          type: string
+          minLength: 1
+          maxLength: 255
+        taxCode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        legalRepresentative:
+          type: string
+          minLength: 1
+          maxLength: 100
+        bankInfo:
+          type: string
+          minLength: 1
+          maxLength: 500

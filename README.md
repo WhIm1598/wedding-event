@@ -58,10 +58,13 @@ flowchart TD
     CI --> PythonScript["5. claude_coder.py prepare: lập đề bài (spec diff, module đang active, quy ước, phiên bản Flyway kế tiếp)"]
     PythonScript --> ClaudeAI["6. Claude Code tự đọc spec + mã nguồn và sửa code<br/>(chỉ Read/Edit + git chỉ-đọc)"]
     ClaudeAI --> Guard["7. claude_coder.py guard: hoàn tác mọi thay đổi ngoài src/lib/test của module đang active<br/>(cấm .github/, docs/, lockfile, dependency manifest, sửa migration đã phát hành)"]
-    Guard --> VerifyJava["8.1. Backend: ./gradlew build (khi đã có Gradle)"]
-    Guard --> VerifyWeb["8.2. Web: npm ci + npm run build"]
-    Guard --> VerifyMobile["8.3. Mobile: flutter analyze + flutter test"]
-    VerifyJava & VerifyWeb & VerifyMobile --> PR["9. Mở Draft PR (ai/spec-update-&lt;run_id&gt;)<br/>kèm báo cáo; lỗi verify → patch được lưu artifact"]
+    Guard --> Review["7.1. Agent code-reviewer (.claude/agents/code-reviewer.md) review chỉ-đọc:<br/>spec, RBAC, Flyway, mock, test → verdict APPROVE / BLOCK"]
+    Review -->|"có CRITICAL/HIGH"| Fix["7.2. Claude tự sửa 1 vòng → guard lại"]
+    Review --> VerifyJava
+    Fix --> VerifyJava["8.1. Backend: ./gradlew build (khi đã có Gradle)"]
+    Review --> VerifyWeb["8.2. Web: npm ci + npm run build"]
+    Review --> VerifyMobile["8.3. Mobile: flutter analyze + flutter test"]
+    VerifyJava & VerifyWeb & VerifyMobile --> PR["9. Mở Draft PR (ai/spec-update-&lt;run_id&gt;)<br/>kèm báo cáo + kết quả review; lỗi verify → patch được lưu artifact"]
 ```
 
 **Lưu ý:**
@@ -106,7 +109,7 @@ flowchart TD
 #### 1. Backend Admin (Java 21 + Spring Boot 4)
 ```bash
 docker compose -f docker-compose.dev.yml up -d   # PostgreSQL 16 cho môi trường dev
-./gradlew build                                   # compile + integration tests (Testcontainers, cần Docker)
+./gradlew build                                   # compile + tests (Testcontainers, cần Docker) + cổng coverage JaCoCo ≥ 85%
 ./gradlew :admin-console:backend:bootRun          # API http://localhost:8082 + dữ liệu demo
 ```
 Chi tiết API, tài khoản demo và biến môi trường: [admin-console/backend/README.md](admin-console/backend/README.md).
@@ -148,6 +151,10 @@ python .github/scripts/claude_coder.py guard --dry-run --targets web          # 
 3. **Biến tùy chọn** (`Settings > Secrets and variables > Actions > Variables`):
    * `CLAUDE_MODEL` — mặc định `claude-opus-5-5`.
    * `CLAUDE_MAX_TURNS` — số lượt tối đa của Claude Code trong một lần chạy (mặc định `150`); hết lượt thì job dừng, không mở PR.
+   * `CLAUDE_REVIEW` — `false` để tắt bước review tự động sau khi sinh mã (mặc định bật).
+   * `CLAUDE_AUTO_FIX` — `false` để không chạy vòng tự sửa các lỗi CRITICAL/HIGH do reviewer tìm thấy (mặc định bật).
+   * `CLAUDE_REVIEW_MODEL`, `CLAUDE_REVIEW_MAX_TURNS` — model / số lượt riêng cho reviewer (mặc định như `CLAUDE_MODEL`, `60`).
+4. **Label** `ai-generated` và `ai-review-findings` được workflow tự tạo/cập nhật trước khi mở PR (không cần tạo tay). PR bị reviewer đánh BLOCK hoặc không kết luận được sẽ có label thứ hai.
    * `ALLOW_DEPENDENCY_CHANGES` — `true` để agent được sửa `package.json` / `pubspec.yaml` / `build.gradle` (mặc định `false`).
 
 ---

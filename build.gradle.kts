@@ -10,6 +10,8 @@ subprojects {
 
     apply(plugin = "java")
     apply(plugin = "io.spring.dependency-management")
+    // Test coverage (TDD gate). Reports: build/reports/jacoco/test/html/index.html
+    apply(plugin = "jacoco")
 
     group = "com.weddingevent"
     version = "0.1.0"
@@ -49,6 +51,14 @@ subprojects {
         testLogging {
             events("failed")
             exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+        finalizedBy("jacocoTestReport")
+    }
+
+    tasks.named<JacocoReport>("jacocoTestReport") {
+        reports {
+            xml.required.set(true)  // machine-readable, for CI tools
+            html.required.set(true)
         }
     }
 }

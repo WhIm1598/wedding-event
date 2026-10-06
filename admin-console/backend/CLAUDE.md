@@ -19,7 +19,10 @@ Inside a module package: `XxxController` + `XxxService` holding the request/resp
 (e.g. `BookingService.CreateBookingRequest`, `BookingService.BookingDto` with a static `of(entity)`).
 Tiny CRUD modules (crm, packages, settings) may use repositories directly from the controller.
 
-## Recipe: new endpoint
+## Recipe: new endpoint (test-first)
+0. **Tests first (TDD, JUnit 5):** turn every rule of the spec function into a named test — see step 6 for what to cover —
+   run them and see them fail, then do steps 1–5 until they pass. Pure domain logic gets plain JUnit unit tests
+   (`@ParameterizedTest` for boundary tables).
 1. Schema change? → entity in backend-common + new Flyway migration (see backend-common/CLAUDE.md).
 2. Request record with Jakarta Validation matching the spec (`@NotBlank @Size(max=…)`, `@Pattern(regexp = StaffService.VN_PHONE)`, …).
    Response record whose field names equal the spec / `src/types/index.ts` in the frontend.
@@ -40,4 +43,6 @@ Tiny CRUD modules (crm, packages, settings) may use repositories directly from t
 - Escape user text in HTML (`HtmlUtils.htmlEscape`) — see `ContractDocumentRenderer`.
 - Escape `%`/`_` in LIKE searches (see `SearchController`).
 - Don't log phone numbers, tokens or passwords.
-- Check: `./gradlew :admin-console:backend:build` (tests need Docker or `TEST_DATABASE_URL`).
+- Check: `./gradlew :admin-console:backend:build` (tests need Docker or `TEST_DATABASE_URL`). The build fails below
+  **85% line coverage** (JaCoCo, measured over this module + backend-common; report:
+  `build/reports/jacoco/test/html/index.html`). Never lower the gate or add exclusions to pass it — add tests.

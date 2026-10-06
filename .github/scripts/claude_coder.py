@@ -9,6 +9,9 @@ The workflow runs three steps:
   2. Claude Code edits the working tree (authenticated with CLAUDE_CODE_OAUTH_TOKEN).
   3. `guard`    — checks every file Claude changed against the safety rails, reverts anything not allowed
                   and writes the Markdown report used as the PR description.
+  4. Review     — `review-prompt` → the code-reviewer agent (.claude/agents/code-reviewer.md) reviews the changes →
+                  `review-result` (verdict) → optional `fix-prompt` + one fix pass + guard again → `append-review`
+                  adds the findings to the PR description.
 
 Safety rails (enforced by `guard`, also stated in the prompt):
   * Changes are only kept inside the source folders of *initialized* modules (a module is initialized when
@@ -239,6 +242,9 @@ Use them to go straight to the files you need instead of exploring the whole tre
 5. Do not commit, push, create branches or open PRs — the workflow verifies the build and opens a draft PR.
 6. If the spec is ambiguous or contradicts itself, choose the safest interpretation and say so.
 7. If you add a new folder, pattern or shared helper, update that module's `CLAUDE.md` in the same change (keep it short).
+8. Backend changes are test-driven (JUnit 5): first write the tests that encode each rule of the spec change (success,
+   every 400/403/business error code, transitions, formula boundaries), then the code that satisfies them. The build
+   that runs after you fails below 85% line coverage — never lower the gate, add coverage exclusions or disable tests.
 
 ## Final answer
 End with a short Markdown summary for the PR description: what you implemented (by spec function id),
@@ -446,6 +452,107 @@ def cmd_guard(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------------------
+# review: run the code-reviewer agent on the generated changes, optionally feed findings back for one fix pass
+# --------------------------------------------------------------------------------------
+REVIEWER_AGENT = '.claude/agents/code-reviewer.md'
+REVIEW_SUMMARY = re.compile(
+    r'Review Summary:.*?found\s+(\d+)\s+CRITICAL,\s*(\d+)\s+HIGH,\s*(\d+)\s+MEDIUM,\s*(\d+)\s+LOW.*?'
+    r'Merge recommendation:\s*\**\s*(BLOCK|APPROVE WITH SUGGESTIONS|APPROVE)', re.IGNORECASE | re.DOTALL)
+
+
+def agent_body(path: str) -> str:
+    """Agent instructions without the YAML front matter (used as the reviewer's system prompt)."""
+    text = (REPO_ROOT / path).read_text(encoding='utf-8')
+    if text.startswith('---'):
+        end = text.find('\n---', 3)
+        if end != -1:
+            text = text[end + 4:]
+    return text.strip() + '\n'
+
+
+def cmd_review_prompt(args: argparse.Namespace) -> int:
+    Path(args.system_out).write_text(agent_body(REVIEWER_AGENT), encoding='utf-8')
+    task = Path(args.task).read_text(encoding='utf-8')
+    Path(args.out).write_text(f"""Review the **uncommitted changes in this working tree** (run `git status --porcelain` — it includes new
+untracked files — and `git diff HEAD`). They were written by an AI agent, unattended, for the task below, and already
+passed a path guard. Judge them against the spec change in that task: correctness, completeness, scope creep, and all
+checks in your instructions. Do not modify any file. Finish with the exact "Review Summary" line.
+
+## Task the code was generated for
+{task}
+""", encoding='utf-8')
+    log(f'🔍 Review prompt written ({REVIEWER_AGENT})')
+    return 0
+
+
+def parse_review(text: str) -> dict:
+    m = REVIEW_SUMMARY.search(text or '')
+    if not m:
+        return {'verdict': 'UNKNOWN', 'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'blocking': 0}
+    critical, high, medium, low = (int(g) for g in m.groups()[:4])
+    return {'verdict': m.group(5).upper(), 'critical': critical, 'high': high, 'medium': medium, 'low': low,
+            'blocking': critical + high}
+
+
+def cmd_review_result(args: argparse.Namespace) -> int:
+    run = read_execution(args.execution_file)
+    text = (run.get('summary') or '').strip()
+    review = parse_review(text)
+    if review['verdict'] == 'UNKNOWN':
+        log('⚠️  Reviewer output has no "Review Summary" line — treating the verdict as UNKNOWN.')
+    Path(args.out).write_text(text or '_The reviewer returned no output._', encoding='utf-8')
+    for key in ('verdict', 'blocking', 'critical', 'high'):
+        set_output(key, str(review[key]))
+    log(f'🔍 Review verdict: {review["verdict"]} — {review["critical"]} critical, {review["high"]} high, '
+        f'{review["medium"]} medium, {review["low"]} low')
+    return 0
+
+
+def cmd_fix_prompt(args: argparse.Namespace) -> int:
+    task = Path(args.task).read_text(encoding='utf-8')
+    review = Path(args.review).read_text(encoding='utf-8')
+    Path(args.out).write_text(f"""A code review of your uncommitted changes found the problems below. Fix every **CRITICAL** and **HIGH**
+finding in the working tree. Fix MEDIUM findings only when the fix is small and clearly correct; ignore LOW ones.
+Stay within the scope and rules of the original task (repeated below) — do not start unrelated work. If you believe a
+finding is wrong, leave the code unchanged and explain why.
+
+End with a short Markdown list: each CRITICAL/HIGH finding → fixed / not fixed (reason).
+
+## Review findings
+{review}
+
+## Original task
+{task}
+""", encoding='utf-8')
+    log('🛠️  Fix prompt written')
+    return 0
+
+
+def append_review(report_path: str, review_path: str, verdict: str, fix_execution: str | None) -> None:
+    review = Path(review_path).read_text(encoding='utf-8').strip()
+    icon = {'APPROVE': '✅', 'APPROVE WITH SUGGESTIONS': '🟡', 'BLOCK': '⛔'}.get(verdict, '❔')
+    lines = ['', f'## 🔍 AI code review — {icon} {verdict}', '', '<details><summary>Findings</summary>', '', review, '', '</details>']
+    if fix_execution:
+        fix = read_execution(fix_execution)
+        lines += ['', '### 🛠️ Automatic fix pass',
+                  '_The CRITICAL/HIGH findings above were sent back to Claude once; the result was re-checked by the guard '
+                  'and the build, but **not re-reviewed** — confirm each finding during human review._', '',
+                  (fix.get('summary') or '_No summary returned._').strip()]
+    section = '\n'.join(lines) + '\n'
+    with open(report_path, 'a', encoding='utf-8') as f:
+        f.write(section)
+    summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+    if summary_file:
+        with open(summary_file, 'a', encoding='utf-8') as f:
+            f.write(section)
+
+
+def cmd_append_review(args: argparse.Namespace) -> int:
+    append_review(args.report, args.review, args.verdict, args.fix_execution_file)
+    return 0
+
+
+# --------------------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------------------
 def main() -> int:
@@ -466,6 +573,30 @@ def main() -> int:
     g.add_argument('--execution-file', help='output of `claude -p --output-format stream-json` (for the PR summary)')
     g.add_argument('--dry-run', action='store_true', help='report what would be reverted without reverting')
     g.set_defaults(func=cmd_guard)
+
+    rp = sub.add_parser('review-prompt', help='write the reviewer system prompt + review task')
+    rp.add_argument('--task', required=True, help='the generation task file written by `prepare`')
+    rp.add_argument('--out', required=True, help='review task prompt')
+    rp.add_argument('--system-out', required=True, help=f'reviewer instructions ({REVIEWER_AGENT} without front matter)')
+    rp.set_defaults(func=cmd_review_prompt)
+
+    rr = sub.add_parser('review-result', help='extract the review + verdict (step outputs verdict/blocking)')
+    rr.add_argument('--execution-file', required=True, help='reviewer `claude -p --output-format stream-json` output')
+    rr.add_argument('--out', required=True, help='write the review Markdown here')
+    rr.set_defaults(func=cmd_review_result)
+
+    fp = sub.add_parser('fix-prompt', help='write the prompt for the automatic fix pass')
+    fp.add_argument('--task', required=True)
+    fp.add_argument('--review', required=True)
+    fp.add_argument('--out', required=True)
+    fp.set_defaults(func=cmd_fix_prompt)
+
+    ar = sub.add_parser('append-review', help='append the review (and fix pass) to the PR report')
+    ar.add_argument('--report', required=True)
+    ar.add_argument('--review', required=True)
+    ar.add_argument('--verdict', default='UNKNOWN')
+    ar.add_argument('--fix-execution-file', help='output of the fix pass, if it ran')
+    ar.set_defaults(func=cmd_append_review)
 
     args = parser.parse_args()
     return args.func(args)
