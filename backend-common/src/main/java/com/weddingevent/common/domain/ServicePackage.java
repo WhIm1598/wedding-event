@@ -1,9 +1,12 @@
 package com.weddingevent.common.domain;
 
+import com.weddingevent.common.domain.enums.ServiceCategory;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
@@ -22,7 +25,7 @@ import lombok.Setter;
 @Table(name = "service_packages")
 public class ServicePackage extends BaseEntity {
 
-    /** Null for the studio's own packages */
+    /** {@link VendorProfile} id; null for the studio's own packages */
     @Column(name = "vendor_id")
     private UUID vendorId;
 
@@ -31,6 +34,11 @@ public class ServicePackage extends BaseEntity {
 
     @Column(nullable = false)
     private String type;
+
+    /** Mobile catalog category (FN-SVC-01); the studio's own packages are photography */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ServiceCategory category = ServiceCategory.PHOTO;
 
     @Column(nullable = false, precision = 15, scale = 0)
     private BigDecimal price;

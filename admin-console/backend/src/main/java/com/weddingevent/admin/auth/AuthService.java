@@ -43,7 +43,7 @@ public class AuthService {
             passwordEncoder.matches(password, dummyHash);
             throw invalidCredentials();
         }
-        if (!passwordEncoder.matches(password, user.getPasswordHash()) || !CONSOLE_ROLES.contains(user.getRole())) {
+        if (!passwordEncoder.matches(password, user.getPasswordHash()) || !isConsoleUser(user)) {
             throw invalidCredentials();
         }
         if (!user.isActive()) {
@@ -67,8 +67,13 @@ public class AuthService {
     private User activeConsoleUser(UUID userId) {
         return users.findById(userId)
                 .filter(User::isActive)
-                .filter(u -> CONSOLE_ROLES.contains(u.getRole()))
+                .filter(AuthService::isConsoleUser)
                 .orElseThrow(() -> AppException.unauthorized("UNAUTHORIZED", "Phiên đăng nhập không hợp lệ"));
+    }
+
+    /** Mobile accounts (couple/vendor, or no role yet) can't use the admin console. Set.of(...).contains(null) throws. */
+    private static boolean isConsoleUser(User user) {
+        return user.getRole() != null && CONSOLE_ROLES.contains(user.getRole());
     }
 
     private LoginResponse respond(User user) {

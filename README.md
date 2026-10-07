@@ -68,7 +68,7 @@ flowchart TD
 ```
 
 **Lưu ý:**
-* Module chỉ được agent sinh mã khi đã "khởi tạo" (có `package.json` / `pubspec.yaml` / `settings.gradle` ở root). Backend hiện **chưa** có Gradle nên bị bỏ qua và CI cảnh báo rõ ràng.
+* Module chỉ được agent sinh mã khi đã "khởi tạo" (có `package.json` / `pubspec.yaml` / `settings.gradle.kts` ở root). Module nào thiếu manifest sẽ bị bỏ qua và CI cảnh báo rõ ràng.
 * Có thể chạy tay: *Actions → Claude Spec-to-Code Agent → Run workflow* (chọn spec và `targets`: `web,mobile,backend`).
 * PR do agent tạo bằng `GITHUB_TOKEN` không kích hoạt `ci.yml` (giới hạn của GitHub) — vì vậy agent tự chạy cùng bộ verify trước khi mở PR.
 
@@ -123,15 +123,24 @@ npm run dev:api # dùng API thật của admin-console/backend qua Vite proxy
 npm run build   # tsc --noEmit + vite build (giống CI)
 ```
 
-#### 3. Kiểm tra Mobile App (Flutter)
+#### 3. Backend Mobile (Java 21 + Spring Boot 4)
+```bash
+docker compose -f docker-compose.dev.yml up -d   # dùng chung database với Backend Admin
+./gradlew :client-console:backend:bootRun         # API http://localhost:8081 + WebSocket /ws + dữ liệu demo
+```
+Endpoint, tài khoản demo và biến môi trường: [client-console/backend/README.md](client-console/backend/README.md).
+
+#### 4. Mobile App (Flutter)
 ```bash
 cd client-console/mobile
 flutter create . --platforms=android,ios   # lần đầu: sinh thư mục nền tảng
 flutter pub get
 flutter analyze && flutter test            # giống CI
+flutter run                                # dữ liệu mock, không cần backend
+flutter run --dart-define=USE_MOCK=false   # gọi Backend Mobile (emulator Android: http://10.0.2.2:8081)
 ```
 
-#### 4. Chạy thử AI Coder Agent nội bộ
+#### 5. Chạy thử AI Coder Agent nội bộ
 ```bash
 python .github/scripts/claude_coder.py prepare --targets web --out task.md   # xem đề bài gửi cho Claude Code
 claude -p "$(cat task.md)"                                                    # chạy bằng Claude Code CLI trên máy

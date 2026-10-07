@@ -3,7 +3,8 @@ import '../../core/network/api_client.dart';
 import '../mock/mock_data.dart';
 import '../models/vendor.dart';
 
-/// Vendor workspace (spec §4.3). Endpoints are not detailed in the spec yet — paths below are proposals.
+/// Vendor workspace (feature spec §4.3). The detailed spec has no endpoints for it yet, so client-console/backend
+/// doesn't serve them: these work in mock mode only. Paths below are proposals.
 class VendorRepository {
   VendorRepository(this._api);
 

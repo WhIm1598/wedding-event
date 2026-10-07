@@ -299,7 +299,8 @@ class _BudgetTab extends StatelessWidget {
                   ),
                   IconButton(
                     style: IconButton.styleFrom(backgroundColor: AppColors.pink50, foregroundColor: AppColors.pink600),
-                    onPressed: () => showAppSnack(context, 'TODO: thêm hạng mục ngân sách'),
+                    // TODO: no budget-item endpoint in the spec yet
+                    onPressed: () => showComingSoon(context, 'Thêm hạng mục ngân sách'),
                     icon: const Icon(Icons.add),
                   ),
                 ],

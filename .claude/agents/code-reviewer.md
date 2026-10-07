@@ -47,7 +47,7 @@ You are the senior reviewer of the Wedding Event monorepo. You review changes; y
   `NUMERIC(15,0)`↔`BigDecimal`, `TIMESTAMPTZ`↔`Instant`, `DATE`↔`LocalDate`, enum `VARCHAR` wide enough.
 - Indexes for new foreign keys/columns used in `WHERE`/`JOIN`; repositories are top-level interfaces, one per file.
 
-### Backend correctness (admin-console/backend, backend-common)
+### Backend correctness (admin-console/backend, client-console/backend, backend-common)
 - `@Transactional` on writes (`readOnly = true` on reads); "today" via the injected `Clock`, never `LocalDate.now()`.
 - Money with `BigDecimal` and `compareTo`, never `equals`/`double`; integer VND.
 - Concurrency: row lock (`findByIdForUpdate`) or `@Version` where two requests can race (payments, reservations, schedules).

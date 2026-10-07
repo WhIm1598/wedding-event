@@ -2,7 +2,10 @@
 
 Flutter (Dart 3.5+) · go_router · provider · dio · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
 Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios` and not committed.
-The client backend doesn't exist yet, so the app runs on mock data by default.
+The app runs on mock data by default; `--dart-define=USE_MOCK=false` calls `client-console/backend` (port 8081, see its
+CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sending messages; the vendor workspace
+(`VendorRepository`) has no backend endpoints yet and works in mock mode only. List endpoints return the spec's page shape
+`{items, page, size, totalElements, totalPages}`.
 
 ## Where things go (`lib/`)
 | Path | Contents |
@@ -12,7 +15,7 @@ The client backend doesn't exist yet, so the app runs on mock data by default.
 | `core/network/` | `ApiClient.get/post/put/patch(path, {body/query, parse:})` unwrapping the `{success, code, message, data}` envelope; `ApiException(code:, message:, statusCode:)`; `mockDelay(value, [ms])` |
 | `core/router/app_router.dart` | `Routes` path constants + `createRouter(session)`: auth redirects, `ShellRoute` for bottom-nav tabs, plain `GoRoute`s for full-screen pages |
 | `core/theme/` | `AppColors` (rose/pink brand, slate neutrals), `AppTheme.light` |
-| `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>` |
+| `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>`, `showAppSnack`, `showComingSoon` (Vietnamese "sắp ra mắt" for template buttons without a spec endpoint; dev notes stay in code comments, never in UI text) |
 | `core/utils/` | `Fmt` (money, dates), `Validators` (email, VN phone, required) |
 | `data/models/` | Immutable models with `const` constructors and `fromJson`/`toJson` using the spec's JSON names |
 | `data/repositories/` | One per API module (`auth`, `plan`, `guest`, `service`, `vendor`, `notification`) |

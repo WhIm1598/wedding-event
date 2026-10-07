@@ -99,7 +99,8 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (users.count() > 0) {
+        // Not users.count(): the client backend shares the database and may have seeded mobile users first
+        if (users.existsByEmailIgnoreCase("admin@lumiere.vn")) {
             return;
         }
         LocalDate today = LocalDate.now(clock);

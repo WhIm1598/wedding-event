@@ -1,5 +1,7 @@
 package com.weddingevent.common.exception;
 
+import com.weddingevent.common.api.ApiResponse;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 
 /** Business error carrying an HTTP status and a spec error code (e.g. 409 STAFF_SCHEDULE_CONFLICT). */
@@ -7,11 +9,17 @@ public class AppException extends RuntimeException {
 
     private final HttpStatus status;
     private final String code;
+    private final List<ApiResponse.FieldError> errors;
 
     public AppException(HttpStatus status, String code, String message) {
+        this(status, code, message, null);
+    }
+
+    public AppException(HttpStatus status, String code, String message, List<ApiResponse.FieldError> errors) {
         super(message);
         this.status = status;
         this.code = code;
+        this.errors = errors;
     }
 
     public HttpStatus getStatus() {
@@ -22,8 +30,19 @@ public class AppException extends RuntimeException {
         return code;
     }
 
+    /** Field errors for validation rules that annotations can't express (e.g. "at least 7 days from today") */
+    public List<ApiResponse.FieldError> getErrors() {
+        return errors;
+    }
+
     public static AppException badRequest(String code, String message) {
         return new AppException(HttpStatus.BAD_REQUEST, code, message);
+    }
+
+    /** 400 BAD_REQUEST with one field error, same shape as a Jakarta Validation failure */
+    public static AppException invalidField(String field, String message) {
+        return new AppException(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Dữ liệu không hợp lệ",
+                List.of(new ApiResponse.FieldError(field, message)));
     }
 
     public static AppException conflict(String code, String message) {

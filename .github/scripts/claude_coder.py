@@ -85,13 +85,15 @@ TARGETS: tuple[Target, ...] = (
     Target(
         key='backend',
         manifests=('settings.gradle', 'settings.gradle.kts'),
-        # client-console/backend is not a Gradle module yet (see its CLAUDE.md): code there would never be compiled or
-        # tested, so it isn't writable until the module is set up.
-        writable=('backend-common/src/*', 'admin-console/backend/src/*', 'backend-common/CLAUDE.md', 'admin-console/backend/CLAUDE.md'),
+        writable=(
+            'backend-common/src/*', 'admin-console/backend/src/*', 'client-console/backend/src/*',
+            'backend-common/CLAUDE.md', 'admin-console/backend/CLAUDE.md', 'client-console/backend/CLAUDE.md',
+        ),
         dependency_files=(
             'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts',
             'backend-common/build.gradle', 'backend-common/build.gradle.kts',
             'admin-console/backend/build.gradle', 'admin-console/backend/build.gradle.kts',
+            'client-console/backend/build.gradle', 'client-console/backend/build.gradle.kts',
         ),
         guides=('backend-common/CLAUDE.md', 'admin-console/backend/CLAUDE.md', 'client-console/backend/CLAUDE.md'),
     ),

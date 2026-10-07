@@ -26,7 +26,8 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationDto> latest() {
-        return notifications.findTop30ByOrderByCreatedAtDesc().stream().map(NotificationDto::of).toList();
+        // Studio feed only — rows with a recipient belong to mobile users' inboxes (client-console)
+        return notifications.findTop30ByRecipientUserIdIsNullOrderByCreatedAtDesc().stream().map(NotificationDto::of).toList();
     }
 
     /** Called by other services when something needs the team's attention */
@@ -40,7 +41,7 @@ public class NotificationService {
 
     @Transactional
     public void markRead(UUID id) {
-        notifications.findById(id).orElseThrow(() -> new ResourceNotFoundException("thông báo", id)).setRead(true);
+        notifications.findByIdAndRecipientUserIdIsNull(id).orElseThrow(() -> new ResourceNotFoundException("thông báo", id)).setRead(true);
     }
 
     @Transactional

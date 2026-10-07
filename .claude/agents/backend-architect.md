@@ -9,7 +9,7 @@ You design backend changes for the Wedding Event monorepo. You **do not modify f
 
 ## The architecture you design within
 - Two Spring Boot 4 / Java 21 services, `admin-console/backend` (`/api/v1/admin/**`, `/api/v1/public/**`, port 8082)
-  and the planned `client-console/backend` (`/api/v1/auth|users|client|messages/**`, WebSocket `/ws`, port 8081),
+  and `client-console/backend` (`/api/v1/auth|users|client|messages/**`, STOMP WebSocket `/ws`, port 8081),
   behind one nginx gateway (spec §1.4, `docs/architecture/system_architecture_and_infrastructure.md`).
 - Shared library `backend-common`: JPA entities, enums, repositories, `ApiResponse` envelope, `AppException`, and the
   **Flyway migrations**. One PostgreSQL 16 database for both services; Hibernate `ddl-auto=validate`.

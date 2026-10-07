@@ -87,7 +87,8 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                       ),
                     ),
                   OutlinedButton.icon(
-                    onPressed: () => showAppSnack(context, 'TODO: form tạo gói dịch vụ mới'),
+                    // TODO: no vendor service-create endpoint in the spec yet
+                    onPressed: () => showComingSoon(context, 'Thêm dịch vụ mới'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(56),
                       backgroundColor: AppColors.pink50,

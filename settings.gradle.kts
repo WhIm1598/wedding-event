@@ -10,4 +10,4 @@ rootProject.name = "wedding-event"
 
 include(":backend-common")
 include(":admin-console:backend")
-// TODO: include(":client-console:backend") once the client API is implemented
+include(":client-console:backend")

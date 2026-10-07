@@ -21,11 +21,15 @@ class ServiceItem {
     required this.category,
     required this.imageUrl,
     required this.description,
+    this.providerId,
   });
 
   final String id;
   final String name;
   final String provider;
+
+  /// User id of the vendor (FN-MSG-01 `recipientId`); null for the studio's own packages
+  final String? providerId;
   final int price;
   final double rating;
   final int reviews;
@@ -38,6 +42,7 @@ class ServiceItem {
         id: json['id'] as String,
         name: json['name'] as String,
         provider: json['providerName'] as String? ?? '',
+        providerId: json['providerId'] as String?,
         price: (json['price'] as num).toInt(),
         rating: (json['rating'] as num?)?.toDouble() ?? 0,
         reviews: json['reviewCount'] as int? ?? 0,

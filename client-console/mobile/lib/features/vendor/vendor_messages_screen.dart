@@ -54,7 +54,8 @@ class _ThreadTile extends StatelessWidget {
     return Material(
       color: unread ? AppColors.pink50 : AppColors.white,
       child: InkWell(
-        onTap: () => showAppSnack(context, 'TODO: mở cuộc trò chuyện với ${thread.name}'),
+        // TODO: conversation screen on FN-MSG-01 (POST /messages/send + STOMP /topic/messages/{roomId})
+        onTap: () => showComingSoon(context, 'Trò chuyện'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

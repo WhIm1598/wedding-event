@@ -2,7 +2,7 @@
 
 Two products share one PostgreSQL database and one Java domain library:
 - **Lumière Studios admin** (web, studio staff): `admin-console/frontend` → `admin-console/backend`
-- **WedPlanner** (mobile, couples & vendors): `client-console/mobile` → `client-console/backend` (not built yet)
+- **WedPlanner** (mobile, couples & vendors): `client-console/mobile` → `client-console/backend`
 
 | Module | Stack | Guide |
 |---|---|---|
@@ -10,10 +10,10 @@ Two products share one PostgreSQL database and one Java domain library:
 | `admin-console/backend/` | Spring Boot 4 API, port 8082, `/api/v1/admin/**`, `/api/v1/public/**` | [admin-console/backend/CLAUDE.md](admin-console/backend/CLAUDE.md) |
 | `admin-console/frontend/` | React 18 + TS + Vite + Tailwind, mock or real API | [admin-console/frontend/CLAUDE.md](admin-console/frontend/CLAUDE.md) |
 | `client-console/mobile/` | Flutter app, mock or real API | [client-console/mobile/CLAUDE.md](client-console/mobile/CLAUDE.md) |
-| `client-console/backend/` | Planned Spring Boot API `/api/v1/client/**`, `/api/v1/auth/**` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
+| `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
-| `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml`); maintained with the `api-documenter` agent | |
+| `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml`; `client-api.yml` still to generate); maintained with the `api-documenter` agent | |
 | `docs/templates/` | UI reference mock-ups only (look & feel, not code to copy) | |
 | `.github/` | CI (`ci.yml`), spec-to-code agent (`claude-agent.yml`, `scripts/claude_coder.py`) | |
 | `.claude/agents/` | Project subagents: `backend-architect` (read-only design proposal before backend work), `java-architect` (backend Java/Spring implementation + code-level design), `frontend-developer` (admin web implementation), `api-documenter` (OpenAPI `docs/api/*.yml` from the code), `code-reviewer` (read-only review; also runs in CI after code generation) | |
@@ -39,6 +39,7 @@ on mobile). JSON field names are identical at every layer; the spec's names win.
 |---|---|
 | Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo) |
 | Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun` |
+| Run mobile API | same database, then `./gradlew :client-console:backend:bootRun` (port 8081) |
 | Web type-check + build | `cd admin-console/frontend && npm run build` |
 | Web dev (mock / real API) | `npm run dev` / `npm run dev:api` |
 | Mobile | `cd client-console/mobile && flutter analyze && flutter test` |

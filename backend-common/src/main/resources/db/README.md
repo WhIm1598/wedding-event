@@ -4,7 +4,7 @@ Flyway is the **only** thing that creates or changes tables. Hibernate runs with
 touches the schema, it only checks at startup that the JPA entities in `backend-common` match it.
 
 Migrations live here, in `backend-common/src/main/resources/db/migration/`, next to the entities they describe.
-Every backend that depends on `backend-common` (admin-console now, client-console later) ships the same set and runs
+Every backend that depends on `backend-common` (admin-console and client-console) ships the same set and runs
 `migrate` on startup; Flyway's lock on `flyway_schema_history` makes concurrent starts safe.
 
 ## Adding a change

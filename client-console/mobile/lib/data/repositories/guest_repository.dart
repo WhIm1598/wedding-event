@@ -22,7 +22,7 @@ class GuestRepository {
     }
     return _api.get(
       '/client/guests',
-      query: {'status': status?.name ?? 'all', 'group': group, 'search': search},
+      query: {'status': status?.name ?? 'all', if (group != null) 'group': group, 'search': search},
       parse: (d) {
         final map = d! as Map<String, dynamic>;
         return GuestListResult(

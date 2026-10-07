@@ -1,6 +1,6 @@
 # TÀI LIỆU ĐẶC TẢ CHI TIẾT CHỨC NĂNG (DETAILED FUNCTIONAL SPECIFICATION)
 **Dự án:** Wedding Event & Studio Management Monorepo Platform  
-**Phiên bản:** 1.1.1  
+**Phiên bản:** 1.1.2  
 **Mục tiêu:** Cung cấp thông số kỹ thuật, quy tắc nghiệp vụ (Business Rules), Schema Request/Response và quy trình xử lý chi tiết từng function cho AI Agent / Kỹ sư phần mềm triển khai mã nguồn chính xác 100%.
 
 **Ký hiệu trạng thái triển khai** (gắn ở đầu mỗi function phía Admin):
@@ -14,6 +14,7 @@
 | 1.0.0 | Bản đầu tiên. |
 | 1.1.0 | **Nhóm A — làm rõ spec:** vòng đời trạng thái Hợp đồng/Lịch hẹn/Lead (§1.6); xác thực Admin tách `/api/v1/admin/auth/**`, thu hồi token, đăng xuất (Module 5A); ma trận phân quyền (§1.5); danh mục mã lỗi (§1.3); công thức KPI chống chia cho 0; bộ đệm bảo dưỡng kiểm tra hai chiều; bổ sung các endpoint đã có nhưng chưa được đặc tả (gói dịch vụ, nhân sự, thông báo, tìm kiếm, cài đặt). **Nhóm B — tính năng mới:** UI giữ lịch trang phục, hành trình khách hàng liền mạch, lịch thanh toán 30/50/20 + nhắc nợ, sửa/hủy, quản lý tài khoản, trang hợp đồng công khai, tự phục vụ cho nhân viên, phân trang & điều hướng tìm kiếm, yêu cầu phi chức năng (§3). |
 | 1.1.1 | Đối chiếu với mã nguồn: các mục chưa có trong code được gắn *(v1.1)* (JWT claim `typ`, kết quả tìm kiếm `contract`/`lead`, `completedThisMonth` tính đến hôm nay, địa chỉ Bên A); bổ sung endpoint mobile đang dùng nhưng chưa đặc tả (FN-AUTH-04, FN-PLAN-05, FN-SVC-02, FN-NOTI-01) và `budgetItems`/`tasks` trong FN-PLAN-02. |
+| 1.1.2 | Triển khai `client-console/backend` (Phần A): bảng mã lỗi phía mobile (§1.3); `users.role` để trống tới khi chọn vai trò, vai trò chỉ chọn một lần (FN-AUTH-03); kế hoạch `DRAFT` không tính là có kế hoạch; quy tắc OTP/gửi lại mã (FN-AUTH-02); `providerId` trong FN-SVC-01; mặc định ngày cưới và lỗi dịch vụ AI (FN-PLAN-03); quy tắc mã kết nối (FN-PLAN-04); người nhận hợp lệ và thông báo khi offline (FN-MSG-01); làm tròn `progressPercentage`. |
 
 ---
 
@@ -78,6 +79,20 @@
 | `TRANSACTION_ALREADY_VOIDED` | 409 | Hủy phiếu thu/chi đã bị hủy. |
 | `ZALO_NOT_AVAILABLE` | 400 | SĐT khách chưa đăng ký Zalo. |
 | `SHARE_LINK_EXPIRED` | 410 | Link hợp đồng công khai hết hạn hoặc đã bị thu hồi. |
+
+**Mã nghiệp vụ phía Mobile (Phần A)** *(v1.1.2)* — dùng chung `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `EMAIL_EXISTS` ở trên:
+| Mã | HTTP | Ngữ cảnh |
+| :--- | :--- | :--- |
+| `INVALID_GOOGLE_TOKEN` | 401 | Google ID token sai/hết hạn, hoặc đăng nhập Google chưa được cấu hình. |
+| `INVALID_OTP` | 400 | Mã OTP sai, hoặc không có mã nào đang chờ cho email này. |
+| `OTP_EXPIRED` | 400 | Mã quá 5 phút hoặc đã sai 5 lần — phải gửi lại mã (`POST /auth/send-otp`). |
+| `ROLE_ALREADY_SET` | 409 | Tài khoản đã chọn vai trò (FN-AUTH-03 chỉ gọi một lần). |
+| `PLAN_ALREADY_EXISTS` | 409 | Cặp đôi đã có kế hoạch `PLANNING` (là chủ hoặc bạn đời đã đồng bộ). |
+| `INVALID_SYNC_CODE` | 400 | Mã kết nối không tồn tại, đã dùng, hết hạn hoặc thuộc kế hoạch không còn hoạt động. |
+| `CANNOT_JOIN_OWN_PLAN` | 409 | Dùng mã kết nối của chính kế hoạch mình. |
+| `PLAN_ALREADY_SYNCED` | 409 | Kế hoạch đã có bạn đời (tạo mã mới hoặc tham gia đều bị chặn). |
+| `INVALID_RECIPIENT` | 400 | Người nhận tin nhắn không tồn tại, bị khóa, là chính mình, hoặc không phải cặp Cặp đôi ↔ Vendor. |
+| `AI_SERVICE_UNAVAILABLE` | 503 | Dịch vụ AI planner lỗi/quá thời gian hoặc trả về kế hoạch rỗng. |
 
 ### 1.4. Định tuyến API qua Nginx Gateway *(v1.1)*
 | Tiền tố | Service | Ghi chú |
@@ -205,6 +220,9 @@ stateDiagram-v2
   * Mã OTP có hiệu lực trong 5 phút tính từ thời điểm tạo.
   * Nhập sai quá 5 lần liên tiếp sẽ vô hiệu hóa mã OTP và bắt gửi lại.
   * Nếu thành công: Cập nhật `is_verified = true` trong cơ sở dữ liệu.
+  * *(v1.1.2)* Sai mã → `400 INVALID_OTP`; sau 5 lần sai hoặc quá 5 phút → `400 OTP_EXPIRED`. Mã chỉ dùng một lần và chỉ lưu dạng băm. Mã mới (đăng nhập tài khoản chưa xác thực, đổi email, hoặc gửi lại) thay thế mã cũ.
+  * *(v1.1.2)* Gửi lại mã: `POST /api/v1/auth/send-otp` `{ "email" }` — luôn trả `200` (không tiết lộ email có tồn tại); chỉ gửi khi tài khoản tồn tại, đang hoạt động và chưa xác thực.
+  * *(v1.1.2)* Tài khoản Studio (`ROLE_ADMIN`/`ROLE_STAFF`) không đăng nhập được app mobile (`401 INVALID_CREDENTIALS`), và ngược lại tài khoản mobile không đăng nhập được Web Admin.
 
 #### `FN-AUTH-03: Lựa chọn vai trò (Role Picker Onboarding)`
 * **Mục tiêu:** Gán vai trò ban đầu cho người dùng sau khi đăng ký tài khoản mới.
@@ -219,6 +237,8 @@ stateDiagram-v2
   * Chỉ chấp nhận `ROLE_COUPLE` hoặc `ROLE_VENDOR` (vai trò `ROLE_STAFF`/`ROLE_ADMIN` chỉ được cấp qua §FN-ADM-USER-01).
   * Nếu chọn `ROLE_COUPLE`: Tạo bản ghi mặc định trong `wedding_plans` ở trạng thái nháp (`hasPlan = false`).
   * Nếu chọn `ROLE_VENDOR`: Tạo hồ sơ Vendor mặc định trong `vendor_profiles`.
+  * *(v1.1.2)* Tài khoản mới (vd. tạo qua Google) có `role = null` cho tới khi chọn; trong thời gian đó chỉ gọi được `/auth/me`, `/users/**` và hộp thư thông báo (`403` với các API khác). Vai trò chỉ chọn **một lần**: gọi lại → `409 ROLE_ALREADY_SET`. Giá trị khác `ROLE_COUPLE`/`ROLE_VENDOR` → `400`.
+  * *(v1.1.2)* Kế hoạch `DRAFT` tạo ở bước này **không** tính là "có kế hoạch" (`hasPlan = false`, FN-PLAN-02 trả `data: null`); FN-PLAN-01/03 sẽ dùng lại bản ghi này.
 * **Output (200):** đối tượng `user` như FN-AUTH-01.
 
 #### `FN-AUTH-04: Cập nhật hồ sơ cá nhân`
@@ -279,7 +299,7 @@ stateDiagram-v2
       "tasksProgress": {
         "totalTasks": 12,
         "completedTasks": 5,
-        "progressPercentage": 41.6
+        "progressPercentage": 41.7
       },
       "partner": {
         "id": "e2d1c0b9-...",
@@ -301,7 +321,8 @@ stateDiagram-v2
   * `daysRemaining = max(0, weddingDate - CurrentDate)`.
   * `totalSpent = SUM(actualAmount)` của toàn bộ `budget_items`.
   * `spentPercentage = (totalSpent / totalBudget) * 100`, làm tròn 1 chữ số thập phân.
-  * `progressPercentage = completedTasks / totalTasks * 100`; bằng `0` khi `totalTasks = 0`.
+  * `progressPercentage = completedTasks / totalTasks * 100`, làm tròn `HALF_UP` 1 chữ số thập phân *(v1.1.2 — ví dụ cũ ghi 41.6)*; bằng `0` khi `totalTasks = 0`. `spentPercentage` bằng `0` khi `totalBudget = 0`.
+  * `partner` là **người còn lại** của cặp đôi so với người gọi (chủ kế hoạch thấy bạn đời và ngược lại); `null` khi chưa đồng bộ.
 
 #### `FN-PLAN-03: Trợ lý AI sinh kế hoạch tự động (In-House AI Wedding Planner)`
 * **Mục tiêu:** Sử dụng Custom In-House AI Model (Mô hình chuyên biệt được dự án tự huấn luyện riêng cho lĩnh vực cưới hỏi) để phân tích yêu cầu của cặp đôi và tự động sinh bản phân bổ chi phí & lộ trình công việc.
@@ -340,6 +361,7 @@ stateDiagram-v2
     }
     ```
 * **Post-processing:** Lưu kết quả trực tiếp vào cơ sở dữ liệu `wedding_plans`, `budget_items`, `plan_tasks` của người dùng trong một Database Transaction duy nhất.
+* *(v1.1.2)* **Quy tắc bổ sung:** `prompt` bắt buộc (≤ 2000 ký tự); `totalBudget` nếu có ≥ 10.000.000; `weddingDate` nếu có phải sau hôm nay ≥ 7 ngày, nếu không gửi thì mặc định **hôm nay + 6 tháng**; `guestCount` 1–5000; `style` ∈ `MODERN|CLASSIC|MINIMAL|ELEGANT`. Đã có kế hoạch → `409 PLAN_ALREADY_EXISTS`. `dueDate = weddingDate − dueMonthOffset tháng`, riêng `dueMonthOffset = 0` → `weddingDate − 7 ngày`. `categories[].notes` lưu vào `budget_items.notes`. Gọi AI ngoài transaction; lỗi/timeout/kế hoạch rỗng → `503 AI_SERVICE_UNAVAILABLE`. Thành công tạo thông báo `kind = ai` "Kế hoạch đã sẵn sàng". Trả `201` với schema FN-PLAN-02.
 
 #### `FN-PLAN-04: Đồng bộ Kế hoạch Bạn đời (Couple Sync)`
 * **Mục tiêu:** Cho phép 2 tài khoản Cô dâu và Chú rể xem và quản lý chung một Wedding Plan.
@@ -352,6 +374,8 @@ stateDiagram-v2
       2. Gán `partner_id` của bản ghi `wedding_plans` tương ứng.
       3. Đánh dấu `is_used = true`.
       4. Gửi thông báo Push Notification (Firebase Cloud Messaging) cho cả 2 thiết bị: *"Bạn và nửa kia đã kết nối thành công!"*.
+  * *(v1.1.2)* `sync-code`: cần kế hoạch `PLANNING` (không có → `404`); kế hoạch đã có bạn đời → `409 PLAN_ALREADY_SYNCED`; mã mới thay thế các mã chưa dùng của kế hoạch. Trả `201 { "syncCode", "expiresAt" }`.
+  * *(v1.1.2)* `join-sync`: mã không phân biệt hoa thường, đúng 6 ký tự (sai định dạng → `400` lỗi trường). Lỗi: mã không hợp lệ/đã dùng/hết hạn → `400 INVALID_SYNC_CODE`; mã của chính mình → `409 CANNOT_JOIN_OWN_PLAN`; kế hoạch đã có bạn đời → `409 PLAN_ALREADY_SYNCED`; người tham gia đã có kế hoạch `PLANNING` → `409 PLAN_ALREADY_EXISTS` (kế hoạch `DRAFT` của họ bị xóa). Khóa dòng mã khi đổi để 2 người không cùng dùng một mã. Trả `200` với kế hoạch chung (schema FN-PLAN-02); thông báo `kind = sync` được lưu vào hộp thư của cả hai.
 
 #### `FN-PLAN-05: Đánh dấu hoàn thành công việc (Checklist)`
 * **Endpoint:** `PATCH /api/v1/client/plans/tasks/{taskId}` — `ROLE_COUPLE` (chủ kế hoạch hoặc bạn đời đã đồng bộ).
@@ -414,7 +438,8 @@ stateDiagram-v2
 
 #### `FN-SVC-01: Khám phá danh mục dịch vụ`
 * **Endpoint:** `GET /api/v1/client/services?category={photo|decor|restaurant|dress}&keyword={text}&page=0&size=10`
-* **Output:** Danh sách các gói dịch vụ có phân trang (§1.2), chỉ gồm gói `is_active = true`. Mỗi phần tử: `{ id, name, providerName, price, rating, reviewCount, address, category, thumbnailUrl, description }`.
+* **Output:** Danh sách các gói dịch vụ có phân trang (§1.2), chỉ gồm gói `is_active = true`. Mỗi phần tử: `{ id, name, providerId, providerName, price, rating, reviewCount, address, category, thumbnailUrl, description }`.
+  * *(v1.1.2)* `providerId` = id **tài khoản người dùng** của Vendor (dùng làm `recipientId` của FN-MSG-01); `null` với gói của Studio (`vendor_id IS NULL`) — khi đó `providerName`/`address` lấy từ `studio_settings`, `rating = 0`, `reviewCount = 0`. `category` chữ thường; giá trị khác `photo|decor|restaurant|dress` → `400`. `keyword` khớp không phân biệt hoa thường với tên gói hoặc tên nhà cung cấp (`%`, `_` là ký tự thường). `size` 1–100, mặc định 10.
 
 #### `FN-SVC-02: Chi tiết dịch vụ`
 * **Endpoint:** `GET /api/v1/client/services/{id}` — cùng schema phần tử của FN-SVC-01 (mở rộng sau: thư viện ảnh, quyền lợi gói, đánh giá). Gói không tồn tại hoặc đã tắt → `404 NOT_FOUND`.
@@ -432,11 +457,14 @@ stateDiagram-v2
   }
   ```
 * **Business Logic:** Lưu tin nhắn vào `chat_messages`, cập nhật `last_message_at` của phòng chat, đẩy thông báo thời gian thực qua WebSocket và gửi Push Notification nếu người nhận không online.
+* *(v1.1.2)* **Quy tắc bổ sung:** `ROLE_COUPLE`/`ROLE_VENDOR`; chỉ nhắn giữa Cặp đôi ↔ Vendor, người nhận phải tồn tại và đang hoạt động, khác người gửi — ngược lại `400 INVALID_RECIPIENT`. `content` 1–2000 ký tự, `attachmentUrl` ≤ 500. Mỗi cặp người dùng có đúng một phòng (`chat_rooms`). Trả `201 { id, roomId, senderId, recipientId, content, attachmentUrl, createdAt }`; cùng nội dung được phát tới `/topic/messages/{roomId}` sau khi lưu. Người nhận không có phiên WebSocket đang mở → thông báo `kind = message` (tiêu đề = tên người gửi) được lưu vào hộp thư + Push.
+* *(v1.1.2)* **STOMP:** frame `CONNECT` mang header `Authorization: Bearer <accessToken>`; chỉ thành viên phòng mới `SUBSCRIBE` được `/topic/messages/{roomId}`; `SEND /app/chat` cùng body với REST; lỗi trả về `/user/queue/errors` theo envelope §1.2.
 
 #### `FN-NOTI-01: Hộp thư thông báo trong ứng dụng`
 * **Endpoint:** `GET /api/v1/client/notifications?page=0&size=20` — người dùng đã đăng nhập, mới nhất trước.
 * **Item:** `{ "id", "title", "body", "kind": "ai|message|sync|reminder", "isRead": false, "createdAt" }` — `kind` quyết định icon trên app (gợi ý AI, tin nhắn mới, đồng bộ bạn đời, nhắc việc/đến hạn).
 * Mọi thông báo gửi qua Push (FCM) đều được lưu tại đây để xem lại. Đánh dấu đã đọc: `PATCH /api/v1/client/notifications/{id}/read`.
+* *(v1.1.2)* `data` theo dạng phân trang §1.2 (`size` 1–100, mặc định 20). Mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò) đều có hộp thư; chỉ thấy thông báo của mình (`notifications.recipient_user_id`), thông báo của người khác → `404`. `PATCH .../read` trả về phần tử đã cập nhật. Thông báo không có `kind` hiển thị như `reminder`.
 
 ---
 

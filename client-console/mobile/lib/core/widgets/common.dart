@@ -253,3 +253,9 @@ void showAppSnack(BuildContext context, String message, {bool error = false}) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(message), backgroundColor: error ? AppColors.red600 : AppColors.slate800));
 }
+
+/// User-facing placeholder for actions the template shows but the app doesn't support yet.
+/// Keep the developer note (missing endpoint/plugin) as a code comment at the call site, never in the UI text.
+void showComingSoon(BuildContext context, String feature) {
+  showAppSnack(context, '$feature sẽ sớm ra mắt');
+}

@@ -1,12 +1,19 @@
 package com.weddingevent.common.domain;
 
+import com.weddingevent.common.domain.enums.NotificationKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
-/** In-app notification for the studio team ("Thông báo thông minh"). */
+/**
+ * In-app notification. {@code recipientUserId == null}: the studio team's feed in the admin console ("Thông báo
+ * thông minh"); otherwise one mobile user's inbox (FN-NOTI-01).
+ */
 @Getter
 @Setter
 @Entity
@@ -21,4 +28,13 @@ public class Notification extends BaseEntity {
 
     @Column(name = "is_read", nullable = false)
     private boolean read;
+
+    @Column(name = "recipient_user_id")
+    private UUID recipientUserId;
+
+    /** Mobile icon hint; null for studio notifications */
+    @Enumerated(EnumType.STRING)
+    private NotificationKind kind;
+
+    private String link;
 }

@@ -9,11 +9,12 @@ class NotificationRepository {
 
   final ApiClient _api;
 
-  /// GET /client/notifications
-  Future<List<AppNotification>> list() {
+  /// GET /client/notifications?page&size (FN-NOTI-01) — first page, newest first
+  Future<List<AppNotification>> list({int page = 0, int size = 20}) {
     if (Env.useMock) return mockDelay(MockData.notifications, 250);
-    return _api.get('/client/notifications', parse: (d) {
-      return (d! as List<dynamic>).map((e) {
+    return _api.get('/client/notifications', query: {'page': page, 'size': size}, parse: (d) {
+      final items = (d! as Map<String, dynamic>)['items'] as List<dynamic>;
+      return items.map((e) {
         final m = e as Map<String, dynamic>;
         return AppNotification(
           id: m['id'] as String,

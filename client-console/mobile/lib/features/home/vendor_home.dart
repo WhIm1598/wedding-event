@@ -94,7 +94,8 @@ class _VendorHomeState extends State<VendorHome> {
                           ),
                           TextButton(
                             style: TextButton.styleFrom(backgroundColor: AppColors.pink50, foregroundColor: AppColors.pink600),
-                            onPressed: () => showAppSnack(context, 'TODO: mở hội thoại với ${q.customerName}'),
+                            // TODO: open the FN-MSG-01 conversation with this customer
+                            onPressed: () => showComingSoon(context, 'Phản hồi báo giá'),
                             child: const Text('Phản hồi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ],

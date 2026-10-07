@@ -1,0 +1,67 @@
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+
+spring:
+  application:
+    name: client-backend
+  profiles:
+    default: dev
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/wedding_db}
+    username: ${SPRING_DATASOURCE_USERNAME:wedding_admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  # Same migration set as the admin backend (shipped in backend-common); Flyway's lock serializes concurrent starts.
+  flyway:
+    locations: classpath:db/migration
+    fail-on-missing-locations: true
+    validate-on-migrate: true
+    validate-migration-naming: true
+    out-of-order: false
+    baseline-on-migrate: false
+    clean-disabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  zone: Asia/Ho_Chi_Minh
+  jwt:
+    # Must be >= 32 bytes. Required in every non-dev environment (env JWT_SECRET).
+    secret: ${JWT_SECRET:}
+    # Different from the admin backend's issuer, so admin and mobile tokens are never accepted by the other service
+    issuer: wedding-event-client
+    access-token-ttl: 2h
+    refresh-token-ttl: 30d
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  otp:
+    ttl: 5m
+    max-attempts: 5
+    # Dev only: print the code in the log because no e-mail sender is configured yet
+    log-code: false
+  google:
+    # OAuth client id(s) the mobile app's Google ID tokens are issued for (comma separated). Empty = Google login off.
+    client-ids: ${GOOGLE_CLIENT_IDS:}
+  ai-planner:
+    # In-house AI planner (FN-PLAN-03), e.g. http://ai-planner-service:8000. Empty = built-in rule-based planner.
+    base-url: ${AI_PLANNER_BASE_URL:}
+    timeout: 30s
+  demo-data:
+    enabled: false

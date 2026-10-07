@@ -79,7 +79,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                           bottom: 0,
                           child: IconButton.filled(
                             style: IconButton.styleFrom(backgroundColor: AppColors.pink600, minimumSize: const Size(32, 32)),
-                            onPressed: () => showAppSnack(context, 'TODO: chọn ảnh đại diện (image_picker + MinIO upload)'),
+                            // TODO: avatar picker (image_picker + MinIO upload)
+                            onPressed: () => showComingSoon(context, 'Đổi ảnh đại diện'),
                             icon: const Icon(Icons.photo_camera, size: 14, color: AppColors.white),
                           ),
                         ),

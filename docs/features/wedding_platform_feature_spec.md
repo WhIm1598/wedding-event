@@ -204,9 +204,9 @@ erDiagram
 > Mọi bảng có `created_at`, `updated_at` (TIMESTAMPTZ). Tiền là `NUMERIC(15,0)`. Enum lưu dạng chuỗi. 🆕 = cột/bảng thêm ở v1.1, chưa có trong migration hiện tại. Nguồn chuẩn của schema đã triển khai: Flyway migration trong `backend-common/src/main/resources/db/migration/` (quy ước: `backend-common/src/main/resources/db/README.md`).
 
 1. **User (`users`)**:
-   * `id` (UUID, PK), `email` (String, Unique), `password_hash` (String), `full_name` (String), `phone` (String, Nullable), `avatar_url` (String, Nullable), `role` (Enum: `ROLE_COUPLE`, `ROLE_VENDOR`, `ROLE_STAFF`, `ROLE_ADMIN`), `is_active` (Boolean), `is_verified` (Boolean — OTP email, phía mobile), `staff_member_id` (UUID, FK `staff_members`, Nullable — tài khoản Web Admin gắn hồ sơ nhân sự), 🆕 `must_change_password` (Boolean), 🆕 `failed_login_count` (Integer), 🆕 `locked_until` (Timestamp, Nullable), 🆕 `last_login_at` (Timestamp, Nullable). *(Cột `has_plan` của mobile được suy ra từ `wedding_plans`, không lưu.)*
+   * `id` (UUID, PK), `email` (String, Unique), `password_hash` (String), `full_name` (String), `phone` (String, Nullable), `avatar_url` (String, Nullable), `role` (Enum: `ROLE_COUPLE`, `ROLE_VENDOR`, `ROLE_STAFF`, `ROLE_ADMIN`; Nullable — tài khoản mobile chưa chọn vai trò), `is_active` (Boolean), `is_verified` (Boolean — OTP email, phía mobile), `staff_member_id` (UUID, FK `staff_members`, Nullable — tài khoản Web Admin gắn hồ sơ nhân sự), 🆕 `must_change_password` (Boolean), 🆕 `failed_login_count` (Integer), 🆕 `locked_until` (Timestamp, Nullable), 🆕 `last_login_at` (Timestamp, Nullable). *(Cột `has_plan` của mobile được suy ra từ `wedding_plans`, không lưu.)*
 2. **WeddingPlan (`wedding_plans`)**:
-   * `id` (UUID, PK), `user_id` (UUID, FK), `partner_id` (UUID, FK, Nullable), `wedding_date` (LocalDate), `engagement_date` (LocalDate, Nullable), `total_budget` (BigDecimal), `completed_percentage` (Integer), `status` (Enum: `PLANNING`, `COMPLETED`).
+   * `id` (UUID, PK), `user_id` (UUID, FK), `partner_id` (UUID, FK, Nullable), `wedding_date` (LocalDate), `engagement_date` (LocalDate, Nullable), `total_budget` (BigDecimal), `completed_percentage` (Integer), `status` (Enum: `DRAFT` — tạo khi chọn vai trò, chưa có ngày/ngân sách; `PLANNING`; `COMPLETED`), `version` (khóa lạc quan). Mỗi chủ có tối đa 1 kế hoạch `DRAFT`/`PLANNING`; mỗi bạn đời tham gia tối đa 1 kế hoạch `PLANNING`.
 3. **BudgetItem (`budget_items`)**:
    * `id` (UUID, PK), `wedding_plan_id` (UUID, FK), `category_name` (String), `estimated_amount` (BigDecimal), `actual_amount` (BigDecimal, Nullable), `status` (Enum: `PLANNED`, `DEPOSITED`, `PAID_FULL`).
 4. **PlanTask (`plan_tasks`)**:
@@ -214,7 +214,7 @@ erDiagram
 5. **Guest (`guests`)**:
    * `id` (UUID, PK), `wedding_plan_id` (UUID, FK), `name` (String), `phone` (String, Nullable), `group_name` (String: *Nhà Trai*, *Nhà Gái*, *Bạn Bè*, *Đồng Nghiệp*), `status` (Enum: `ATTENDING`, `PENDING`, `DECLINED`).
 6. **ServicePackage (`service_packages`)** + **`service_package_features`**:
-   * `id` (UUID, PK), `vendor_id` (UUID, Nullable - Null nếu là gói của Studio chính), `name` (String), `type` (String: *Pre-wedding*, *Ngày Cưới*, *Lễ Ăn Hỏi*), `price` (BigDecimal ≥ 0), `description` (Text), `thumbnail_url` (String), `is_active` (Boolean).
+   * `id` (UUID, PK), `vendor_id` (UUID, FK `vendor_profiles`, Nullable - Null nếu là gói của Studio chính), `name` (String), `type` (String: *Pre-wedding*, *Ngày Cưới*, *Lễ Ăn Hỏi*), `category` (Enum: `PHOTO`, `DECOR`, `RESTAURANT`, `DRESS` — danh mục app mobile, mặc định `PHOTO`), `price` (BigDecimal ≥ 0), `description` (Text), `thumbnail_url` (String), `is_active` (Boolean).
    * Quyền lợi gói lưu bảng con có thứ tự `service_package_features` (`package_id`, `position`, `feature`), tối đa 20 dòng.
 7. **Booking (`bookings`)**:
    * `id` (UUID, PK), `customer_name` (String), `phone` (String, Nullable), `booking_type` (String: *Chụp Pre-wedding*, *Thử váy cưới*, ...), `service_package_id` (UUID, FK, Nullable), 🆕 `contract_id` (UUID, FK, Nullable), 🆕 `lead_id` (UUID, FK, Nullable), `event_date` (LocalDate), `event_time` (LocalTime `HH:mm`), `venue_address` (String), `status` (Enum: `UPCOMING`, `CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`), 🆕 `cancel_reason` (String, Nullable).
@@ -234,10 +234,15 @@ erDiagram
     * `id` (UUID, PK), `code` (String, Unique, `TRX-xxx`), `contract_id` (UUID, FK, Nullable), `amount` (> 0), `type` (Enum: `INCOME`, `EXPENSE`), `category` (String), `description` (String), `transaction_date` (LocalDate), 🆕 `voided_at`, 🆕 `voided_by`, 🆕 `void_reason`.
 16. **StaffMember (`staff_members`)**: `id`, `code` (Unique, `NV-xxx`), `full_name`, `position` (*Thợ Chụp Chính*, *Makeup*, *Sales*...), `phone`, `work_status` (Enum: `WORKING`, `ON_LEAVE`).
 17. **StaffTask (`staff_tasks`)**: `id`, `staff_member_id` (FK, xóa theo nhân sự), `title`, `due_date`, `notes` (Nullable), `completed` (Boolean).
-18. **Notification (`notifications`)**: `id`, `title`, `description`, `is_read` (Boolean), 🆕 `recipient_user_id` (FK, Nullable = mọi Admin), 🆕 `link` (String, Nullable). *(v1.1: trạng thái đã đọc theo từng người — khi có `recipient_user_id`.)*
+18. **Notification (`notifications`)**: `id`, `title`, `description`, `is_read` (Boolean), `recipient_user_id` (FK, Nullable = mọi Admin; có giá trị = hộp thư của một người dùng mobile, FN-NOTI-01), `kind` (Enum: `AI`, `MESSAGE`, `SYNC`, `REMINDER`, Nullable — icon trên app), `link` (String, Nullable). *(v1.1: trạng thái đã đọc theo từng người — khi có `recipient_user_id`.)*
 19. **StudioSettings (`studio_settings`)** — đúng 1 dòng `id = 1`: `name`, `address`, `tax_code`, `legal_representative`, `bank_info`, 🆕 `bank_bin`, 🆕 `bank_account_number`, 🆕 `bank_account_name`, 🆕 `payment_schedule` (JSON, mặc định `[30,50,20]`), 🆕 `delivery_days` (mặc định 30), 🆕 `booking_slot_minutes` (Nullable), 🆕 `zalo_payment_reminder` (Boolean), 🆕 `require_full_payment_before_delivery` (Boolean), 🆕 `contract_terms_template` (Text).
 20. 🆕 **AuditLog (`audit_logs`)**: `id`, `actor_user_id`, `action`, `entity_type`, `entity_id`, `before` (JSONB), `after` (JSONB), `ip`, `created_at` — chỉ thêm, không sửa/xóa.
 21. **Sequences**: `staff_code_seq` (NV-001), `contract_number_seq` (bắt đầu 102 → HD-102), `transaction_code_seq` (TRX-001).
+22. **VendorProfile (`vendor_profiles`)**: `id`, `user_id` (FK, Unique), `business_name`, `address` (Nullable), `rating` (0.0–5.0), `review_count` — tạo khi chọn `ROLE_VENDOR` (FN-AUTH-03).
+23. **PlanSyncCode (`plan_sync_codes`)**: `id`, `wedding_plan_id` (FK), `code` (6 ký tự, duy nhất trong các mã chưa dùng), `expires_at`, `is_used`, `created_by` (FK users) — FN-PLAN-04.
+24. **EmailOtp (`email_otps`)**: `id`, `user_id` (FK, Unique), `code_hash` (BCrypt), `expires_at`, `failed_attempts` — FN-AUTH-02.
+25. **ChatRoom (`chat_rooms`)**: `id`, `user_a_id`, `user_b_id` (FK users, `user_a_id < user_b_id`, Unique theo cặp), `last_message_at`. **ChatMessage (`chat_messages`)**: `id`, `room_id` (FK), `sender_id` (FK users), `content` (≤ 2000), `attachment_url` (Nullable) — FN-MSG-01.
+*Bảng 22–25 và các cột mobile ở trên được tạo bởi migration `V2__client_workspace.sql`.*
 
 *Refresh token Web Admin lưu ở Redis (`admin:refresh:{userId}:{jti}`, TTL 30 ngày), không lưu DB.*
 

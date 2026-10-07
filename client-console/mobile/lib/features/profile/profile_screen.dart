@@ -20,8 +20,9 @@ class ProfileScreen extends StatelessWidget {
       (Icons.settings_outlined, 'Cài đặt tài khoản', () => context.push(Routes.accountSettings)),
       isVendor
           ? (Icons.description_outlined, 'Quản lý dịch vụ', () => context.push(Routes.serviceManagement))
-          : (Icons.credit_card, 'Phương thức thanh toán', () => showAppSnack(context, 'TODO: phương thức thanh toán')),
-      (Icons.shield_outlined, 'Bảo mật', () => showAppSnack(context, 'TODO: cài đặt bảo mật')),
+          // TODO: payment methods and security settings have no spec functions yet
+          : (Icons.credit_card, 'Phương thức thanh toán', () => showComingSoon(context, 'Phương thức thanh toán')),
+      (Icons.shield_outlined, 'Bảo mật', () => showComingSoon(context, 'Cài đặt bảo mật')),
     ];
 
     return Column(

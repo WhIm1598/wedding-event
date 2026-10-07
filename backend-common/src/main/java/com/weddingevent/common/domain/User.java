@@ -32,8 +32,8 @@ public class User extends BaseEntity {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    /** Null for a new mobile account until it picks ROLE_COUPLE / ROLE_VENDOR (FN-AUTH-03). */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private Role role;
 
     @Column(name = "is_active", nullable = false)
