@@ -47,7 +47,10 @@ public class NimbusGoogleIdTokenVerifier implements GoogleIdTokenVerifier {
             if (email == null || email.isBlank()) {
                 throw invalid("Tài khoản Google không có email");
             }
-            return new GoogleProfile(email, jwt.getClaimAsString("name"), jwt.getClaimAsString("picture"),
+            if (jwt.getSubject() == null || jwt.getSubject().isBlank()) {
+                throw invalid("Không thể xác thực tài khoản Google");
+            }
+            return new GoogleProfile(jwt.getSubject(), email, jwt.getClaimAsString("name"), jwt.getClaimAsString("picture"),
                     Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified")));
         } catch (JwtException | IllegalArgumentException e) {
             throw invalid("Không thể xác thực tài khoản Google");

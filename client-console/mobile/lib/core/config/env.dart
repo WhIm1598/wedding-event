@@ -8,4 +8,11 @@ class Env {
 
   /// true -> repositories return in-memory mock data (lib/data/mock), no backend required.
   static const bool useMock = bool.fromEnvironment('USE_MOCK', defaultValue: true);
+
+  /// Google Sign-In: the **Web** OAuth client id. Android needs it to issue an ID token, and it must be one of the
+  /// backend's `app.google.client-ids` (the token's audience). Empty = Google login unavailable in real mode.
+  static const String googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+
+  /// Google Sign-In: the **iOS** OAuth client id (iOS only; can also come from Info.plist `GIDClientID`).
+  static const String googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
 }

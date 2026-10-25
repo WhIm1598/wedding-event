@@ -1,14 +1,26 @@
 import type { BadgeVariant } from '@/components/ui/Badge';
-import type { AssetCategory, AssetStatus, BookingStatus, ContractStatus, LeadStage, StaffWorkStatus } from '@/types';
+import type { AssetCategory, AssetStatus, BookingProgressStatus, BookingStatus, ContractStatus, LeadStage, StaffWorkStatus } from '@/types';
 
 type LabelMap<K extends string> = Record<K, { label: string; variant: BadgeVariant }>;
 
 export const BOOKING_STATUS: LabelMap<BookingStatus> = {
-  UPCOMING: { label: 'Sắp tới', variant: 'warning' },
+  UPCOMING: { label: 'Chờ xác nhận', variant: 'warning' },
   IN_PROGRESS: { label: 'Đang thực hiện', variant: 'brand' },
   CONFIRMED: { label: 'Đã xác nhận', variant: 'success' },
   COMPLETED: { label: 'Hoàn thành', variant: 'default' },
   CANCELLED: { label: 'Đã hủy', variant: 'danger' },
+};
+
+/** Next execution steps per status (spec §1.6, FN-ADM-CAL-04) with their button labels */
+export const BOOKING_NEXT_STEPS: Record<BookingStatus, Array<{ status: BookingProgressStatus; label: string }>> = {
+  UPCOMING: [
+    { status: 'CONFIRMED', label: 'Xác nhận' },
+    { status: 'IN_PROGRESS', label: 'Bắt đầu' },
+  ],
+  CONFIRMED: [{ status: 'IN_PROGRESS', label: 'Bắt đầu' }],
+  IN_PROGRESS: [{ status: 'COMPLETED', label: 'Hoàn thành' }],
+  COMPLETED: [],
+  CANCELLED: [],
 };
 
 export const ASSET_STATUS: LabelMap<AssetStatus> = {

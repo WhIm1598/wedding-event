@@ -13,6 +13,7 @@ One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, public-base-url, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `support/` | `DateRange` (day / Monday-based week / month, instant bounds) |
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |
+| `crm/CustomerStageSync` | `contractChanged(contract)` — call after any contract status change (payment, delivery) so the customer's stage follows (FN-ADM-CRM-03) |
 | `demo/` | `DemoDataSeeder` — seeds the empty dev/test database (profile flag `app.demo-data.enabled`) |
 
 Inside a module package: `XxxController` + `XxxService` holding the request/response **records** as nested types

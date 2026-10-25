@@ -1,6 +1,7 @@
 package com.weddingevent.common.domain;
 
 import com.weddingevent.common.domain.enums.ContractStatus;
+import com.weddingevent.common.exception.AppException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,6 +12,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,10 +31,6 @@ public class Contract extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lead_id")
     private Lead lead;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "booking_id")
-    private Booking booking;
 
     @Column(name = "customer_name", nullable = false)
     private String customerName;
@@ -54,7 +52,7 @@ public class Contract extends BaseEntity {
     @Column(name = "total_amount", nullable = false, precision = 15, scale = 0)
     private BigDecimal totalAmount;
 
-    /** Sum of INCOME transactions linked to this contract (spec: deposit_amount) */
+    /** Sum of INCOME transactions linked to this contract (GLOSSARY: Paid Amount; the spec's deposit_amount) */
     @Column(name = "paid_amount", nullable = false, precision = 15, scale = 0)
     private BigDecimal paidAmount = BigDecimal.ZERO;
 
@@ -73,17 +71,51 @@ public class Contract extends BaseEntity {
 
     private String notes;
 
+    /** When the studio confirmed handing over everything (FN-ADM-CONTR-02 "Xác nhận bàn giao") */
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
     @Version
     private long version;
 
-    /** Applies an incoming payment and updates the status (FN-ADM-FIN-01). */
+    /**
+     * Applies an incoming payment (FN-ADM-FIN-01). The first payment makes a draft effective (DEPOSITED); paying in
+     * full completes the contract only once it has been delivered (§1.6).
+     */
     public void applyPayment(BigDecimal amount) {
         paidAmount = paidAmount.add(amount);
         remainingAmount = totalAmount.subtract(paidAmount).max(BigDecimal.ZERO);
-        if (remainingAmount.signum() == 0) {
-            status = ContractStatus.COMPLETED;
-        } else if (status == ContractStatus.DRAFT) {
+        if (status == ContractStatus.DRAFT) {
             status = ContractStatus.DEPOSITED;
+        }
+        completeIfDone();
+    }
+
+    /** The first booking of an effective contract started (FN-ADM-CAL-04): DEPOSITED → IN_PROGRESS. */
+    public void startWork() {
+        if (status == ContractStatus.DEPOSITED) {
+            status = ContractStatus.IN_PROGRESS;
+        }
+    }
+
+    /** Records the hand-over; 409 INVALID_STATUS_TRANSITION unless in progress and not yet delivered. */
+    public void deliver(Instant at) {
+        if (status != ContractStatus.IN_PROGRESS || deliveredAt != null) {
+            throw AppException.conflict("INVALID_STATUS_TRANSITION",
+                    "Chỉ xác nhận bàn giao được hợp đồng đang thực hiện và chưa bàn giao");
+        }
+        deliveredAt = at;
+        completeIfDone();
+    }
+
+    /** GLOSSARY: Paid in Full — a payment state, not the contract's completion */
+    public boolean isPaidInFull() {
+        return remainingAmount.signum() == 0;
+    }
+
+    private void completeIfDone() {
+        if (isPaidInFull() && deliveredAt != null) {
+            status = ContractStatus.COMPLETED;
         }
     }
 }

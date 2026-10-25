@@ -53,7 +53,7 @@ class DashboardAndMiscApiTest extends IntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INVALID_STATUS_TRANSITION"));
 
-        // Signing a contract (same phone) moves the lead to IN_PROGRESS; COMPLETED is then allowed
+        // Once the customer has a contract (same phone), the contract stages may be set by hand
         String admin = adminToken();
         String pkgs = mvc.perform(authed(get("/api/v1/admin/packages"), admin)).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         mvc.perform(authed(post("/api/v1/admin/contracts"), admin).content(json("""

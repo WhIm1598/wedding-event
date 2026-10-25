@@ -34,7 +34,8 @@ export interface RevenuePoint {
   amount: number;
 }
 
-// --- Bookings (FN-ADM-CAL-01/02) ---
+// --- Bookings (FN-ADM-CAL-01/02/04) ---
+// UPCOMING = waiting for confirmation ("Chờ xác nhận"), not a date filter (GLOSSARY: Pending Booking)
 export type BookingStatus = 'UPCOMING' | 'IN_PROGRESS' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 export type CalendarView = 'day' | 'week' | 'month';
 
@@ -55,6 +56,7 @@ export interface Booking {
   venueAddress?: string;
   status: BookingStatus;
   assignedStaff: StaffRef[];
+  contractId?: string | null;
 }
 
 export interface CreateBookingRequest {
@@ -66,7 +68,13 @@ export interface CreateBookingRequest {
   eventTime: string;
   venueAddress?: string;
   staffIds: string[];
+  /** v1.1 (FN-ADM-CRM-03): the contract's phone and package fill the blanks */
+  contractId?: string;
+  leadId?: string;
 }
+
+/** Statuses settable through PATCH /bookings/{id}/status (cancelling has its own endpoint) */
+export type BookingProgressStatus = 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED';
 
 // --- Packages ---
 export interface ServicePackage {
@@ -144,8 +152,8 @@ export interface Lead {
 
 export type CreateLeadRequest = Pick<Lead, 'name' | 'phone' | 'hasZalo' | 'interest'>;
 
-// --- Contracts (FN-ADM-CONTR-01) ---
-// NOTE: the spec lists DRAFT | DEPOSITED | COMPLETED; IN_PROGRESS is added to match the UI template.
+// --- Contracts (FN-ADM-CONTR-01/02) ---
+// COMPLETED = paid in full AND delivered (spec §1.6); paid in full alone is remainingAmount === 0
 export type ContractStatus = 'DRAFT' | 'DEPOSITED' | 'IN_PROGRESS' | 'COMPLETED';
 
 export interface Contract {
@@ -161,6 +169,8 @@ export interface Contract {
   contractDate: string;
   status: ContractStatus;
   notes?: string;
+  /** ISO timestamp of "Xác nhận bàn giao"; set with remainingAmount > 0 = delivered but still owing */
+  deliveredAt?: string | null;
 }
 
 export interface CreateContractRequest {

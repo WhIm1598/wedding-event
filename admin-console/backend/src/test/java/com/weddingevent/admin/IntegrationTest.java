@@ -1,5 +1,7 @@
 package com.weddingevent.admin;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -104,5 +106,66 @@ public abstract class IntegrationTest {
     protected static String read(String body, String path) {
         Object value = JsonPath.read(body, path);
         return String.valueOf(value);
+    }
+
+    protected String body(MockHttpServletRequestBuilder req, String token) throws Exception {
+        return mvc.perform(authed(req, token)).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    /** CRM customer (lead) with the given phone; returns its id */
+    protected String createLead(String admin, String phone) throws Exception {
+        String created = mvc.perform(authed(post("/api/v1/admin/crm/customers"), admin)
+                        .content(json("{'name':'Khách Hành Trình','phone':'%s','hasZalo':true}".formatted(phone))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return read(created, "$.data.id");
+    }
+
+    /** Contract on the first demo package; a lead with the same phone becomes its customer. Returns its id */
+    protected String createContract(String admin, String phone, long total, long deposit) throws Exception {
+        String pkgId = read(body(get("/api/v1/admin/packages"), admin), "$.data[0].id");
+        String created = mvc.perform(authed(post("/api/v1/admin/contracts"), admin).content(json("""
+                        {'customerName':'Phạm Thu Hà','phone':'%s','servicePackageId':'%s','totalAmount':%d,'depositAmount':%d}
+                        """.formatted(phone, pkgId, total, deposit))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return read(created, "$.data.id");
+    }
+
+    /** Booking of a contract on a unique future date, no staff assigned. Returns its id */
+    protected String createContractBooking(String admin, String contractId) throws Exception {
+        String created = mvc.perform(authed(post("/api/v1/admin/bookings"), admin).content(json("""
+                        {'clientName':'Phạm Thu Hà','type':'Chụp Pre-wedding','contractId':'%s','eventDate':'%s','eventTime':'09:00','staffIds':[]}
+                        """.formatted(contractId, uniqueFutureDate()))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return read(created, "$.data.id");
+    }
+
+    protected void moveBooking(String token, String bookingId, String status) throws Exception {
+        mvc.perform(authed(patch("/api/v1/admin/bookings/" + bookingId + "/status"), token)
+                        .content(json("{'status':'%s'}".formatted(status))))
+                .andExpect(status().isOk());
+    }
+
+    protected static String income(long amount, String contractId, LocalDate date) {
+        return json("""
+                {'type':'INCOME','amount':%d,'category':'Doanh thu HĐ','description':'Thanh toán','contractId':'%s','transactionDate':'%s'}
+                """.formatted(amount, contractId, date));
+    }
+
+    /** A field of one contract from the list (null when the field is null) */
+    protected Object contractField(String admin, String contractId, String field) throws Exception {
+        return first(body(get("/api/v1/admin/contracts"), admin), "$.data[?(@.id=='%s')].%s".formatted(contractId, field));
+    }
+
+    protected Object leadStage(String admin, String leadId) throws Exception {
+        return first(body(get("/api/v1/admin/crm/pipeline"), admin), "$.data[?(@.id=='%s')].stage".formatted(leadId));
+    }
+
+    /** First match of a filter path, which JsonPath always returns as a list */
+    protected static Object first(String body, String path) {
+        java.util.List<Object> matches = JsonPath.read(body, path);
+        return matches.isEmpty() ? null : matches.get(0);
     }
 }

@@ -1,7 +1,7 @@
 import { env } from '@/config/env';
 import { todayISO } from '@/lib/date';
 import { ApiError, http } from './http';
-import { db, delay, nextId } from './mock/db';
+import { applyMockPayment, db, delay, nextId } from './mock/db';
 import type { CreateTransactionRequest, FinancialSummary, Transaction } from '@/types';
 
 export const financialsApi = {
@@ -19,7 +19,7 @@ export const financialsApi = {
     return delay({ periodLabel: `Tháng ${new Date().getMonth() + 1}`, totalIncome, totalExpense, netProfit: totalIncome - totalExpense });
   },
 
-  /** POST /admin/financials/transactions (FN-ADM-FIN-01) — INCOME with contractId reduces contract debt */
+  /** POST /admin/financials/transactions (FN-ADM-FIN-01) — INCOME with contractId reduces contract debt and moves the customer */
   create(req: CreateTransactionRequest): Promise<Transaction> {
     if (!env.useMock) return http.post('/admin/financials/transactions', req);
     if (req.transactionDate > todayISO()) throw new ApiError(400, 'BAD_REQUEST', 'Ngày giao dịch không được sau ngày hôm nay');
@@ -37,11 +37,7 @@ export const financialsApi = {
     const trx: Transaction = { ...req, id, code: id.toUpperCase() };
     db.transactions.push(trx);
 
-    if (contract && req.type === 'INCOME') {
-      contract.paidAmount += req.amount;
-      contract.remainingAmount = Math.max(0, contract.totalAmount - contract.paidAmount);
-      if (contract.remainingAmount === 0) contract.status = 'COMPLETED';
-    }
+    if (contract && req.type === 'INCOME') applyMockPayment(contract, req.amount);
     return delay(trx);
   },
 };

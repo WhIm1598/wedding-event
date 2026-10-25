@@ -1,17 +1,21 @@
 # client-console/mobile — WedPlanner app
 
-Flutter (Dart 3.5+) · go_router · provider · dio · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
-Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios` and not committed.
+Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
+Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios --org vn.wedplanner` and not committed.
+After generating: revert `analysis_options.yaml`, delete the sample `test/widget_test.dart`, add
+`<application android:usesCleartextTraffic="true"/>` to `android/app/src/debug/AndroidManifest.xml` (local backend is plain http)
+Keep `PUB_CACHE` on the project's drive: Kotlin incremental compile fails on plugin sources from another drive
+(`this and base files have different roots`); otherwise add `kotlin.incremental=false` to `android/gradle.properties`.
 The app runs on mock data by default; `--dart-define=USE_MOCK=false` calls `client-console/backend` (port 8081, see its
 CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sending messages; the vendor workspace
-(`VendorRepository`) has no backend endpoints yet and works in mock mode only. List endpoints return the spec's page shape
+(`VendorRepository`, spec FN-VND-01..05) has no backend endpoints yet and works in mock mode only. List endpoints return the spec's page shape
 `{items, page, size, totalElements, totalPages}`.
 
 ## Where things go (`lib/`)
 | Path | Contents |
 |---|---|
 | `main.dart`, `app.dart` | Bootstrap; `MultiProvider` registering `ApiClient`, `SessionController` and every repository |
-| `core/config/env.dart` | `Env.useMock` (`--dart-define=USE_MOCK=false`), `Env.apiBaseUrl` (`API_BASE_URL`, default `http://10.0.2.2:8081/api/v1`) |
+| `core/config/env.dart` | `Env.useMock` (`--dart-define=USE_MOCK=false`), `Env.apiBaseUrl` (`API_BASE_URL`, default `http://10.0.2.2:8081/api/v1`), Google Sign-In ids `GOOGLE_SERVER_CLIENT_ID` (Web client) / `GOOGLE_IOS_CLIENT_ID` |
 | `core/network/` | `ApiClient.get/post/put/patch(path, {body/query, parse:})` unwrapping the `{success, code, message, data}` envelope; `ApiException(code:, message:, statusCode:)`; `mockDelay(value, [ms])` |
 | `core/router/app_router.dart` | `Routes` path constants + `createRouter(session)`: auth redirects, `ShellRoute` for bottom-nav tabs, plain `GoRoute`s for full-screen pages |
 | `core/theme/` | `AppColors` (rose/pink brand, slate neutrals), `AppTheme.light` |
@@ -39,6 +43,13 @@ CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sen
 3. Screen in `features/<feature>/` built from `common.dart` widgets and `AppColors`; read repositories with
    `context.read<XRepository>()` in callbacks/`initState`, watch state with `context.watch<SessionController>()` in `build`.
 4. Route: add a `Routes` constant and a `GoRoute` (inside the `ShellRoute` only if it is a bottom-nav tab).
+
+## Google Sign-In (`google_sign_in` 7, `AuthRepository.loginWithGoogle`)
+Mock mode needs nothing. Real mode needs OAuth clients in one Google Cloud project:
+- **Web** client → `--dart-define=GOOGLE_SERVER_CLIENT_ID=...` and in the backend's `app.google.client-ids` (it is the ID token's audience).
+- **Android** client: package name + SHA-1 of the signing key (`keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androiddebugkey -storepass android` for debug). No code, only registration.
+- **iOS** client (macOS + Xcode only): `--dart-define=GOOGLE_IOS_CLIENT_ID=...` (or `GIDClientID` in `ios/Runner/Info.plist`) and its reversed client id as a URL scheme (`CFBundleURLTypes`) in `ios/Runner/Info.plist`.
+`initialize()` runs once per app run; closing the Google sheet returns null (no error); logout also signs out of Google.
 
 ## Rules (`flutter analyze` must report zero issues)
 - No deprecated APIs: use `Color.withValues(alpha:)` not `withOpacity`, `WidgetStateProperty` not `MaterialStateProperty`,

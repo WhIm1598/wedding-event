@@ -1,13 +1,16 @@
 package com.weddingevent.admin.finance;
 
+import com.weddingevent.admin.crm.CustomerStageSync;
 import com.weddingevent.admin.notification.NotificationService;
 import com.weddingevent.admin.support.DateRange;
 import com.weddingevent.common.domain.Contract;
 import com.weddingevent.common.domain.PaymentTransaction;
+import com.weddingevent.common.domain.enums.BookingStatus;
 import com.weddingevent.common.domain.enums.ContractStatus;
 import com.weddingevent.common.domain.enums.TransactionType;
 import com.weddingevent.common.exception.AppException;
 import com.weddingevent.common.exception.ResourceNotFoundException;
+import com.weddingevent.common.repository.BookingRepository;
 import com.weddingevent.common.repository.ContractRepository;
 import com.weddingevent.common.repository.PaymentTransactionRepository;
 import com.weddingevent.common.support.CodeGenerator;
@@ -20,6 +23,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -48,18 +52,24 @@ public class FinanceService {
             UUID contractId,
             @NotNull LocalDate transactionDate) {}
 
+    private static final EnumSet<BookingStatus> STARTED = EnumSet.of(BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED);
+
     private final PaymentTransactionRepository transactions;
     private final ContractRepository contracts;
+    private final BookingRepository bookings;
     private final CodeGenerator codes;
     private final NotificationService notifications;
+    private final CustomerStageSync stages;
     private final Clock clock;
 
-    public FinanceService(PaymentTransactionRepository transactions, ContractRepository contracts, CodeGenerator codes,
-            NotificationService notifications, Clock clock) {
+    public FinanceService(PaymentTransactionRepository transactions, ContractRepository contracts, BookingRepository bookings,
+            CodeGenerator codes, NotificationService notifications, CustomerStageSync stages, Clock clock) {
         this.transactions = transactions;
         this.contracts = contracts;
+        this.bookings = bookings;
         this.codes = codes;
         this.notifications = notifications;
+        this.stages = stages;
         this.clock = clock;
     }
 
@@ -85,8 +95,8 @@ public class FinanceService {
         Contract contract = req.contractId() == null ? null
                 : contracts.findById(req.contractId()).orElseThrow(() -> new ResourceNotFoundException("hợp đồng", req.contractId()));
         PaymentTransaction t = record(req.type(), req.amount(), req.category().trim(), req.description().trim(), contract, req.transactionDate());
-        // The final payment already raises "đã tất toán" inside record()
-        if (contract != null && t.getType() == TransactionType.INCOME && contract.getStatus() != ContractStatus.COMPLETED) {
+        // The final payment already raises "đã thanh toán đủ" inside record()
+        if (contract != null && t.getType() == TransactionType.INCOME && !contract.isPaidInFull()) {
             notifications.notify("Đã thu tiền 💰", "Thu " + VndFormatter.vnd(t.getAmount()) + " cho hợp đồng " + contract.getContractNumber()
                     + " (" + contract.getCustomerName() + "). Còn lại " + VndFormatter.vnd(contract.getRemainingAmount()) + ".");
         }
@@ -95,8 +105,8 @@ public class FinanceService {
 
     /**
      * Records a transaction. An INCOME linked to a contract is added to its paid amount and reduces the
-     * remaining debt; a settled contract can't take more money (409 CONTRACT_NOT_PAYABLE) and paying more than
-     * the remaining amount is rejected (400 PAYMENT_EXCEEDS_REMAINING).
+     * remaining debt; a completed contract can't take more money (409 CONTRACT_NOT_PAYABLE) and paying more than
+     * the remaining amount is rejected (400 PAYMENT_EXCEEDS_REMAINING). The customer's stage follows the contract.
      */
     @Transactional
     public PaymentTransaction record(TransactionType type, BigDecimal amount, String category, String description,
@@ -111,8 +121,13 @@ public class FinanceService {
                         "Số tiền thu vượt quá công nợ còn lại của hợp đồng (" + VndFormatter.vnd(contract.getRemainingAmount()) + ")");
             }
             contract.applyPayment(amount);
-            if (contract.getStatus() == ContractStatus.COMPLETED) {
-                notifications.notify("Hợp đồng đã tất toán ✅",
+            // The shoot may have started before the deposit: then the now-effective contract is already in progress
+            if (contract.getStatus() == ContractStatus.DEPOSITED && bookings.existsByContractIdAndStatusIn(contract.getId(), STARTED)) {
+                contract.startWork();
+            }
+            stages.contractChanged(contract);
+            if (contract.isPaidInFull()) {
+                notifications.notify("Hợp đồng đã thanh toán đủ ✅",
                         "Hợp đồng " + contract.getContractNumber() + " của " + contract.getCustomerName() + " đã thanh toán đủ.");
             }
         }

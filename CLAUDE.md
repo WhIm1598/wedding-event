@@ -1,4 +1,8 @@
-# Wedding Event monorepo — guide for Claude
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Wedding Event monorepo
 
 Two products share one PostgreSQL database and one Java domain library:
 - **Lumière Studios admin** (web, studio staff): `admin-console/frontend` → `admin-console/backend`
@@ -37,11 +41,29 @@ on mobile). JSON field names are identical at every layer; the spec's names win.
 ## Commands (repo root unless noted)
 | Check | Command |
 |---|---|
-| Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo) |
+| Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo); report at `<module>/build/reports/jacoco/test/html/index.html` |
+| One module / one test | `./gradlew :admin-console:backend:test` · `./gradlew :client-console:backend:test --tests '*PlanApiTest'` (modules: `:backend-common`, `:admin-console:backend`, `:client-console:backend`) |
 | Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun` |
 | Run mobile API | same database, then `./gradlew :client-console:backend:bootRun` (port 8081) |
-| Web type-check + build | `cd admin-console/frontend && npm run build` |
+| Web type-check + build | `cd admin-console/frontend && npm run build` (type-check only: `npm run typecheck`; the web app has no test runner or linter) |
 | Web dev (mock / real API) | `npm run dev` / `npm run dev:api` |
-| Mobile | `cd client-console/mobile && flutter analyze && flutter test` |
+| Mobile | `cd client-console/mobile && flutter analyze && flutter test` (one file: `flutter test test/<file>_test.dart`; real API: `flutter run --dart-define=USE_MOCK=false`) |
 
 CI (`.github/actions/verify-monorepo`) runs the same checks, plus a job rejecting edits to released migrations.
+
+Spec-to-code agent locally: `python .github/scripts/claude_coder.py prepare --targets web --out task.md`, then
+`guard --dry-run --targets web`. **`guard` without `--dry-run` reverts every uncommitted change outside the allowed scope**, so only run it on a clean tree.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `WhIm1598/wedding-event` (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.

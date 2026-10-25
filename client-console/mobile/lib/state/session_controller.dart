@@ -44,12 +44,16 @@ class SessionController extends ChangeNotifier {
 
   Future<void> resendOtp() => _auth.resendOtp(pendingEmail);
 
-  Future<void> loginWithGoogle() async => _setUser(await _auth.loginWithGoogle());
+  /// Closing the Google sheet is not an error: nothing changes
+  Future<void> loginWithGoogle() async {
+    final user = await _auth.loginWithGoogle();
+    if (user != null) _setUser(user);
+  }
 
   Future<void> selectRole(UserRole role) async => _setUser(await _auth.selectRole(_user!, role));
 
   Future<void> updateProfile({required String fullName, required String email, String? phone}) async =>
-      _setUser(await _auth.updateProfile(_user!.copyWith(fullName: fullName, email: email, phone: phone)));
+      _setUser(await _auth.updateProfile(_user!, fullName: fullName, email: email, phone: phone));
 
   void markPlanCreated() {
     if (_user == null || _user!.hasPlan) return;

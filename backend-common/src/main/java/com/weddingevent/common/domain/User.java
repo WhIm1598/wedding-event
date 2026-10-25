@@ -42,6 +42,14 @@ public class User extends BaseEntity {
     @Column(name = "is_verified", nullable = false)
     private boolean verified;
 
+    /** A new e-mail waiting for its OTP (FN-AUTH-04); {@code email} keeps the proven address until then */
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
+    /** Google's user id ({@code sub}) once the account has signed in with Google; null otherwise */
+    @Column(name = "google_sub", unique = true)
+    private String googleSub;
+
     /** Links a ROLE_STAFF account to its staff profile so they only see their own schedule. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "staff_member_id")

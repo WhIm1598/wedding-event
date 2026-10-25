@@ -55,7 +55,7 @@ lib/
 ## Việc cần làm khi triển khai thật (TODO)
 
 - Lưu token vào secure storage (`flutter_secure_storage`) + refresh token; khôi phục phiên ở Splash.
-- Google Sign-In (`google_sign_in`) → `POST /auth/google`.
+- Google Sign-In: code đã có (`google_sign_in`); còn tạo OAuth client Web/Android/iOS trên Google Cloud và truyền `--dart-define=GOOGLE_SERVER_CLIENT_ID=...` (xem `CLAUDE.md`).
 - Firebase Cloud Messaging cho push notification; WebSocket STOMP cho chat realtime.
-- Endpoint vendor (`/client/vendor/**`) và chat trợ lý AI chưa có trong spec — đang dùng mock.
+- Endpoint vendor (`/client/vendor/**`) đã có spec (FN-VND-01..05) nhưng backend chưa làm; chat trợ lý AI chưa có trong spec — đang dùng mock.
 - Bật lại `prefer_const_constructors` trong `analysis_options.yaml` rồi chạy `dart fix --apply`.

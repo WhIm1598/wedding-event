@@ -5,12 +5,16 @@ import com.weddingevent.admin.security.CurrentUser;
 import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.admin.support.DateRange;
 import com.weddingevent.common.domain.Booking;
+import com.weddingevent.common.domain.Contract;
+import com.weddingevent.common.domain.Lead;
 import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.domain.StaffMember;
 import com.weddingevent.common.domain.enums.BookingStatus;
 import com.weddingevent.common.exception.AppException;
 import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.BookingRepository;
+import com.weddingevent.common.repository.ContractRepository;
+import com.weddingevent.common.repository.LeadRepository;
 import com.weddingevent.common.repository.ServicePackageRepository;
 import com.weddingevent.common.repository.StaffRepository;
 import com.weddingevent.common.util.VndFormatter;
@@ -29,7 +33,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Smart booking calendar (FN-ADM-CAL-01 / FN-ADM-CAL-02). */
+/** Smart booking calendar (FN-ADM-CAL-01 / 02 / 04). */
 @Service
 public class BookingService {
 
@@ -41,7 +45,7 @@ public class BookingService {
 
     public record BookingDto(
             String id, LocalDate date, String time, String clientName, String phone, String type,
-            String packageName, String venueAddress, BookingStatus status, List<StaffRefDto> assignedStaff) {
+            String packageName, String venueAddress, BookingStatus status, List<StaffRefDto> assignedStaff, String contractId) {
 
         static BookingDto of(Booking b) {
             List<StaffRefDto> staff = b.getStaff().stream()
@@ -51,10 +55,11 @@ public class BookingService {
             return new BookingDto(
                     b.getId().toString(), b.getEventDate(), b.getEventTime().format(HH_MM), b.getCustomerName(), b.getPhone(),
                     b.getType(), b.getServicePackage() == null ? "—" : b.getServicePackage().getName(), b.getVenueAddress(),
-                    b.getStatus(), staff);
+                    b.getStatus(), staff, b.getContract() == null ? null : b.getContract().getId().toString());
         }
     }
 
+    /** {@code contractId} / {@code leadId} (v1.1, FN-ADM-CRM-03): a contract's phone and package fill the blanks. */
     public record CreateBookingRequest(
             @NotBlank @Size(max = 100) String clientName,
             @Pattern(regexp = "^$|" + StaffService.VN_PHONE, message = "Số điện thoại không hợp lệ") String phone,
@@ -63,19 +68,28 @@ public class BookingService {
             @NotNull LocalDate eventDate,
             @NotNull @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$", message = "Giờ hẹn phải có dạng HH:mm") String eventTime,
             @Size(max = 255) String venueAddress,
-            List<UUID> staffIds) {}
+            List<UUID> staffIds,
+            UUID contractId,
+            UUID leadId) {}
+
+    /** FN-ADM-CAL-04; cancelling goes through its own endpoint (FN-ADM-CAL-03) */
+    public record UpdateStatusRequest(@NotNull BookingStatus status) {}
 
     private final BookingRepository bookings;
     private final StaffRepository staff;
     private final ServicePackageRepository packages;
+    private final ContractRepository contracts;
+    private final LeadRepository leads;
     private final NotificationService notifications;
     private final Clock clock;
 
     public BookingService(BookingRepository bookings, StaffRepository staff, ServicePackageRepository packages,
-            NotificationService notifications, Clock clock) {
+            ContractRepository contracts, LeadRepository leads, NotificationService notifications, Clock clock) {
         this.bookings = bookings;
         this.staff = staff;
         this.packages = packages;
+        this.contracts = contracts;
+        this.leads = leads;
         this.notifications = notifications;
         this.clock = clock;
     }
@@ -123,12 +137,27 @@ public class BookingService {
                         "Nhân sự " + String.join(", ", busy) + " đã có lịch vào khung giờ này");
             }
         }
-        ServicePackage pkg = req.servicePackageId() == null ? null
+        Contract contract = req.contractId() == null ? null
+                : contracts.findById(req.contractId()).orElseThrow(() -> new ResourceNotFoundException("hợp đồng", req.contractId()));
+        Lead lead = req.leadId() == null ? null
+                : leads.findById(req.leadId()).orElseThrow(() -> new ResourceNotFoundException("khách hàng", req.leadId()));
+        if (contract != null) {
+            if (lead != null && contract.getLead() != null && !contract.getLead().getId().equals(lead.getId())) {
+                throw AppException.invalidField("leadId", "Khách hàng không phải là khách của hợp đồng này");
+            }
+            if (contract.getLead() != null) {
+                lead = contract.getLead();
+            }
+        }
+        ServicePackage pkg = req.servicePackageId() == null ? (contract == null ? null : contract.getServicePackage())
                 : packages.findById(req.servicePackageId()).orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", req.servicePackageId()));
+        String phone = req.phone() == null || req.phone().isBlank() ? (contract == null ? null : contract.getPhone()) : req.phone();
 
         Booking b = new Booking();
+        b.setContract(contract);
+        b.setLead(lead);
         b.setCustomerName(req.clientName().trim());
-        b.setPhone(req.phone() == null || req.phone().isBlank() ? null : req.phone());
+        b.setPhone(phone);
         b.setType(req.type().trim());
         b.setServicePackage(pkg);
         b.setEventDate(req.eventDate());
@@ -138,6 +167,26 @@ public class BookingService {
         b = bookings.save(b);
         notifications.notify("Lịch hẹn mới 📅", b.getCustomerName() + " - " + b.getType() + " lúc " + req.eventTime()
                 + " ngày " + VndFormatter.date(b.getEventDate()) + ".");
+        return BookingDto.of(b);
+    }
+
+    /**
+     * Execution status (FN-ADM-CAL-04) along the §1.6 state machine. Staff may only move bookings they are assigned
+     * to (403). The first booking of an effective contract going IN_PROGRESS starts the contract.
+     */
+    @Transactional
+    public BookingDto updateStatus(UUID id, BookingStatus next, CurrentUser user) {
+        if (next == BookingStatus.UPCOMING || next == BookingStatus.CANCELLED) {
+            throw AppException.invalidField("status", "Trạng thái phải là CONFIRMED, IN_PROGRESS hoặc COMPLETED");
+        }
+        Booking b = bookings.findById(id).orElseThrow(() -> new ResourceNotFoundException("lịch hẹn", id));
+        if (!user.isAdmin() && b.getStaff().stream().noneMatch(s -> s.getId().equals(user.staffMemberId()))) {
+            throw AppException.forbidden("FORBIDDEN", "Bạn chỉ cập nhật được lịch hẹn được phân công cho mình");
+        }
+        b.moveTo(next);
+        if (next == BookingStatus.IN_PROGRESS && b.getContract() != null) {
+            b.getContract().startWork();
+        }
         return BookingDto.of(b);
     }
 }

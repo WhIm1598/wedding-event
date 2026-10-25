@@ -17,17 +17,23 @@ import org.springframework.context.annotation.Primary;
 @TestConfiguration
 public class TestDoubles {
 
-    /** Remembers the last OTP sent to each e-mail address */
+    /** Remembers the last OTP sent to each e-mail address and how many were sent */
     public static class RecordingOtpSender implements OtpSender {
         private final Map<String, String> lastCode = new ConcurrentHashMap<>();
+        private final Map<String, Integer> sends = new ConcurrentHashMap<>();
 
         @Override
         public void send(String email, String code) {
             lastCode.put(email.toLowerCase(), code);
+            sends.merge(email.toLowerCase(), 1, Integer::sum);
         }
 
         public String lastCodeFor(String email) {
             return lastCode.get(email.toLowerCase());
+        }
+
+        public int sendCount(String email) {
+            return sends.getOrDefault(email.toLowerCase(), 0);
         }
 
         public void forget(String email) {
@@ -62,16 +68,17 @@ public class TestDoubles {
         return new RecordingPushSender();
     }
 
-    /** Accepts tokens of the form {@code google|<email>|<name>|<verified>} */
+    /** Accepts tokens of the form {@code google|<email>|<name>|<verified>[|<sub>]}; the Google id defaults to "sub-<email>" */
     @Bean
     @Primary
     GoogleIdTokenVerifier fakeGoogleVerifier() {
         return idToken -> {
             String[] parts = idToken == null ? new String[0] : idToken.split("\\|");
-            if (parts.length != 4 || !parts[0].equals("google")) {
+            if ((parts.length != 4 && parts.length != 5) || !parts[0].equals("google")) {
                 throw AppException.unauthorized("INVALID_GOOGLE_TOKEN", "Không thể xác thực tài khoản Google");
             }
-            return new GoogleIdTokenVerifier.GoogleProfile(parts[1], parts[2], "https://example.com/a.png", Boolean.parseBoolean(parts[3]));
+            String sub = parts.length == 5 ? parts[4] : "sub-" + parts[1];
+            return new GoogleIdTokenVerifier.GoogleProfile(sub, parts[1], parts[2], "https://example.com/a.png", Boolean.parseBoolean(parts[3]));
         };
     }
 }

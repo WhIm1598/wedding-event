@@ -21,6 +21,9 @@ public interface ContractRepository extends JpaRepository<Contract, UUID> {
 
     boolean existsByLeadId(UUID leadId);
 
+    /** Does the customer still have an effective contract in these states? Drafts aren't effective (GLOSSARY). */
+    boolean existsByLeadIdAndStatusIn(UUID leadId, Collection<ContractStatus> statuses);
+
     /** Case-insensitive search on customer, phone or contract number; {@code pattern} lower-case with % */
     @Query("""
             select c from Contract c

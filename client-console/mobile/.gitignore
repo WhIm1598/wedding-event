@@ -20,3 +20,8 @@ ios/Pods/
 ios/.symlinks/
 ios/Flutter/Generated.xcconfig
 *.log
+
+# Generated locally with flutter create (see CLAUDE.md)
+android/
+ios/
+.metadata

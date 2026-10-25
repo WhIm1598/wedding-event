@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Contracts (FN-ADM-CONTR-01). Staff can view/export/share; creating contracts is admin-only. */
+/** Contracts (FN-ADM-CONTR-01/02). Staff can view/export/share; creating and delivering contracts is admin-only. */
 @RestController
 @RequestMapping("/api/v1/admin/contracts")
 public class ContractController {
@@ -45,6 +45,13 @@ public class ContractController {
     @PreAuthorize(ADMIN)
     public ApiResponse<ContractDto> create(@Valid @RequestBody CreateContractRequest req) {
         return ApiResponse.ok(service.create(req), "Đã tạo hợp đồng");
+    }
+
+    /** "Xác nhận bàn giao" (FN-ADM-CONTR-02, v1.1) */
+    @PostMapping("/{id}/deliver")
+    @PreAuthorize(ADMIN)
+    public ApiResponse<ContractDto> deliver(@PathVariable UUID id) {
+        return ApiResponse.ok(service.deliver(id), "Đã xác nhận bàn giao");
     }
 
     @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)

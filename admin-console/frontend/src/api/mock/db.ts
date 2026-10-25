@@ -48,7 +48,7 @@ export const db = {
   ] as ServicePackage[],
 
   bookings: [
-    { id: 'bk-101', date: today, time: '09:00', clientName: 'Lan & Hoàng', type: 'Chụp Pre-wedding', packageName: 'Gói Tiêu Chuẩn (Pre-wedding)', status: 'IN_PROGRESS', assignedStaff: [ref('nv-01')] },
+    { id: 'bk-101', date: today, time: '09:00', clientName: 'Lan & Hoàng', phone: '0901112222', type: 'Chụp Pre-wedding', packageName: 'Gói Kim Cương (Ngày Cưới)', status: 'IN_PROGRESS', assignedStaff: [ref('nv-01')], contractId: 'hd-102' },
     { id: 'bk-102', date: today, time: '11:30', clientName: 'Mai & Huy', type: 'Thử Váy / Vest', packageName: 'Gói Kim Cương (Ngày Cưới)', status: 'UPCOMING', assignedStaff: [ref('nv-02')] },
     { id: 'bk-103', date: addDays(today, 1), time: '14:00', clientName: 'Linh & Tuấn', type: 'Lễ Ăn Hỏi', packageName: 'Gói Lễ Ăn Hỏi', status: 'UPCOMING', assignedStaff: [ref('nv-03')] },
     { id: 'bk-104', date: addDays(today, 2), time: '08:00', clientName: 'Trang & Hiếu', type: 'Chụp Pre-wedding', packageName: 'Gói Kim Cương (Ngày Cưới)', status: 'CONFIRMED', assignedStaff: [ref('nv-01'), ref('nv-04')] },
@@ -70,7 +70,7 @@ export const db = {
 
   contracts: [
     { id: 'hd-102', contractNumber: 'HD-102', customerName: 'Nguyễn Thị Lan', phone: '0901112222', hasZalo: true, packageName: 'Gói Kim Cương (Ngày Cưới)', totalAmount: 25_000_000, paidAmount: 10_000_000, remainingAmount: 15_000_000, contractDate: addDays(today, -20), status: 'IN_PROGRESS' },
-    { id: 'hd-103', contractNumber: 'HD-103', customerName: 'Trần Văn Huy', phone: '0988889999', hasZalo: true, packageName: 'Gói Lễ Ăn Hỏi', totalAmount: 6_000_000, paidAmount: 6_000_000, remainingAmount: 0, contractDate: addDays(today, -45), status: 'COMPLETED' },
+    { id: 'hd-103', contractNumber: 'HD-103', customerName: 'Trần Văn Huy', phone: '0988889999', hasZalo: true, packageName: 'Gói Lễ Ăn Hỏi', totalAmount: 6_000_000, paidAmount: 6_000_000, remainingAmount: 0, contractDate: addDays(today, -45), status: 'COMPLETED', deliveredAt: `${addDays(today, -41)}T03:00:00Z` },
     { id: 'hd-104', contractNumber: 'HD-104', customerName: 'Lê Hoàng C', phone: '0911223344', hasZalo: false, packageName: 'Gói Tiêu Chuẩn (Pre-wedding)', totalAmount: 12_500_000, paidAmount: 2_500_000, remainingAmount: 10_000_000, contractDate: addDays(today, -3), status: 'DEPOSITED' },
   ] as Contract[],
 
@@ -104,3 +104,28 @@ export const db = {
 
   revenueByMonth: [40, 70, 45, 90, 65, 85, 100, 50, 75, 60, 80, 95].map((m, i) => ({ month: i + 1, amount: m * 1_000_000 })),
 };
+
+/**
+ * Mock of the backend's CustomerStageSync (FN-ADM-CRM-03): the customer (same phone) is "in progress" once a
+ * contract is effective and "completed" once all of their contracts are completed.
+ */
+export function syncCustomerStage(contract: Contract): void {
+  const lead = db.leads.find((l) => l.phone === contract.phone);
+  if (!lead || contract.status === 'DRAFT') return;
+  if (lead.stage === 'NEW_LEAD' || lead.stage === 'IN_CONSULTATION' || lead.stage === 'AWAITING_DEPOSIT') lead.stage = 'IN_PROGRESS';
+  // an abandoned draft isn't effective, so it doesn't keep the customer "in progress"
+  const open = db.contracts.some((c) => c.phone === lead.phone && (c.status === 'DEPOSITED' || c.status === 'IN_PROGRESS'));
+  if (contract.status === 'COMPLETED' && lead.stage === 'IN_PROGRESS' && !open) lead.stage = 'COMPLETED';
+}
+
+/** Mock of Contract.applyPayment (spec §1.6): first payment → DEPOSITED; COMPLETED needs paid in full AND delivered */
+export function applyMockPayment(contract: Contract, amount: number): void {
+  contract.paidAmount += amount;
+  contract.remainingAmount = Math.max(0, contract.totalAmount - contract.paidAmount);
+  if (contract.status === 'DRAFT') contract.status = 'DEPOSITED';
+  // the shoot may have started before the deposit
+  const started = db.bookings.some((b) => b.contractId === contract.id && (b.status === 'IN_PROGRESS' || b.status === 'COMPLETED'));
+  if (contract.status === 'DEPOSITED' && started) contract.status = 'IN_PROGRESS';
+  if (contract.remainingAmount === 0 && contract.deliveredAt) contract.status = 'COMPLETED';
+  syncCustomerStage(contract);
+}

@@ -6,6 +6,7 @@ import { crmApi } from '@/api/crm.api';
 import { errorMessage } from '@/api/http';
 import { useAsync } from '@/hooks/useAsync';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -21,6 +22,7 @@ type ViewType = 'kanban' | 'table';
 
 export function CustomersPage() {
   const { contractsVersion } = useLayout();
+  const { isAdmin } = useAuth();
   const showToast = useToast();
   const [params, setParams] = useSearchParams();
   const viewType: ViewType = params.get('view') === 'kanban' ? 'kanban' : 'table';
@@ -37,6 +39,22 @@ export function CustomersPage() {
     } catch (err) {
       showToast(errorMessage(err), 'error');
       leads.reload(); // revert the optimistic move
+    }
+  };
+
+  const [deliveringId, setDeliveringId] = useState<string>();
+  const deliver = async (contract: Contract) => {
+    if (!window.confirm(`Xác nhận đã bàn giao toàn bộ sản phẩm của hợp đồng ${contract.contractNumber}?`)) return;
+    setDeliveringId(contract.id);
+    try {
+      const updated = await contractsApi.deliver(contract);
+      contracts.setData((prev) => prev?.map((c) => (c.id === updated.id ? updated : c)));
+      leads.reload(); // a completed contract may complete the customer
+      showToast(updated.status === 'COMPLETED' ? 'Hợp đồng đã bàn giao và hoàn thành' : 'Đã bàn giao — hợp đồng vẫn còn công nợ');
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setDeliveringId(undefined);
     }
   };
 
@@ -78,7 +96,12 @@ export function CustomersPage() {
         (viewType === 'kanban' ? (
           <LeadKanban leads={leads.data ?? []} onMove={moveLead} />
         ) : (
-          <ContractTable contracts={contracts.data ?? []} onExport={setExporting} />
+          <ContractTable
+            contracts={contracts.data ?? []}
+            onExport={setExporting}
+            onDeliver={isAdmin ? deliver : undefined}
+            deliveringId={deliveringId}
+          />
         ))}
 
       <CreateLeadModal

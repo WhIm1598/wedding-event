@@ -1,6 +1,7 @@
 package com.weddingevent.admin.contract;
 
 import com.weddingevent.admin.config.AppProperties;
+import com.weddingevent.admin.crm.CustomerStageSync;
 import com.weddingevent.admin.finance.FinanceService;
 import com.weddingevent.admin.notification.NotificationService;
 import com.weddingevent.admin.staff.StaffService;
@@ -9,7 +10,6 @@ import com.weddingevent.common.domain.Lead;
 import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.domain.enums.ContractStatus;
-import com.weddingevent.common.domain.enums.LeadStage;
 import com.weddingevent.common.domain.enums.TransactionType;
 import com.weddingevent.common.exception.AppException;
 import com.weddingevent.common.exception.ResourceNotFoundException;
@@ -28,8 +28,8 @@ import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -38,14 +38,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ContractService {
 
+    /** {@code deliveredAt} with {@code remainingAmount > 0}: delivered but still owing ("Đã giao nhưng còn nợ") */
     public record ContractDto(
             String id, String contractNumber, String customerName, String phone, boolean hasZalo, String packageName,
             BigDecimal totalAmount, BigDecimal paidAmount, BigDecimal remainingAmount, LocalDate contractDate,
-            ContractStatus status, String notes) {
+            ContractStatus status, String notes, Instant deliveredAt) {
         static ContractDto of(Contract c) {
             return new ContractDto(c.getId().toString(), c.getContractNumber(), c.getCustomerName(), c.getPhone(), c.isHasZalo(),
                     c.getPackageName(), c.getTotalAmount(), c.getPaidAmount(), c.getRemainingAmount(), c.getContractDate(),
-                    c.getStatus(), c.getNotes());
+                    c.getStatus(), c.getNotes(), c.getDeliveredAt());
         }
     }
 
@@ -62,8 +63,6 @@ public class ContractService {
 
     public record Document(String fileName, byte[] content) {}
 
-    private static final EnumSet<LeadStage> BEFORE_CONTRACT = EnumSet.of(LeadStage.NEW_LEAD, LeadStage.IN_CONSULTATION, LeadStage.AWAITING_DEPOSIT);
-
     private final ContractRepository contracts;
     private final ServicePackageRepository packages;
     private final LeadRepository leads;
@@ -74,17 +73,20 @@ public class ContractService {
     private final ZaloClient zalo;
     private final CodeGenerator codes;
     private final AppProperties props;
+    private final CustomerStageSync stages;
     private final Clock clock;
 
     public ContractService(ContractRepository contracts, ServicePackageRepository packages, LeadRepository leads,
             StudioSettingsRepository settings, FinanceService finance, NotificationService notifications,
-            ContractDocumentRenderer renderer, ZaloClient zalo, CodeGenerator codes, AppProperties props, Clock clock) {
+            ContractDocumentRenderer renderer, ZaloClient zalo, CodeGenerator codes, AppProperties props,
+            CustomerStageSync stages, Clock clock) {
         this.contracts = contracts;
         this.packages = packages;
         this.leads = leads;
         this.settings = settings;
         this.finance = finance;
         this.notifications = notifications;
+        this.stages = stages;
         this.renderer = renderer;
         this.zalo = zalo;
         this.codes = codes;
@@ -98,8 +100,9 @@ public class ContractService {
     }
 
     /**
-     * Creates the contract, books the deposit into the cash book (status becomes DEPOSITED) and moves the
-     * matching CRM lead (same phone) to IN_PROGRESS.
+     * Creates the contract for the CRM customer with the same phone. A deposit is booked into the cash book, which
+     * makes the contract effective (DEPOSITED) and moves the customer to IN_PROGRESS; without one it stays a draft
+     * and the customer keeps their stage (FN-ADM-CRM-03).
      */
     @Transactional
     public ContractDto create(CreateContractRequest req) {
@@ -129,11 +132,20 @@ public class ContractService {
             finance.record(TransactionType.INCOME, req.depositAmount(), "Doanh thu HĐ",
                     "Thanh toán cọc hợp đồng " + c.getContractNumber() + " - " + c.getCustomerName(), c, today);
         }
-        if (lead != null && BEFORE_CONTRACT.contains(lead.getStage())) {
-            lead.setStage(LeadStage.IN_PROGRESS);
-        }
         notifications.notify("Hợp đồng mới 📄", "Đã tạo hợp đồng " + c.getContractNumber() + " cho " + c.getCustomerName()
                 + " (" + VndFormatter.vnd(c.getTotalAmount()) + ").");
+        return ContractDto.of(c);
+    }
+
+    /** "Xác nhận bàn giao" (FN-ADM-CONTR-02): completes the contract if it is paid in full, otherwise it keeps the debt. */
+    @Transactional
+    public ContractDto deliver(UUID id) {
+        Contract c = require(id);
+        c.deliver(clock.instant());
+        stages.contractChanged(c);
+        notifications.notify("Đã bàn giao hợp đồng 🎁", c.isPaidInFull()
+                ? "Hợp đồng " + c.getContractNumber() + " của " + c.getCustomerName() + " đã bàn giao và hoàn thành."
+                : "Hợp đồng " + c.getContractNumber() + " đã giao nhưng còn nợ " + VndFormatter.vnd(c.getRemainingAmount()) + ".");
         return ContractDto.of(c);
     }
 

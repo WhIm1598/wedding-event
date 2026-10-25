@@ -1,10 +1,12 @@
+import 'package:google_sign_in/google_sign_in.dart';
+
 import '../../core/config/env.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../mock/mock_data.dart';
 import '../models/app_user.dart';
 
-/// Module 1: Authentication & Onboarding (FN-AUTH-01..03)
+/// Module 1: Authentication & Onboarding (FN-AUTH-01..04, Google login)
 class AuthRepository {
   AuthRepository(this._api);
 
@@ -24,10 +26,34 @@ class AuthRepository {
     return _api.post('/auth/login', body: {'email': email, 'password': password}, parse: _readLogin);
   }
 
-  /// POST /auth/google — Google ID token obtained via google_sign_in (TODO: add plugin)
-  Future<AppUser> loginWithGoogle({String idToken = ''}) {
+  bool _googleReady = false;
+
+  /// POST /auth/google with the ID token from the Google Sign-In sheet. Returns null when the user closes the sheet.
+  Future<AppUser?> loginWithGoogle() async {
     if (Env.useMock) {
       return mockDelay(const AppUser(id: 'u-1', email: MockData.demoEmail, fullName: 'Ngọc & Hoàng', isVerified: true), 800);
+    }
+    if (Env.googleServerClientId.isEmpty) {
+      throw const ApiException(code: 'INVALID_GOOGLE_TOKEN', message: 'Đăng nhập Google chưa được cấu hình');
+    }
+    final signIn = GoogleSignIn.instance;
+    if (!_googleReady) {
+      // initialize() must run exactly once (google_sign_in 7)
+      await signIn.initialize(
+        serverClientId: Env.googleServerClientId,
+        clientId: Env.googleIosClientId.isEmpty ? null : Env.googleIosClientId,
+      );
+      _googleReady = true;
+    }
+    final String? idToken;
+    try {
+      idToken = (await signIn.authenticate()).authentication.idToken;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      throw ApiException(code: 'INVALID_GOOGLE_TOKEN', message: 'Không thể đăng nhập bằng Google (${e.code.name})');
+    }
+    if (idToken == null) {
+      throw const ApiException(code: 'INVALID_GOOGLE_TOKEN', message: 'Google không trả về ID token');
     }
     return _api.post('/auth/google', body: {'idToken': idToken}, parse: _readLogin);
   }
@@ -57,15 +83,33 @@ class AuthRepository {
     return _api.put('/users/role', body: {'role': role.apiValue}, parse: (d) => AppUser.fromJson(d! as Map<String, dynamic>));
   }
 
-  /// PUT /users/me
-  Future<AppUser> updateProfile(AppUser user) {
-    if (Env.useMock) return mockDelay(user);
+  /// PUT /users/me (FN-AUTH-04) — a new e-mail comes back as `pendingEmail` until its OTP is confirmed
+  Future<AppUser> updateProfile(AppUser current, {required String fullName, required String email, String? phone}) {
+    if (Env.useMock) {
+      final changed = email.toLowerCase() != current.email.toLowerCase();
+      final updated = AppUser(
+        id: current.id,
+        email: current.email,
+        fullName: fullName,
+        phone: phone,
+        avatarUrl: current.avatarUrl,
+        role: current.role,
+        hasPlan: current.hasPlan,
+        isVerified: current.isVerified,
+        pendingEmail: changed ? email : null,
+      );
+      return mockDelay(updated);
+    }
     return _api.put(
       '/users/me',
-      body: {'fullName': user.fullName, 'email': user.email, 'phone': user.phone},
+      body: {'fullName': fullName, 'email': email, 'phone': phone},
       parse: (d) => AppUser.fromJson(d! as Map<String, dynamic>),
     );
   }
 
-  void logout() => _api.accessToken = null;
+  /// Also signs out of Google, so the next Google login shows the account picker again
+  void logout() {
+    _api.accessToken = null;
+    if (!Env.useMock && _googleReady) GoogleSignIn.instance.signOut();
+  }
 }

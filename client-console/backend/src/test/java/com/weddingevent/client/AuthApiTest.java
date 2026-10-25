@@ -145,6 +145,36 @@ class AuthApiTest extends ClientIntegrationTest {
     }
 
     @Test
+    void atMostFiveCodesAnHourSoTheCodeCantBeGuessed() throws Exception {
+        // 5 codes × 5 attempts = 25 guesses an hour out of 10 000 codes
+        User u = createUser(null, false);
+        loginCall(u.getEmail(), PASSWORD).andExpect(status().isOk()); // 1st code
+        for (int i = 0; i < 6; i++) {
+            mvc.perform(post("/api/v1/auth/send-otp").contentType(MediaType.APPLICATION_JSON)
+                            .content(json("{'email':'" + u.getEmail() + "'}")))
+                    .andExpect(status().isOk()); // never reveals the limit
+        }
+        assertThat(otpSender.sendCount(u.getEmail())).isEqualTo(5);
+
+        // A refused resend doesn't hand out 5 fresh guesses
+        String code = otpSender.lastCodeFor(u.getEmail());
+        for (int i = 0; i < 5; i++) {
+            verify(u.getEmail(), wrong(code));
+        }
+        mvc.perform(post("/api/v1/auth/send-otp").contentType(MediaType.APPLICATION_JSON)
+                .content(json("{'email':'" + u.getEmail() + "'}")));
+        verify(u.getEmail(), code).andExpect(jsonPath("$.code").value("OTP_EXPIRED"));
+
+        // Next hour: sending works again
+        EmailOtp otp = otps.findByUserId(u.getId()).orElseThrow();
+        otp.setSendWindowStart(Instant.now().minus(61, ChronoUnit.MINUTES));
+        otps.save(otp);
+        mvc.perform(post("/api/v1/auth/send-otp").contentType(MediaType.APPLICATION_JSON)
+                .content(json("{'email':'" + u.getEmail() + "'}")));
+        verify(u.getEmail(), otpSender.lastCodeFor(u.getEmail())).andExpect(status().isOk());
+    }
+
+    @Test
     void codeExpiresAfterFiveMinutes() throws Exception {
         User u = createUser(null, false);
         loginCall(u.getEmail(), PASSWORD).andExpect(status().isOk());
@@ -199,13 +229,12 @@ class AuthApiTest extends ClientIntegrationTest {
 
     @Test
     void googleLoginLinksAnExistingAccountAndRespectsLocksAndStudioRoles() throws Exception {
-        User couple = createUser(Role.ROLE_COUPLE, false);
+        User couple = createUser(Role.ROLE_COUPLE, true);
         mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
                         .content(json("{'idToken':'google|" + couple.getEmail() + "|X|true'}")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.user.id").value(couple.getId().toString()))
-                .andExpect(jsonPath("$.data.user.role").value("ROLE_COUPLE"))
-                .andExpect(jsonPath("$.data.user.isVerified").value(true)); // Google verified the address
+                .andExpect(jsonPath("$.data.user.role").value("ROLE_COUPLE"));
 
         couple.setActive(false);
         users.save(couple);
@@ -221,6 +250,42 @@ class AuthApiTest extends ClientIntegrationTest {
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
+    private org.springframework.test.web.servlet.ResultActions google(String email, String sub) throws Exception {
+        return mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                .content(json("{'idToken':'google|" + email + "|Người Dùng|true|" + sub + "'}")));
+    }
+
+    @Test
+    void googleAccountIsRecognisedByItsGoogleIdEvenAfterItsEmailChanges() throws Exception {
+        String sub = "sub-" + UUID.randomUUID();
+        String first = body(google("old-" + UUID.randomUUID() + "@gmail.com", sub).andExpect(status().isOk()));
+        String id = read(first, "$.data.user.id");
+        assertThat(users.findById(UUID.fromString(id)).orElseThrow().getGoogleSub()).isEqualTo(sub);
+
+        // Same Google account, new address on Google's side: same WedPlanner account, not a new empty one
+        google("new-" + UUID.randomUUID() + "@gmail.com", sub)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.id").value(id));
+    }
+
+    @Test
+    void anExistingAccountIsLinkedToItsGoogleIdOnFirstGoogleLogin() throws Exception {
+        User couple = createUser(Role.ROLE_COUPLE, true);
+        String sub = "sub-" + UUID.randomUUID();
+        google(couple.getEmail(), sub).andExpect(jsonPath("$.data.user.id").value(couple.getId().toString()));
+        assertThat(users.findById(couple.getId()).orElseThrow().getGoogleSub()).isEqualTo(sub);
+    }
+
+    @Test
+    void aRecycledGoogleAddressCannotTakeOverTheAccount() throws Exception {
+        // The address now belongs to a different Google account (e.g. a recycled Gmail address)
+        String email = "recycled-" + UUID.randomUUID() + "@gmail.com";
+        google(email, "sub-original-" + UUID.randomUUID()).andExpect(status().isOk());
+        google(email, "sub-newcomer-" + UUID.randomUUID())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EMAIL_EXISTS"));
+    }
+
     @Test
     void googleLoginRejectsInvalidTokens() throws Exception {
         mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
@@ -232,13 +297,24 @@ class AuthApiTest extends ClientIntegrationTest {
     }
 
     @Test
-    void unverifiedGoogleEmailMustBeConfirmedWithAnOtp() throws Exception {
+    void googleLoginNeedsAnAddressGoogleHasVerified() throws Exception {
+        // Otherwise anyone could create an account holding someone else's address and wait for the owner
         String email = "g-" + UUID.randomUUID() + "@example.com";
         mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
                         .content(json("{'idToken':'google|" + email + "|Khách|false'}")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.user.isVerified").value(false));
-        assertThat(otpSender.lastCodeFor(email)).matches("\\d{4}");
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_GOOGLE_TOKEN"));
+        assertThat(users.findByEmailIgnoreCase(email)).isEmpty();
+    }
+
+    @Test
+    void googleLoginDoesNotTakeOverAnAccountWhoseAddressWasNeverVerified() throws Exception {
+        User unverified = createUser(Role.ROLE_COUPLE, false);
+        mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                        .content(json("{'idToken':'google|" + unverified.getEmail() + "|X|true'}")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EMAIL_EXISTS"));
+        assertThat(users.findById(unverified.getId()).orElseThrow().isVerified()).isFalse();
     }
 
     @Test

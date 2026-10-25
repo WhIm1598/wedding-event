@@ -1,4 +1,4 @@
-import { HeartHandshake, MessageCircle, Phone, Printer } from 'lucide-react';
+import { HeartHandshake, MessageCircle, PackageCheck, Phone, Printer } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { CONTRACT_STATUS } from '@/constants/labels';
@@ -7,7 +7,15 @@ import type { Contract } from '@/types';
 
 const HEADERS = ['Thông tin Khách', 'Gói Dịch Vụ', 'Thanh Toán', 'Trạng Thái'];
 
-export function ContractTable({ contracts, onExport }: { contracts: Contract[]; onExport: (c: Contract) => void }) {
+interface Props {
+  contracts: Contract[];
+  onExport: (c: Contract) => void;
+  /** "Xác nhận bàn giao" (FN-ADM-CONTR-02); omitted for staff, who can't deliver */
+  onDeliver?: (c: Contract) => void;
+  deliveringId?: string;
+}
+
+export function ContractTable({ contracts, onExport, onDeliver, deliveringId }: Props) {
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -48,13 +56,31 @@ export function ContractTable({ contracts, onExport }: { contracts: Contract[]; 
                   </td>
                   <td className="py-4 px-6">
                     <div className="text-sm font-bold text-slate-900">{formatVND(c.totalAmount)}</div>
-                    <div className="text-xs text-rose-600 mt-1 font-medium">Còn nợ: {formatVND(c.remainingAmount)}</div>
+                    {c.remainingAmount === 0 ? (
+                      <div className="text-xs text-emerald-600 mt-1 font-medium">Đã thanh toán đủ</div>
+                    ) : (
+                      <div className="text-xs text-rose-600 mt-1 font-medium">Còn nợ: {formatVND(c.remainingAmount)}</div>
+                    )}
                   </td>
                   <td className="py-4 px-6">
                     <Badge variant={CONTRACT_STATUS[c.status].variant}>{CONTRACT_STATUS[c.status].label}</Badge>
+                    {c.deliveredAt && c.remainingAmount > 0 && (
+                      <div className="text-xs text-amber-700 mt-1 font-medium">Đã giao nhưng còn nợ {formatVND(c.remainingAmount)}</div>
+                    )}
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex justify-end gap-2">
+                      {onDeliver && c.status === 'IN_PROGRESS' && !c.deliveredAt && (
+                        <button
+                          onClick={() => onDeliver(c)}
+                          disabled={deliveringId === c.id}
+                          className="p-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+                          title="Xác nhận bàn giao"
+                          aria-label={`Xác nhận bàn giao hợp đồng ${c.contractNumber}`}
+                        >
+                          <PackageCheck size={16} />
+                        </button>
+                      )}
                       <button onClick={() => onExport(c)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors" title="Xuất hợp đồng">
                         <Printer size={16} />
                       </button>

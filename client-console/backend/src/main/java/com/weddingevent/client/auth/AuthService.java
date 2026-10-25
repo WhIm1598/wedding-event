@@ -75,11 +75,27 @@ public class AuthService {
         return signIn(user);
     }
 
-    /** Creates the account on first use (no role yet), or signs in the account with the same e-mail. */
+    /**
+     * Signs in the account of this Google user, recognised by Google's user id ({@code sub}) so it survives an e-mail
+     * change on Google's side. Without one yet: links the account with the same e-mail and stores the id, or creates
+     * the account (no role yet). Only addresses Google has verified are accepted, and an account is only linked when
+     * its address is verified and it isn't tied to another Google user (a recycled address): otherwise someone could
+     * get another person's account, or get that person signed into theirs.
+     */
     @Transactional
     public LoginResponse loginWithGoogle(GoogleLoginRequest req) {
         GoogleProfile profile = google.verify(req.idToken());
-        User user = users.findByEmailIgnoreCase(profile.email().trim()).orElse(null);
+        if (!profile.emailVerified()) {
+            throw AppException.unauthorized("INVALID_GOOGLE_TOKEN", "Email Google chưa được xác thực, vui lòng xác thực email với Google trước");
+        }
+        User user = users.findByGoogleSub(profile.subject()).orElse(null);
+        if (user == null) {
+            user = users.findByEmailIgnoreCase(profile.email().trim()).orElse(null);
+            if (user != null && UserAuthenticationConverter.isMobileUser(user)
+                    && (!user.isVerified() || (user.getGoogleSub() != null && !user.getGoogleSub().equals(profile.subject())))) {
+                throw AppException.conflict("EMAIL_EXISTS", "Email này đã gắn với một tài khoản khác, vui lòng liên hệ hỗ trợ");
+            }
+        }
         if (user == null) {
             user = new User();
             user.setEmail(profile.email().trim().toLowerCase(Locale.ROOT));
@@ -87,13 +103,13 @@ public class AuthService {
                     ? user.getEmail().substring(0, user.getEmail().indexOf('@'))
                     : profile.name().trim());
             user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString())); // unusable for e-mail login
+            user.setGoogleSub(profile.subject());
             user = users.save(user);
         } else if (!UserAuthenticationConverter.isMobileUser(user)) {
             throw invalidCredentials();
         }
-        if (profile.emailVerified()) {
-            user.setVerified(true);
-        }
+        user.setGoogleSub(profile.subject());
+        user.setVerified(true);
         if (user.getAvatarUrl() == null) {
             user.setAvatarUrl(profile.pictureUrl());
         }
@@ -110,7 +126,7 @@ public class AuthService {
             throw AppException.forbidden("ACCOUNT_LOCKED", "Tài khoản đã bị khóa, vui lòng liên hệ hỗ trợ");
         }
         if (!user.isVerified()) {
-            otp.issue(user);
+            otp.issue(user, user.getEmail());
         }
         TokenPair pair = tokens.issue(user);
         return new LoginResponse(pair.accessToken(), pair.refreshToken(), userService.dto(user));
