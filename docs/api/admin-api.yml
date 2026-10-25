@@ -1536,9 +1536,9 @@ paths:
       operationId: deliverContract
       summary: Confirm the hand-over ("Xác nhận bàn giao")
       description: |
-        Records `deliveredAt`. Only a contract `IN_PROGRESS` that hasn't been delivered yet → otherwise
+        Records `deliveredAt`. Only an effective contract (`DEPOSITED` or `IN_PROGRESS`, e.g. a rental without bookings) not delivered yet → otherwise
         `409 INVALID_STATUS_TRANSITION`. Paid in full → `COMPLETED` (and its customer → `COMPLETED` once none of
-        their contracts is still `DEPOSITED`/`IN_PROGRESS`; abandoned drafts don't count). Still owing → keeps `IN_PROGRESS`; the final payment then completes it.
+        their contracts is still `DEPOSITED`/`IN_PROGRESS`; abandoned drafts don't count). Still owing → keeps its status; the final payment then completes it.
         Creates a "Đã bàn giao hợp đồng" notification. The `require_full_payment_before_delivery` setting
         (`409 CONTRACT_NOT_PAID`) is not implemented yet.
       x-spec-function: FN-ADM-CONTR-02
@@ -1575,7 +1575,7 @@ paths:
               example:
                 success: false
                 code: INVALID_STATUS_TRANSITION
-                message: Chỉ xác nhận bàn giao được hợp đồng đang thực hiện và chưa bàn giao
+                message: Chỉ xác nhận bàn giao được hợp đồng đã đặt cọc và chưa bàn giao
 
   /api/v1/admin/contracts/{id}/preview-html:
     get:

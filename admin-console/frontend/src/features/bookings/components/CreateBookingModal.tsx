@@ -58,9 +58,6 @@ export function CreateBookingModal({ isOpen, defaultDate, onClose, onCreated }: 
         contractId: contractId || undefined,
       });
       showToast('Đã thêm lịch trình thành công!');
-      setContractId('');
-      setClientName('');
-      setPhone('');
       onCreated();
       onClose();
     } catch (err) {

@@ -75,14 +75,22 @@ class ContractTest {
     }
 
     @Test
-    void onlyAContractInProgressCanBeDeliveredAndOnlyOnce() {
-        Contract deposited = contract(10_000_000);
-        deposited.applyPayment(BigDecimal.ONE);
-        assertThatThrownBy(() -> deposited.deliver(NOW))
+    void onlyAnEffectiveContractCanBeDeliveredAndOnlyOnce() {
+        Contract draft = contract(10_000_000);
+        assertThatThrownBy(() -> draft.deliver(NOW))
                 .isInstanceOfSatisfying(AppException.class, e -> assertThat(e.getCode()).isEqualTo("INVALID_STATUS_TRANSITION"));
 
-        deposited.startWork();
-        deposited.deliver(NOW);
-        assertThatThrownBy(() -> deposited.deliver(NOW)).isInstanceOf(AppException.class);
+        draft.applyPayment(BigDecimal.ONE);
+        draft.deliver(NOW);
+        assertThatThrownBy(() -> draft.deliver(NOW)).isInstanceOf(AppException.class);
+    }
+
+    @Test
+    void aRentalWithoutBookingsIsDeliveredStraightFromDeposited() {
+        Contract rental = contract(3_000_000);
+        rental.applyPayment(BigDecimal.valueOf(3_000_000));
+        assertThat(rental.getStatus()).isEqualTo(ContractStatus.DEPOSITED);
+        rental.deliver(NOW);
+        assertThat(rental.getStatus()).isEqualTo(ContractStatus.COMPLETED);
     }
 }

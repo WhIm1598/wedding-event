@@ -70,7 +70,7 @@ export function ContractTable({ contracts, onExport, onDeliver, deliveringId }: 
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex justify-end gap-2">
-                      {onDeliver && c.status === 'IN_PROGRESS' && !c.deliveredAt && (
+                      {onDeliver && (c.status === 'DEPOSITED' || c.status === 'IN_PROGRESS') && !c.deliveredAt && (
                         <button
                           onClick={() => onDeliver(c)}
                           disabled={deliveringId === c.id}

@@ -91,7 +91,8 @@ export function BookingsPage() {
         />
       </div>
 
-      <CreateBookingModal isOpen={isCreateOpen} defaultDate={selectedDate} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
+      {/* key: a fresh form (and contract list) on every open, so a closed draft never carries over */}
+      <CreateBookingModal key={isCreateOpen ? 'open' : 'closed'} isOpen={isCreateOpen} defaultDate={selectedDate} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
     </div>
   );
 }

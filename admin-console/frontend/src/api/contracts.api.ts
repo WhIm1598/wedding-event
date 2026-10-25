@@ -40,8 +40,8 @@ export const contractsApi = {
   deliver(contract: Contract): Promise<Contract> {
     if (!env.useMock) return http.post(`/admin/contracts/${contract.id}/deliver`);
     const c = db.contracts.find((x) => x.id === contract.id)!;
-    if (c.status !== 'IN_PROGRESS' || c.deliveredAt) {
-      throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'Chỉ xác nhận bàn giao được hợp đồng đang thực hiện và chưa bàn giao');
+    if ((c.status !== 'DEPOSITED' && c.status !== 'IN_PROGRESS') || c.deliveredAt) {
+      throw new ApiError(409, 'INVALID_STATUS_TRANSITION', 'Chỉ xác nhận bàn giao được hợp đồng đã đặt cọc và chưa bàn giao');
     }
     c.deliveredAt = new Date().toISOString();
     if (c.remainingAmount === 0) c.status = 'COMPLETED';

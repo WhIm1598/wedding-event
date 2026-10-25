@@ -98,11 +98,6 @@ class ContractFinanceApiTest extends IntegrationTest {
         String leadId = createLead(admin, phone);
         String contractId = createContract(admin, phone, 10_000_000, 4_000_000);
 
-        // Delivery needs work in progress: a DEPOSITED contract can't be delivered yet
-        mvc.perform(authed(post("/api/v1/admin/contracts/" + contractId + "/deliver"), admin))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("INVALID_STATUS_TRANSITION"));
-
         moveBooking(admin, createContractBooking(admin, contractId), "IN_PROGRESS");
         mvc.perform(authed(post("/api/v1/admin/financials/transactions"), admin).content(income(6_000_000, contractId, TODAY)))
                 .andExpect(status().isCreated());
@@ -139,6 +134,24 @@ class ContractFinanceApiTest extends IntegrationTest {
         mvc.perform(authed(post("/api/v1/admin/financials/transactions"), admin).content(income(6_000_000, contractId, TODAY)))
                 .andExpect(status().isCreated());
         assertThat(contractField(admin, contractId, "status")).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void aDressRentalWithoutBookingsCanBeDeliveredButADraftCannot() throws Exception {
+        String admin = adminToken();
+        String phone = uniquePhone();
+        String leadId = createLead(admin, phone);
+        String draft = createContract(admin, phone, 2_000_000, 0);
+        mvc.perform(authed(post("/api/v1/admin/contracts/" + draft + "/deliver"), admin))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_STATUS_TRANSITION"));
+
+        // Only a rental, no session: delivered straight from DEPOSITED
+        String rental = createContract(admin, phone, 3_000_000, 3_000_000);
+        mvc.perform(authed(post("/api/v1/admin/contracts/" + rental + "/deliver"), admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+        assertThat(leadStage(admin, leadId)).isEqualTo("COMPLETED");
     }
 
     @Test

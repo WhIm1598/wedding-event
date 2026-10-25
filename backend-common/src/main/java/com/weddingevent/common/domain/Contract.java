@@ -98,11 +98,14 @@ public class Contract extends BaseEntity {
         }
     }
 
-    /** Records the hand-over; 409 INVALID_STATUS_TRANSITION unless in progress and not yet delivered. */
+    /**
+     * Records the hand-over; 409 INVALID_STATUS_TRANSITION unless effective and not yet delivered.
+     * DEPOSITED counts: a rental-only contract (e.g. dress hire) has no booking to start it.
+     */
     public void deliver(Instant at) {
-        if (status != ContractStatus.IN_PROGRESS || deliveredAt != null) {
+        if ((status != ContractStatus.DEPOSITED && status != ContractStatus.IN_PROGRESS) || deliveredAt != null) {
             throw AppException.conflict("INVALID_STATUS_TRANSITION",
-                    "Chỉ xác nhận bàn giao được hợp đồng đang thực hiện và chưa bàn giao");
+                    "Chỉ xác nhận bàn giao được hợp đồng đã đặt cọc và chưa bàn giao");
         }
         deliveredAt = at;
         completeIfDone();
