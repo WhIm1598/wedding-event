@@ -18,8 +18,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
-    properties:
-      hibernate.jdbc.time_zone: UTC
+    # No hibernate.jdbc.time_zone: it shifted TIME columns (LocalTime) by the zone's 1970 offset (#33).
+    # Instants still go to TIMESTAMPTZ as absolute UTC values; TIME/DATE columns keep the business time as entered.
   # Same migration set as the admin backend (shipped in backend-common); Flyway's lock serializes concurrent starts.
   flyway:
     locations: classpath:db/migration
