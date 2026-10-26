@@ -50,5 +50,24 @@ void main() {
       expect(Validators.totalBudget(9999999), isNotNull);
       expect(Validators.totalBudget(10000000), isNull);
     });
+
+    test('vendor package discount and features (FN-VND-05)', () {
+      expect(Validators.discountPrice('', 1000000), isNull);
+      expect(Validators.discountPrice('900000', 1000000), isNull);
+      expect(Validators.discountPrice('1000000', 1000000), isNotNull);
+      expect(Validators.discountPrice('0', 1000000), isNotNull);
+      expect(Validators.features('Hoa tươi\n\nLắp đặt'), isNull);
+      expect(Validators.features(List.filled(21, 'x').join('\n')), isNotNull);
+      expect(Validators.features('x' * 201), isNotNull);
+    });
+
+    test('quote request guest count is optional, 1–5000 (FN-VND-01)', () {
+      expect(Validators.optionalGuestCount(''), isNull);
+      expect(Validators.optionalGuestCount('1'), isNull);
+      expect(Validators.optionalGuestCount('5000'), isNull);
+      expect(Validators.optionalGuestCount('0'), isNotNull);
+      expect(Validators.optionalGuestCount('5001'), isNotNull);
+      expect(Validators.optionalGuestCount('nhiều'), isNotNull);
+    });
   });
 }

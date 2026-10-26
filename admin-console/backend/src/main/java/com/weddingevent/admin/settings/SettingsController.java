@@ -2,12 +2,14 @@ package com.weddingevent.admin.settings;
 
 import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 
+import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.common.api.ApiResponse;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.StudioSettingsRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,10 +29,12 @@ public class SettingsController {
             @NotBlank @Size(max = 255) String address,
             @NotBlank @Size(max = 20) String taxCode,
             @NotBlank @Size(max = 100) String legalRepresentative,
-            @NotBlank @Size(max = 500) String bankInfo) {
+            @NotBlank @Size(max = 500) String bankInfo,
+            @Pattern(regexp = "^$|" + StaffService.VN_PHONE, message = "Số Zalo không hợp lệ") String zaloPhone) {
 
         public static StudioSettingsDto of(StudioSettings s) {
-            return new StudioSettingsDto(s.getName(), s.getAddress(), s.getTaxCode(), s.getLegalRepresentative(), s.getBankInfo());
+            return new StudioSettingsDto(s.getName(), s.getAddress(), s.getTaxCode(), s.getLegalRepresentative(), s.getBankInfo(),
+                    s.getZaloPhone());
         }
     }
 
@@ -56,6 +60,7 @@ public class SettingsController {
         s.setTaxCode(req.taxCode().trim());
         s.setLegalRepresentative(req.legalRepresentative().trim());
         s.setBankInfo(req.bankInfo().trim());
+        s.setZaloPhone(req.zaloPhone() == null || req.zaloPhone().isBlank() ? null : req.zaloPhone());
         return ApiResponse.ok(StudioSettingsDto.of(s), "Đã lưu cấu hình");
     }
 

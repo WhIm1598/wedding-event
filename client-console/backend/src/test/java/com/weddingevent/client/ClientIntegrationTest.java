@@ -4,9 +4,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.domain.User;
+import com.weddingevent.common.domain.VendorProfile;
+import com.weddingevent.common.domain.enums.ServiceCategory;
 import com.weddingevent.common.domain.enums.Role;
+import com.weddingevent.common.repository.ServicePackageRepository;
 import com.weddingevent.common.repository.UserRepository;
+import com.weddingevent.common.repository.VendorProfileRepository;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -78,6 +84,12 @@ public abstract class ClientIntegrationTest {
     protected PasswordEncoder passwordEncoder;
 
     @Autowired
+    protected VendorProfileRepository vendorProfiles;
+
+    @Autowired
+    protected ServicePackageRepository servicePackages;
+
+    @Autowired
     protected TestDoubles.RecordingOtpSender otpSender;
 
     @Autowired
@@ -92,6 +104,26 @@ public abstract class ClientIntegrationTest {
         u.setRole(role);
         u.setVerified(verified);
         return users.save(u);
+    }
+
+    /** A ROLE_VENDOR account with its business profile */
+    protected VendorProfile createVendor() {
+        VendorProfile v = new VendorProfile();
+        v.setUser(createUser(Role.ROLE_VENDOR, true));
+        v.setBusinessName(unique("Vendor"));
+        v.setAddress("Quận 3, TP.HCM");
+        return vendorProfiles.save(v);
+    }
+
+    /** An active package of {@code vendor}, or of the studio when {@code vendor} is null */
+    protected ServicePackage createPackage(VendorProfile vendor, long price) {
+        ServicePackage p = new ServicePackage();
+        p.setVendorId(vendor == null ? null : vendor.getId());
+        p.setName(unique("Gói"));
+        p.setType("Trọn gói");
+        p.setCategory(ServiceCategory.DECOR);
+        p.setPrice(BigDecimal.valueOf(price));
+        return servicePackages.save(p);
     }
 
     protected String login(String email) throws Exception {

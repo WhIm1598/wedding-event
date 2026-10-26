@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * FN-SVC-01..02: active service packages of vendors and of the studio. Studio packages (no vendor) show the studio's
- * name/address from the settings and have no {@code providerId}, because the studio has no mobile chat account.
+ * name/address from the settings and have no {@code providerId}, because the studio has no mobile account.
  */
 @Service
 public class CatalogService {
@@ -37,12 +37,14 @@ public class CatalogService {
             String providerId,
             String providerName,
             long price,
+            Long discountPrice,
             double rating,
             int reviewCount,
             String address,
             String category,
             String thumbnailUrl,
-            String description) {}
+            String description,
+            String zaloUrl) {}
 
     private final ServicePackageRepository packages;
     private final VendorProfileRepository vendors;
@@ -84,12 +86,19 @@ public class CatalogService {
                 vendor == null ? null : vendor.getUser().getId().toString(),
                 vendor == null ? studio.getName() : vendor.getBusinessName(),
                 p.getPrice().longValueExact(),
+                p.getDiscountPrice() == null ? null : p.getDiscountPrice().longValueExact(),
                 vendor == null ? 0.0 : vendor.getRating().doubleValue(),
                 vendor == null ? 0 : vendor.getReviewCount(),
                 vendor == null ? studio.getAddress() : vendor.getAddress(),
                 p.getCategory().name().toLowerCase(Locale.ROOT),
                 p.getThumbnailUrl(),
-                p.getDescription());
+                p.getDescription(),
+                zaloUrl(vendor == null ? studio.getZaloPhone() : vendor.getUser().getPhone()));
+    }
+
+    /** "Liên hệ đặt lịch" (FN-SVC-02, v1.1.3): the provider's Zalo; studio from the settings, vendor from its account phone */
+    private static String zaloUrl(String phone) {
+        return phone == null || phone.isBlank() ? null : "https://zalo.me/" + phone;
     }
 
     private StudioSettings studio() {

@@ -10,16 +10,22 @@ public class AppException extends RuntimeException {
     private final HttpStatus status;
     private final String code;
     private final List<ApiResponse.FieldError> errors;
+    private final Object data;
 
     public AppException(HttpStatus status, String code, String message) {
         this(status, code, message, null);
     }
 
     public AppException(HttpStatus status, String code, String message, List<ApiResponse.FieldError> errors) {
+        this(status, code, message, errors, null);
+    }
+
+    private AppException(HttpStatus status, String code, String message, List<ApiResponse.FieldError> errors, Object data) {
         super(message);
         this.status = status;
         this.code = code;
         this.errors = errors;
+        this.data = data;
     }
 
     public HttpStatus getStatus() {
@@ -35,6 +41,11 @@ public class AppException extends RuntimeException {
         return errors;
     }
 
+    /** Extra payload for the client, sent as the envelope's {@code data} (e.g. {@code existingId}) */
+    public Object getData() {
+        return data;
+    }
+
     public static AppException badRequest(String code, String message) {
         return new AppException(HttpStatus.BAD_REQUEST, code, message);
     }
@@ -47,6 +58,11 @@ public class AppException extends RuntimeException {
 
     public static AppException conflict(String code, String message) {
         return new AppException(HttpStatus.CONFLICT, code, message);
+    }
+
+    /** 409 that points the client at the existing row, e.g. {@code data: {existingId}} */
+    public static AppException conflict(String code, String message, Object data) {
+        return new AppException(HttpStatus.CONFLICT, code, message, null, data);
     }
 
     public static AppException unauthorized(String code, String message) {

@@ -43,6 +43,10 @@ public class ServicePackage extends BaseEntity {
     @Column(nullable = false, precision = 15, scale = 0)
     private BigDecimal price;
 
+    /** Price after the vendor's discount, below {@link #price}; null = no discount (FN-VND-05) */
+    @Column(name = "discount_price", precision = 15, scale = 0)
+    private BigDecimal discountPrice;
+
     private String description;
 
     @ElementCollection(fetch = FetchType.EAGER)

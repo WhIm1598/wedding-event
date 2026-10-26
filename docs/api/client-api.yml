@@ -1,0 +1,2877 @@
+openapi: 3.1.0
+info:
+  title: WedPlanner Mobile API
+  version: 0.1.0
+  summary: REST API of client-console/backend (WedPlanner mobile app for couples and vendors).
+  description: |
+    Contract of `client-console/backend` as implemented in the code. The source of truth for business rules is
+    `docs/features/detailed_functional_specification.md` (Part A); each operation links its spec function via
+    `x-spec-function`. Where code and spec differ, this file follows the code.
+
+    **Conventions**
+    * Every response uses the envelope of spec §1.2 (`ApiSuccess` / `ApiError`). `data` and `errors` are omitted
+      when null: an operation without payload, and `GET /client/plans/my-plan` without a plan, return no `data` key.
+      Fields **inside** `data` are always present (`null` when empty).
+    * List endpoints that page return `data` = `{items, page, size, totalElements, totalPages}` (`PageResponse`);
+      `page` starts at 0, `size` is 1–100. There is no `sort` parameter.
+    * Money is integer VND, dates `YYYY-MM-DD`, timestamps ISO 8601 UTC. "Today" and "this month" are evaluated in
+      the business time zone `Asia/Ho_Chi_Minh`.
+    * Authentication: `Authorization: Bearer <accessToken>` (JWT HS256, 2 h, issuer `wedding-event-client`). Only
+      tokens with `typ=access` are accepted; admin-console tokens (other issuer) are rejected. There is **no refresh
+      endpoint**: the 30-day refresh token returned at login cannot be used yet.
+    * The token carries no role. The current role is loaded from the database on every request, so a role chosen
+      with `PUT /users/role` applies at once and a locked account (or a studio account) gets `401 UNAUTHORIZED`.
+    * Authorization is enforced twice: URL rules in `SecurityConfig.apiSecurity` (evaluated before body parsing, so
+      a wrong role receives `403` instead of `400`) and `@PreAuthorize` on the controllers. `x-roles` lists the
+      roles; `authenticated` = any signed-in mobile user, including one who has not chosen a role yet.
+    * Data that is not the caller's (another couple's plan, guest, quote request, project; another vendor's
+      package) is `404 NOT_FOUND`, never `403`.
+    * Generic errors not repeated on every operation: `405 METHOD_NOT_ALLOWED` and `500 INTERNAL_SERVER_ERROR`,
+      both in the `ApiError` envelope. Unknown paths are denied (`401` without a token, `403` with one).
+    * User-facing messages are Vietnamese.
+
+    **Real-time channel (STOMP over WebSocket, FN-MSG-01 — not used by the app since v1.1.3)**
+    OpenAPI cannot describe it, so in short:
+    * Endpoint `ws(s)://<host>/ws` (handshake is public). The `CONNECT` frame must carry
+      `Authorization: Bearer <accessToken>` of an active `ROLE_COUPLE`/`ROLE_VENDOR` user; otherwise the session
+      ends with a STOMP `ERROR` frame.
+    * `SEND /app/chat` with the same JSON body as `POST /api/v1/messages/send` (`SendMessageRequest`). Only
+      `/app/**` destinations may be sent to.
+    * `SUBSCRIBE /topic/messages/{roomId}` — only members of that room; receives every `MessageDto` of the room
+      after it is saved (REST or STOMP).
+    * `SUBSCRIBE /user/queue/errors` — errors of the caller's `SEND` frames, in the `ApiError` envelope
+      (`BAD_REQUEST` with `errors[]`, `INVALID_RECIPIENT`, `INTERNAL_SERVER_ERROR`).
+    * Single instance: in-memory simple broker and presence tracking.
+servers:
+  - url: http://localhost:8081
+    description: Local mobile backend (`./gradlew :client-console:backend:bootRun`)
+  - url: https://{host}
+    description: Through the nginx gateway (forwards `/api/v1/auth|users|client|messages/**` and `/ws/**` to this service)
+    variables:
+      host:
+        default: localhost
+        description: Public host name of the gateway
+security:
+  - bearerAuth: []
+tags:
+  - name: auth
+    description: E-mail and Google sign-in, e-mail OTP, current user (Module 1).
+  - name: user
+    description: Role picker and profile (Module 1).
+  - name: plan
+    description: The couple's wedding plan, AI planner, partner sync and checklist (Module 2). `ROLE_COUPLE`.
+  - name: guest
+    description: Guest list and RSVP of the couple's plan (Module 3). `ROLE_COUPLE`.
+  - name: catalog
+    description: Active service packages of vendors and of the studio (Module 4). Couples and vendors.
+  - name: notification
+    description: In-app inbox of the signed-in user (FN-NOTI-01).
+  - name: message
+    description: |
+      Couple ↔ vendor chat (FN-MSG-01). Kept in the backend but **not used by the app** since v1.1.3 (couples contact
+      the studio and vendors on Zalo). The same operation exists over STOMP (`SEND /app/chat`), see the API
+      description.
+  - name: project
+    description: Vendor projects created from accepted quotes — couple side (`/client/vendor-projects`) and vendor side (`/client/vendor/projects`) (Module 4B).
+  - name: quote
+    description: Quote requests — couple side (`/client/quote-requests`) and vendor side (`/client/vendor/quote-requests`) (Module 4B).
+  - name: vendor
+    description: Vendor dashboard and the vendor's own service packages (Module 4B). `ROLE_VENDOR`.
+
+paths:
+  # ---------------------------------------------------------------- auth
+  /api/v1/auth/google:
+    post:
+      tags: [auth]
+      operationId: loginWithGoogle
+      summary: Sign in with a Google ID token
+      description: |
+        Verifies the Google ID token (audience = `app.google.client-ids`; empty config = Google login off →
+        `401 INVALID_GOOGLE_TOKEN`). Only Google-verified e-mail addresses are accepted (`401 INVALID_GOOGLE_TOKEN`).
+        The account is found by Google's user id (`sub`); without one yet, the account with the same e-mail is linked,
+        or a new account is created with no role (`role = null`) and `isVerified = true`.
+        A mobile account with that e-mail that is unverified, or already linked to another Google user →
+        `409 EMAIL_EXISTS` (no account merge). A studio account (admin/staff) → `401 INVALID_CREDENTIALS`.
+        A locked account → `403 ACCOUNT_LOCKED`. Not a separate function in the detailed spec (error codes in §1.3;
+        product spec §7.1).
+      x-spec-function: FN-AUTH-05
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleLoginRequest'
+            example:
+              idToken: eyJhbGciOiJSUzI1NiJ9.GOOGLE-ID-TOKEN-PLACEHOLDER.signature
+      responses:
+        '200':
+          $ref: '#/components/responses/LoginOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '`INVALID_GOOGLE_TOKEN` — token invalid/expired, Google login not configured, or e-mail not verified by Google; `INVALID_CREDENTIALS` — studio account.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                invalidGoogleToken:
+                  value:
+                    success: false
+                    code: INVALID_GOOGLE_TOKEN
+                    message: Email Google chưa được xác thực, vui lòng xác thực email với Google trước
+                studioAccount:
+                  value:
+                    success: false
+                    code: INVALID_CREDENTIALS
+                    message: Email hoặc mật khẩu không chính xác
+        '403':
+          $ref: '#/components/responses/AccountLocked'
+        '409':
+          description: '`EMAIL_EXISTS` — an unverified account, or one linked to another Google user, already has this e-mail.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: EMAIL_EXISTS
+                message: Email này đã gắn với một tài khoản khác, vui lòng liên hệ hỗ trợ
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in with e-mail and password
+      description: |
+        Looks the user up by e-mail (case-insensitive). Unknown e-mail, wrong password or a studio account
+        (`ROLE_ADMIN`/`ROLE_STAFF`) all return `401 INVALID_CREDENTIALS` with the same message (no account
+        enumeration, equal response time). An inactive account returns `403 ACCOUNT_LOCKED`. An unverified account
+        is sent a new OTP (max 5 codes per hour) but still receives the tokens; the app keeps the user on the OTP
+        screen (`user.isVerified = false`). Access token 2 h, refresh token 30 days, claims `sub`, `email`, `typ`.
+      x-spec-function: FN-AUTH-01
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: ngoc.hoang@example.com
+              password: MatKhau@2026
+      responses:
+        '200':
+          $ref: '#/components/responses/LoginOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '`INVALID_CREDENTIALS` — wrong e-mail or password, or a studio account.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_CREDENTIALS
+                message: Email hoặc mật khẩu không chính xác
+        '403':
+          $ref: '#/components/responses/AccountLocked'
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Get the signed-in user
+      description: Returns the `user` object of the access token's account. Works before a role is chosen.
+      x-spec-function: FN-AUTH-06
+      x-roles: [authenticated]
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/UserDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  email: ngoc.hoang@example.com
+                  fullName: Ngọc & Hoàng
+                  phone: '0900000001'
+                  avatarUrl: null
+                  role: ROLE_COUPLE
+                  hasPlan: true
+                  isVerified: true
+                  pendingEmail: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/send-otp:
+    post:
+      tags: [auth]
+      operationId: sendOtp
+      summary: (Re)send an e-mail OTP
+      description: |
+        Always `200` with the same message, whether or not the e-mail has an account (no account probing). A new
+        4-digit code (valid 5 min) is sent only to an active, unverified account with this e-mail, or to an active
+        account whose pending new e-mail (FN-AUTH-04) is this address. At most 5 codes per account per hour: over the
+        limit nothing is sent, the previous code stays valid, and the answer is still `200`.
+      x-spec-function: FN-AUTH-02
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOtpRequest'
+            example:
+              email: ngoc.hoang@example.com
+      responses:
+        '200':
+          description: Accepted (no `data`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Nếu email hợp lệ, mã OTP đã được gửi
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/verify-otp:
+    post:
+      tags: [auth]
+      operationId: verifyOtp
+      summary: Confirm an e-mail address with its OTP
+      description: |
+        The code is checked against every live code sent to this address (a code proves only the address it was sent
+        to). Wrong code, or no code for this address → `400 INVALID_OTP` (each wrong try is counted). Expired (5 min)
+        or disabled after 5 wrong tries → `400 OTP_EXPIRED` (request a new one with `send-otp`). Success on the
+        account's e-mail sets `isVerified = true`; on a pending new e-mail it replaces the account's e-mail, unless
+        another account took that address meanwhile (`409 EMAIL_EXISTS`, the change is dropped). Codes are single use.
+      x-spec-function: FN-AUTH-02
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+            example:
+              email: ngoc.hoang@example.com
+              otpCode: '8421'
+      responses:
+        '200':
+          description: E-mail verified (no `data`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Xác thực email thành công
+        '400':
+          description: '`BAD_REQUEST` (field errors), `INVALID_OTP` or `OTP_EXPIRED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: otpCode, message: Mã OTP gồm đúng 4 chữ số }
+                invalidOtp:
+                  value:
+                    success: false
+                    code: INVALID_OTP
+                    message: Mã OTP không chính xác
+                otpExpired:
+                  value:
+                    success: false
+                    code: OTP_EXPIRED
+                    message: Mã OTP đã hết hạn hoặc bị vô hiệu hóa, vui lòng yêu cầu gửi lại mã
+        '409':
+          description: '`EMAIL_EXISTS` — confirming a pending new e-mail that another account now uses.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: EMAIL_EXISTS
+                message: Email đã được sử dụng bởi tài khoản khác
+
+  # ---------------------------------------------------------------- user
+  /api/v1/users/me:
+    put:
+      tags: [user]
+      operationId: updateProfile
+      summary: Update the profile
+      description: |
+        Updates `fullName` and `phone` (blank phone clears it). A new `email` does not replace the current one: it is
+        stored as `pendingEmail` and an OTP is sent to it; it replaces `email` when confirmed with
+        `POST /auth/verify-otp`. Sending the current e-mail again cancels a pending change. An e-mail used by another
+        account → `409 EMAIL_EXISTS`. The vendor's `phone` is also its Zalo contact in the catalog (`zaloUrl`).
+      x-spec-function: FN-AUTH-04
+      x-roles: [authenticated]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileRequest'
+            example:
+              fullName: Ngọc & Hoàng
+              email: ngoc.hoang.moi@example.com
+              phone: '0900000001'
+      responses:
+        '200':
+          $ref: '#/components/responses/UserOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: '`EMAIL_EXISTS` — another account uses this e-mail.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: EMAIL_EXISTS
+                message: Email đã được sử dụng bởi tài khoản khác
+
+  /api/v1/users/role:
+    put:
+      tags: [user]
+      operationId: selectRole
+      summary: Choose the account's role (once)
+      description: |
+        Only `ROLE_COUPLE` or `ROLE_VENDOR`. The role can be chosen once (`409 ROLE_ALREADY_SET` afterwards). A couple
+        gets a `DRAFT` plan (not counted as a plan: `hasPlan = false`); a vendor gets a default vendor profile named
+        after the user. Until a role is chosen, only `/auth/me`, `/users/**` and the inbox are allowed.
+      x-spec-function: FN-AUTH-03
+      x-roles: [authenticated]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+            example:
+              role: ROLE_COUPLE
+      responses:
+        '200':
+          $ref: '#/components/responses/UserOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: '`ROLE_ALREADY_SET` — the account already has a role.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: ROLE_ALREADY_SET
+                message: Bạn đã chọn vai trò cho tài khoản này
+
+  # ---------------------------------------------------------------- plan
+  /api/v1/client/plans:
+    post:
+      tags: [plan]
+      operationId: createPlan
+      summary: Create the wedding plan manually
+      description: |
+        Fails with `409 PLAN_ALREADY_EXISTS` when the caller already owns or joined a `PLANNING` plan. `weddingDate`
+        must be at least 7 days after today (`400` on `weddingDate`); the sum of `allocatedAmount` may not exceed
+        150 % of `totalBudget` (`400` on `categories`). Reuses the `DRAFT` created at role selection, creates one
+        budget item per category (`PLANNED`, actual 0) and the default checklist dated from the wedding date.
+      x-spec-function: FN-PLAN-01
+      x-roles: [ROLE_COUPLE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+            example:
+              weddingDate: '2027-03-20'
+              engagementDate: '2027-03-15'
+              totalBudget: 300000000
+              categories:
+                - { name: Nhà hàng & Tiệc, allocatedAmount: 150000000 }
+                - { name: Chụp ảnh & Quay phim, allocatedAmount: 30000000 }
+      responses:
+        '201':
+          $ref: '#/components/responses/PlanCreated'
+        '400':
+          description: '`BAD_REQUEST` — field validation, wedding date too close, or allocation over 150 %.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                weddingDate:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: weddingDate, message: Ngày cưới phải sau ngày hiện tại ít nhất 7 ngày }
+                allocation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: categories, message: Tổng phân bổ các danh mục vượt quá 150% ngân sách }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/PlanAlreadyExists'
+
+  /api/v1/client/plans/ai-generate:
+    post:
+      tags: [plan]
+      operationId: generatePlanWithAi
+      summary: Let the AI planner create the wedding plan
+      description: |
+        Same preconditions as `createPlan` (`409 PLAN_ALREADY_EXISTS`). Without `weddingDate` the plan is dated
+        today + 6 months; a given date must be at least 7 days after today. The AI planner (or the built-in
+        rule-based planner when `app.ai-planner.base-url` is empty) is called outside any transaction; an error,
+        timeout (30 s) or empty plan → `503 AI_SERVICE_UNAVAILABLE`. Task due date = wedding date − `dueMonthOffset`
+        months (offset 0 → one week before). Category notes are kept in `budgetItems[].notes`. Success stores an inbox
+        notification `kind = ai` "Kế hoạch đã sẵn sàng".
+      x-spec-function: FN-PLAN-03
+      x-roles: [ROLE_COUPLE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiGenerateRequest'
+            example:
+              prompt: Ngân sách của chúng mình là 250 triệu, muốn cưới phong cách thanh lịch tại TP.HCM, mời khoảng 200 khách.
+              totalBudget: 250000000
+              weddingDate: '2027-03-20'
+              guestCount: 200
+              style: ELEGANT
+      responses:
+        '201':
+          $ref: '#/components/responses/PlanCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/PlanAlreadyExists'
+        '503':
+          description: '`AI_SERVICE_UNAVAILABLE` — the AI planner failed, timed out or returned an empty plan.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: AI_SERVICE_UNAVAILABLE
+                message: Trợ lý AI đang bận, vui lòng thử lại sau hoặc tạo kế hoạch thủ công
+
+  /api/v1/client/plans/join-sync:
+    post:
+      tags: [plan]
+      operationId: joinPlanSync
+      summary: Join the partner's plan with a sync code
+      description: |
+        The code is case-insensitive. Unknown, used or expired code, or a plan no longer `PLANNING` →
+        `400 INVALID_SYNC_CODE`. Own code → `409 CANNOT_JOIN_OWN_PLAN`; plan already has a partner →
+        `409 PLAN_ALREADY_SYNCED`; the caller already has a `PLANNING` plan → `409 PLAN_ALREADY_EXISTS`. The caller's
+        `DRAFT` plan is deleted, the code row is locked and marked used, and both members get an inbox notification
+        `kind = sync` (+ push). Returns the shared plan as seen by the caller (`partner` = the owner).
+      x-spec-function: FN-PLAN-04
+      x-roles: [ROLE_COUPLE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinSyncRequest'
+            example:
+              syncCode: 8A9B2C
+      responses:
+        '200':
+          description: Joined; the shared plan.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PlanDto'
+        '400':
+          description: '`BAD_REQUEST` (code not 6 letters/digits) or `INVALID_SYNC_CODE`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: syncCode, message: Mã kết nối gồm 6 ký tự }
+                invalidSyncCode:
+                  value:
+                    success: false
+                    code: INVALID_SYNC_CODE
+                    message: Mã kết nối không hợp lệ hoặc đã hết hạn
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: '`CANNOT_JOIN_OWN_PLAN`, `PLAN_ALREADY_SYNCED` or `PLAN_ALREADY_EXISTS`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                ownPlan:
+                  value:
+                    success: false
+                    code: CANNOT_JOIN_OWN_PLAN
+                    message: Bạn không thể dùng mã kết nối của chính mình
+                alreadySynced:
+                  value:
+                    success: false
+                    code: PLAN_ALREADY_SYNCED
+                    message: Kế hoạch đã được kết nối với bạn đời
+                planExists:
+                  value:
+                    success: false
+                    code: PLAN_ALREADY_EXISTS
+                    message: Bạn đã có kế hoạch cưới đang hoạt động
+
+  /api/v1/client/plans/my-plan:
+    get:
+      tags: [plan]
+      operationId: getMyPlan
+      summary: Get the caller's wedding plan
+      description: |
+        The `PLANNING` plan the caller owns or joined as partner. Without one (a `DRAFT` does not count) the answer
+        is `200` **without a `data` key** (the envelope omits null). `daysRemaining = max(0, weddingDate − today)`;
+        `totalSpent = Σ actualAmount`; `spentPercentage = totalSpent / totalBudget × 100` and
+        `progressPercentage = completedTasks / totalTasks × 100`, both HALF_UP to 1 decimal and 0 when the divisor is 0.
+        `partner` is the other member of the couple (null before sync). Budget items by position; tasks by due date.
+      x-spec-function: FN-PLAN-02
+      x-roles: [ROLE_COUPLE]
+      responses:
+        '200':
+          description: The plan, or no `data` when the caller has no plan.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PlanDto'
+              examples:
+                plan:
+                  value:
+                    success: true
+                    code: SUCCESS
+                    message: Thao tác thành công
+                    data:
+                      planId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      weddingDate: '2027-03-20'
+                      engagementDate: '2027-03-15'
+                      daysRemaining: 145
+                      totalBudget: 300000000
+                      totalSpent: 100000000
+                      spentPercentage: 33.3
+                      tasksProgress: { totalTasks: 12, completedTasks: 5, progressPercentage: 41.7 }
+                      partner: { id: e2d1c0b9-8a7f-4e6d-9c5b-4a3f2e1d0c9b, name: Hoàng, avatarUrl: null }
+                      budgetItems:
+                        - { id: 7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f, categoryName: Nhà hàng & Tiệc, estimatedAmount: 150000000, actualAmount: 50000000, status: DEPOSITED, notes: null }
+                      tasks:
+                        - { id: 9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a, title: Khảo sát địa điểm, dueDate: '2026-09-20', monthGroup: Trước 6 tháng, isCompleted: true }
+                noPlan:
+                  value:
+                    success: true
+                    code: SUCCESS
+                    message: Thao tác thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/client/plans/sync-code:
+    post:
+      tags: [plan]
+      operationId: createSyncCode
+      summary: Create a partner sync code
+      description: |
+        Needs a `PLANNING` plan (`404 NOT_FOUND` "Bạn chưa có kế hoạch cưới" otherwise) without a partner
+        (`409 PLAN_ALREADY_SYNCED`). The code has 6 characters from `A–Z`/`2–9` without `O`, `0`, `I`, `1`, is valid
+        24 hours and replaces the plan's unused codes. Either member of the plan may create it (it then can only be
+        redeemed by someone else).
+      x-spec-function: FN-PLAN-04
+      x-roles: [ROLE_COUPLE]
+      responses:
+        '201':
+          description: New code.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/SyncCodeDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  syncCode: 8A9B2C
+                  expiresAt: '2026-10-27T03:15:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NoPlan'
+        '409':
+          description: '`PLAN_ALREADY_SYNCED` — the plan already has a partner.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: PLAN_ALREADY_SYNCED
+                message: Kế hoạch đã được kết nối với bạn đời
+
+  /api/v1/client/plans/tasks/{taskId}:
+    patch:
+      tags: [plan]
+      operationId: setTaskCompleted
+      summary: Tick or untick a checklist task
+      description: |
+        The owner or the synced partner of the task's `PLANNING` plan; any other task → `404 NOT_FOUND`. Also updates
+        the plan's stored completion percentage (whole percent).
+      x-spec-function: FN-PLAN-05
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+            example:
+              isCompleted: true
+      responses:
+        '200':
+          description: Updated task.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TaskDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- guest
+  /api/v1/client/guests:
+    get:
+      tags: [guest]
+      operationId: listGuests
+      summary: Guest list and RSVP stats
+      description: |
+        Guests of the caller's plan, newest first. `stats` always count the whole list; the filters apply to `guests`
+        only. Blank parameters mean "no filter". `search` is a case-insensitive substring of the name (`%`, `_` are
+        literal); `group` is an exact match. Without a plan: zero stats and an empty list.
+      x-spec-function: FN-GUEST-01
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - name: status
+          in: query
+          description: '`all`, `attending`, `pending` or `declined` (case-insensitive); anything else → `400` on `status`.'
+          schema:
+            type: string
+            examples: [attending]
+        - name: group
+          in: query
+          description: Exact group name.
+          schema:
+            type: string
+            examples: [Gia đình nhà Gái]
+        - name: search
+          in: query
+          description: Part of the guest name.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stats and guests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/GuestListDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  stats: { total: 5, attending: 3, pending: 1, declined: 1 }
+                  guests:
+                    - { id: 4b5c6d7e-8f90-4a1b-9c2d-3e4f5a6b7c8d, name: Phạm Văn A, phone: '0900000002', group: Gia đình nhà Gái, status: attending, notes: null, tableNumber: 5 }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [guest]
+      operationId: createGuest
+      summary: Add a guest
+      description: Adds a guest to the caller's plan (`404 NOT_FOUND` "Bạn chưa có kế hoạch cưới" without one). `status` defaults to `pending`; blank optional fields are stored as null.
+      x-spec-function: FN-GUEST-02
+      x-roles: [ROLE_COUPLE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestRequest'
+            example:
+              name: Trần Thị C
+              phone: '0900000003'
+              group: Bạn đại học
+              status: pending
+              notes: Ăn chay
+              tableNumber: 3
+      responses:
+        '201':
+          $ref: '#/components/responses/GuestOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NoPlan'
+
+  /api/v1/client/guests/{id}:
+    put:
+      tags: [guest]
+      operationId: updateGuest
+      summary: Update a guest
+      description: Replaces every field of a guest of the caller's plan (omitted `status` → `pending`). Another plan's guest → `404 NOT_FOUND`.
+      x-spec-function: FN-GUEST-02
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/GuestOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- catalog
+  /api/v1/client/services:
+    get:
+      tags: [catalog]
+      operationId: searchServices
+      summary: Browse active service packages
+      description: |
+        Active packages of vendors and of the studio. Studio packages have `providerId = null`, the studio's name and
+        address from the settings, `rating = 0`, `reviewCount = 0`. `keyword` matches the package name or the provider
+        name, case-insensitively (`%`, `_` literal). `zaloUrl = https://zalo.me/{phone}` (studio: settings
+        `zaloPhone`; vendor: the vendor account's phone), null when there is no number.
+      x-spec-function: FN-SVC-01
+      x-roles: [ROLE_COUPLE, ROLE_VENDOR]
+      parameters:
+        - name: category
+          in: query
+          description: '`photo`, `decor`, `restaurant` or `dress` (case-insensitive); anything else → `400` on `category`.'
+          schema:
+            type: string
+            examples: [photo]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+            examples: [Pre-Wedding]
+        - $ref: '#/components/parameters/Page'
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: One page of packages.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ServiceDtoPage'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  items:
+                    - id: 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f
+                      name: Gói Chụp Pre-Wedding Ngoại Cảnh
+                      providerId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b
+                      providerName: Lumiere Studio
+                      price: 15000000
+                      discountPrice: 12900000
+                      rating: 4.9
+                      reviewCount: 128
+                      address: Quận 1, TP.HCM
+                      category: photo
+                      thumbnailUrl: https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=1000
+                      description: Gói chụp ảnh ngoại cảnh 2 ngày 1 đêm tại Đà Lạt.
+                      zaloUrl: https://zalo.me/0900000004
+                  page: 0
+                  size: 10
+                  totalElements: 1
+                  totalPages: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/client/services/{id}:
+    get:
+      tags: [catalog]
+      operationId: getService
+      summary: Service package detail
+      description: Same shape as an item of `searchServices`. Unknown or hidden package → `404 NOT_FOUND`.
+      x-spec-function: FN-SVC-02
+      x-roles: [ROLE_COUPLE, ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The package.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ServiceDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- notification
+  /api/v1/client/notifications:
+    get:
+      tags: [notification]
+      operationId: listNotifications
+      summary: The caller's inbox
+      description: Notifications addressed to the caller, newest first. Every push is stored here. A notification without kind is shown as `reminder`.
+      x-spec-function: FN-NOTI-01
+      x-roles: [authenticated]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: One page of notifications.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationDtoPage'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  items:
+                    - id: 6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c
+                      title: Kế hoạch đã sẵn sàng
+                      body: Trợ lý AI đã hoàn tất bản nháp kế hoạch cưới của bạn.
+                      kind: ai
+                      isRead: false
+                      createdAt: '2026-10-26T02:30:00Z'
+                  page: 0
+                  size: 20
+                  totalElements: 1
+                  totalPages: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/client/notifications/{id}/read:
+    patch:
+      tags: [notification]
+      operationId: markNotificationRead
+      summary: Mark a notification as read
+      description: Another user's notification → `404 NOT_FOUND`. Returns the updated item. No request body.
+      x-spec-function: FN-NOTI-01
+      x-roles: [authenticated]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Updated notification.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- message
+  /api/v1/messages/send:
+    post:
+      tags: [message]
+      operationId: sendMessage
+      summary: Send a chat message (not used by the app)
+      description: |
+        **Not used by the app since v1.1.3** — couples contact the studio and vendors on Zalo (`zaloUrl`); the endpoint
+        is kept to reopen chat later. Only couple ↔ vendor: the recipient must exist, be active and have the opposite
+        role (so not the sender) — otherwise `400 INVALID_RECIPIENT`. One room per pair of users. After commit the
+        message is broadcast to `/topic/messages/{roomId}`; a recipient without an open STOMP session gets an inbox
+        notification `kind = message` (title = sender's name) + push. Same operation over STOMP: `SEND /app/chat`.
+      x-spec-function: FN-MSG-01
+      x-roles: [ROLE_COUPLE, ROLE_VENDOR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            example:
+              recipientId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b
+              content: Chào Lumiere Studio, gói Pre-wedding Đà Lạt còn lịch vào cuối tuần tháng 11 không ạ?
+              attachmentUrl: null
+      responses:
+        '201':
+          description: Message stored.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/MessageDto'
+        '400':
+          description: '`BAD_REQUEST` (field errors) or `INVALID_RECIPIENT`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                validation:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: content, message: Nội dung tin nhắn không được để trống }
+                invalidRecipient:
+                  value:
+                    success: false
+                    code: INVALID_RECIPIENT
+                    message: Không thể gửi tin nhắn tới người nhận này
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- project
+  /api/v1/client/vendor-projects:
+    get:
+      tags: [project]
+      operationId: listCoupleProjects
+      summary: The vendors the couple has booked
+      description: Vendor projects of the caller (created when the couple accepted a quote), by event date ascending.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectPageOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/client/vendor-projects/{id}/cancel-request:
+    post:
+      tags: [project]
+      operationId: requestProjectCancel
+      summary: Ask the vendor to cancel a project
+      description: |
+        Only for an `UPCOMING`/`IN_PROGRESS` project without a pending cancellation request, otherwise
+        `409 INVALID_STATUS_TRANSITION`. Stores `cancelRequestedAt` and `cancelReason`; the status stays until the
+        vendor approves or rejects. The vendor gets an inbox notification "Cặp đôi xin hủy dự án". Another couple's
+        project → `404`. A concurrent change of the project → `409 CONCURRENT_MODIFICATION`.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+            example:
+              reason: Đổi địa điểm tổ chức
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ProjectConflict'
+
+  /api/v1/client/vendor/projects:
+    get:
+      tags: [project]
+      operationId: listVendorProjects
+      summary: The vendor's projects
+      description: |
+        Projects of the caller's vendor profile by event date ascending; with `status=COMPLETED` or `CANCELLED`, most
+        recent first. No vendor profile → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - name: status
+          in: query
+          description: A `VendorProjectStatus` (case-insensitive); anything else → `400` on `status`. Blank = all.
+          schema:
+            type: string
+            examples: [UPCOMING]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectPageOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/projects/{id}/cancel-request/approve:
+    post:
+      tags: [project]
+      operationId: approveProjectCancel
+      summary: Approve the couple's cancellation request
+      description: The project becomes `CANCELLED` (the reason stays on record). No pending request → `409 INVALID_STATUS_TRANSITION`. The couple gets an inbox notification. No request body.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ProjectConflict'
+
+  /api/v1/client/vendor/projects/{id}/cancel-request/reject:
+    post:
+      tags: [project]
+      operationId: rejectProjectCancel
+      summary: Reject the couple's cancellation request
+      description: Clears `cancelRequestedAt`/`cancelReason`; the project carries on. No pending request → `409 INVALID_STATUS_TRANSITION`. The couple gets an inbox notification. No request body.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ProjectConflict'
+
+  /api/v1/client/vendor/projects/{id}/status:
+    patch:
+      tags: [project]
+      operationId: updateProjectStatus
+      summary: Move a project along its lifecycle
+      description: |
+        Allowed (§1.6): `UPCOMING → IN_PROGRESS | COMPLETED | CANCELLED`, `IN_PROGRESS → COMPLETED | CANCELLED`;
+        anything else (including the current status, or any move from `COMPLETED`/`CANCELLED`) →
+        `409 INVALID_STATUS_TRANSITION`. Moving to `IN_PROGRESS`/`COMPLETED` while the couple asked to cancel rejects
+        that request (the couple is notified). The couple is also notified on `COMPLETED` and `CANCELLED`. An unknown
+        status value is an unparsable body → `400 BAD_REQUEST` without `errors[]`.
+      x-spec-function: FN-VND-04
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusRequest'
+            example:
+              status: IN_PROGRESS
+      responses:
+        '200':
+          $ref: '#/components/responses/ProjectOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ProjectConflict'
+
+  # ---------------------------------------------------------------- quote
+  /api/v1/client/quote-requests:
+    get:
+      tags: [quote]
+      operationId: listSentQuoteRequests
+      summary: Quote requests the couple sent
+      description: The caller's requests, newest first.
+      x-spec-function: FN-VND-02
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/QuoteStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/QuotePageOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [quote]
+      operationId: sendQuoteRequest
+      summary: Ask a vendor for a quote
+      description: |
+        `eventDate`, when given, may not be before today (`400` on `eventDate`). Unknown or hidden package →
+        `404 NOT_FOUND`; a studio package → `400 PACKAGE_NOT_QUOTABLE` (contact the studio on Zalo). An open
+        (`PENDING`/`QUOTED`) request of the caller for the same package → `409 QUOTE_ALREADY_OPEN` with
+        `data.existingId`. Creates a `PENDING` request with a snapshot of the package name and notifies the vendor
+        (`kind = message`, "Yêu cầu báo giá mới").
+      x-spec-function: FN-VND-01
+      x-roles: [ROLE_COUPLE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendQuoteRequest'
+            example:
+              servicePackageId: 8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e
+              eventDate: '2027-03-20'
+              venue: Trung tâm tiệc cưới White Palace
+              guestCount: 300
+              message: Bên mình cần trang trí cổng hoa và sân khấu
+      responses:
+        '201':
+          description: Request sent.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/QuoteRequestDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã gửi yêu cầu báo giá
+                data:
+                  id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+                  coupleName: Ngọc & Hoàng
+                  packageId: 8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e
+                  packageName: Trang trí tiệc cưới
+                  vendorName: Dreamy Decor
+                  eventDate: '2027-03-20'
+                  venue: Trung tâm tiệc cưới White Palace
+                  guestCount: 300
+                  message: Bên mình cần trang trí cổng hoa và sân khấu
+                  status: PENDING
+                  quotedPrice: null
+                  vendorNote: null
+                  createdAt: '2026-10-26T03:00:00Z'
+                  respondedAt: null
+        '400':
+          description: '`BAD_REQUEST` (field errors, past `eventDate`) or `PACKAGE_NOT_QUOTABLE`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                pastDate:
+                  value:
+                    success: false
+                    code: BAD_REQUEST
+                    message: Dữ liệu không hợp lệ
+                    errors:
+                      - { field: eventDate, message: Ngày tổ chức không được trước hôm nay }
+                studioPackage:
+                  value:
+                    success: false
+                    code: PACKAGE_NOT_QUOTABLE
+                    message: Gói của Studio không nhận yêu cầu báo giá, vui lòng liên hệ Studio qua Zalo
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`QUOTE_ALREADY_OPEN` — the caller already has an open request for this package; `data.existingId` points at it.'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiError'
+                  - properties:
+                      data:
+                        type: object
+                        required: [existingId]
+                        properties:
+                          existingId:
+                            type: string
+                            format: uuid
+              example:
+                success: false
+                code: QUOTE_ALREADY_OPEN
+                message: Bạn đã có yêu cầu báo giá đang mở cho gói này
+                data:
+                  existingId: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+
+  /api/v1/client/quote-requests/{id}:
+    get:
+      tags: [quote]
+      operationId: getSentQuoteRequest
+      summary: A quote request the couple sent
+      description: Another couple's request → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-02
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/QuoteOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/quote-requests/{id}/accept:
+    post:
+      tags: [quote]
+      operationId: acceptQuote
+      summary: Accept the vendor's quote
+      description: |
+        Only a `QUOTED` request (`409 INVALID_STATUS_TRANSITION` otherwise). The body is optional; `eventDate` is
+        required only when the request has none (`400` on `eventDate` when missing or before today) and is ignored
+        otherwise; a non-blank `venue` replaces the request's venue. The request becomes `ACCEPTED` and exactly one
+        `UPCOMING` vendor project is created at the quoted price; the vendor is notified ("Báo giá đã được chấp
+        nhận"). Returns the project.
+      x-spec-function: FN-VND-03
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptRequest'
+            example:
+              eventDate: '2027-03-20'
+              venue: Trung tâm tiệc cưới White Palace
+      responses:
+        '201':
+          description: Accepted; the new vendor project.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/VendorProjectDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã chốt báo giá
+                data:
+                  id: 1e2f3a4b-5c6d-4e7f-8a9b-0c1d2e3f4a5b
+                  coupleName: Ngọc & Hoàng
+                  vendorName: Dreamy Decor
+                  packageName: Trang trí tiệc cưới
+                  eventDate: '2027-03-20'
+                  venue: Trung tâm tiệc cưới White Palace
+                  agreedPrice: 23000000
+                  status: UPCOMING
+                  quoteRequestId: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+                  cancelRequestedAt: null
+                  cancelReason: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/QuoteConflict'
+
+  /api/v1/client/quote-requests/{id}/cancel:
+    post:
+      tags: [quote]
+      operationId: cancelQuoteRequest
+      summary: Withdraw an open quote request
+      description: '`PENDING`/`QUOTED` → `CANCELLED`; any other status → `409 INVALID_STATUS_TRANSITION`. No request body.'
+      x-spec-function: FN-VND-03
+      x-roles: [ROLE_COUPLE]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/QuoteOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/QuoteConflict'
+
+  /api/v1/client/vendor/quote-requests:
+    get:
+      tags: [quote]
+      operationId: listReceivedQuoteRequests
+      summary: Quote requests sent to the vendor
+      description: Requests addressed to the caller's vendor profile, newest first. No vendor profile → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-02
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/QuoteStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          $ref: '#/components/responses/QuotePageOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/quote-requests/{id}:
+    get:
+      tags: [quote]
+      operationId: getReceivedQuoteRequest
+      summary: A quote request sent to the vendor
+      description: A request addressed to another vendor → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-02
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/QuoteOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/quote-requests/{id}/decline:
+    post:
+      tags: [quote]
+      operationId: declineQuoteRequest
+      summary: Decline a quote request
+      description: '`PENDING`/`QUOTED` → `DECLINED` (sets `respondedAt`); otherwise `409 INVALID_STATUS_TRANSITION`. The body is optional. The couple is notified.'
+      x-spec-function: FN-VND-03
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclineRequest'
+            example:
+              vendorNote: Ngày này bên mình đã kín lịch
+      responses:
+        '200':
+          $ref: '#/components/responses/QuoteOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/QuoteConflict'
+
+  /api/v1/client/vendor/quote-requests/{id}/quote:
+    post:
+      tags: [quote]
+      operationId: quoteRequest
+      summary: Send (or revise) a quote
+      description: '`PENDING`/`QUOTED` → `QUOTED` (re-quoting replaces price and note, sets `respondedAt`); otherwise `409 INVALID_STATUS_TRANSITION`. The couple is notified ("Đã có báo giá").'
+      x-spec-function: FN-VND-03
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteReply'
+            example:
+              quotedPrice: 23000000
+              vendorNote: Đã gồm vận chuyển nội thành
+      responses:
+        '200':
+          $ref: '#/components/responses/QuoteOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/QuoteConflict'
+
+  # ---------------------------------------------------------------- vendor
+  /api/v1/client/vendor/dashboard:
+    get:
+      tags: [vendor]
+      operationId: getVendorDashboard
+      summary: Vendor dashboard
+      description: |
+        `monthlyRevenue` = Σ `agreedPrice` of `COMPLETED` projects with an event date in the current month;
+        `newRequestCount` = number of `PENDING` requests; `rating` from the vendor profile; `quoteRequests` = up to 5
+        `PENDING` requests, newest first; `upcoming` = up to 5 `UPCOMING` projects, nearest event first. No vendor
+        profile → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-05
+      x-roles: [ROLE_VENDOR]
+      responses:
+        '200':
+          description: Dashboard.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Thao tác thành công
+                data:
+                  monthlyRevenue: 54000000
+                  newRequestCount: 3
+                  rating: 4.8
+                  quoteRequests: []
+                  upcoming: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/services:
+    get:
+      tags: [vendor]
+      operationId: listVendorServices
+      summary: The vendor's service packages
+      description: All packages of the caller (hidden ones included), newest first, with `projectCount` = projects not `CANCELLED`. Not paged. No vendor profile → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-05
+      x-roles: [ROLE_VENDOR]
+      responses:
+        '200':
+          description: Packages.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VendorServiceDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [vendor]
+      operationId: createVendorService
+      summary: Create a service package
+      description: |
+        New package of the caller's vendor profile, active. `discountPrice` must be lower than `price` (`400` on
+        `discountPrice`). Blank `type` defaults to the lower-case category; blank `description`/`thumbnailUrl` are
+        stored as null; features are trimmed.
+      x-spec-function: FN-VND-05
+      x-roles: [ROLE_VENDOR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorServiceRequest'
+            example:
+              name: Trang trí tiệc cưới
+              category: decor
+              type: Trọn gói
+              price: 25000000
+              discountPrice: 22000000
+              description: Trang trí trọn gói với concept hoa tươi 100%.
+              features: [Cổng hoa, Bàn gallery, Backdrop chụp hình]
+              thumbnailUrl: https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=1000
+      responses:
+        '201':
+          $ref: '#/components/responses/VendorServiceOk'
+        '400':
+          $ref: '#/components/responses/VendorServiceBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/services/{id}:
+    put:
+      tags: [vendor]
+      operationId: updateVendorService
+      summary: Edit a service package
+      description: Replaces every field (send `discountPrice` = null to drop the discount). Existing quote requests and projects keep their own package name and price. Another provider's package → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-05
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorServiceRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/VendorServiceOk'
+        '400':
+          $ref: '#/components/responses/VendorServiceBadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/client/vendor/services/{id}/active:
+    patch:
+      tags: [vendor]
+      operationId: setVendorServiceActive
+      summary: Show or hide a service package
+      description: A hidden package leaves the catalog and takes no new quote requests; open requests and projects carry on. Message "Đã hiện gói dịch vụ" / "Đã ẩn gói dịch vụ". Another provider's package → `404 NOT_FOUND`.
+      x-spec-function: FN-VND-05
+      x-roles: [ROLE_VENDOR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActiveRequest'
+            example:
+              isActive: false
+      responses:
+        '200':
+          $ref: '#/components/responses/VendorServiceOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from `POST /api/v1/auth/login` or `/google` (HS256, issuer `wedding-event-client`, `typ=access`, 2 hours).
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      description: Page number, from 0.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    QuoteStatus:
+      name: status
+      in: query
+      description: A `QuoteRequestStatus` (case-insensitive); anything else → `400` on `status`. Blank = all.
+      schema:
+        type: string
+        examples: [PENDING]
+
+  responses:
+    BadRequest:
+      description: |
+        `BAD_REQUEST` — body validation failed (`errors[]` lists each field), a query parameter is out of range
+        (`errors[]` with the parameter name, message "Tham số không hợp lệ"), or the request is malformed
+        (unparsable JSON, unknown enum value, non-UUID id; no `errors[]`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            validation:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Dữ liệu không hợp lệ
+                errors:
+                  - { field: name, message: Tên khách mời không được để trống }
+            parameter:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Tham số không hợp lệ
+                errors:
+                  - { field: size, message: must be less than or equal to 100 }
+            malformed:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Yêu cầu không hợp lệ
+    Unauthorized:
+      description: '`UNAUTHORIZED` — missing, invalid or expired access token, a refresh/admin token, or the account is locked, unknown or a studio account.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: UNAUTHORIZED
+            message: Phiên đăng nhập không hợp lệ hoặc đã hết hạn
+    Forbidden:
+      description: '`FORBIDDEN` — the caller''s role (or no role yet) may not call this route.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: FORBIDDEN
+            message: Bạn không có quyền thực hiện thao tác này
+    NotFound:
+      description: '`NOT_FOUND` — the record does not exist or is not the caller''s (also: the vendor has no vendor profile). Message: `Không tìm thấy <tài nguyên> (<id>)`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: NOT_FOUND
+            message: Không tìm thấy yêu cầu báo giá (0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d)
+    NoPlan:
+      description: '`NOT_FOUND` — the caller has no `PLANNING` plan.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: NOT_FOUND
+            message: Bạn chưa có kế hoạch cưới
+    AccountLocked:
+      description: '`ACCOUNT_LOCKED` — the account is deactivated.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: ACCOUNT_LOCKED
+            message: Tài khoản đã bị khóa, vui lòng liên hệ hỗ trợ
+    PlanAlreadyExists:
+      description: '`PLAN_ALREADY_EXISTS` — the caller already owns or joined a `PLANNING` plan.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            success: false
+            code: PLAN_ALREADY_EXISTS
+            message: Bạn đã có kế hoạch cưới đang hoạt động
+    QuoteConflict:
+      description: '`INVALID_STATUS_TRANSITION` — not allowed from the current status (§1.6); `CONCURRENT_MODIFICATION` — the request was changed at the same time.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            invalidTransition:
+              value:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Yêu cầu báo giá đang ở trạng thái ACCEPTED, không thể thực hiện thao tác này
+            concurrent:
+              value:
+                success: false
+                code: CONCURRENT_MODIFICATION
+                message: Dữ liệu vừa được người khác cập nhật, vui lòng tải lại
+    ProjectConflict:
+      description: '`INVALID_STATUS_TRANSITION` — not allowed from the current status / no pending cancellation request (§1.6); `CONCURRENT_MODIFICATION` — the project was changed at the same time.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            invalidTransition:
+              value:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Không thể chuyển dự án từ COMPLETED sang IN_PROGRESS
+            noPendingCancel:
+              value:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Dự án không có yêu cầu hủy đang chờ duyệt
+            concurrent:
+              value:
+                success: false
+                code: CONCURRENT_MODIFICATION
+                message: Dữ liệu vừa được người khác cập nhật, vui lòng tải lại
+    VendorServiceBadRequest:
+      description: '`BAD_REQUEST` — field validation, or `discountPrice` not lower than `price`.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            validation:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Dữ liệu không hợp lệ
+                errors:
+                  - { field: category, message: 'Danh mục chỉ có thể là photo, decor, restaurant hoặc dress' }
+            discount:
+              value:
+                success: false
+                code: BAD_REQUEST
+                message: Dữ liệu không hợp lệ
+                errors:
+                  - { field: discountPrice, message: Giá sau giảm phải thấp hơn giá gốc }
+    LoginOk:
+      description: Signed in.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/LoginResponse'
+          example:
+            success: true
+            code: SUCCESS
+            message: Đăng nhập thành công
+            data:
+              accessToken: eyJhbGciOiJIUzI1NiJ9.ACCESS-TOKEN-PLACEHOLDER.signature
+              refreshToken: eyJhbGciOiJIUzI1NiJ9.REFRESH-TOKEN-PLACEHOLDER.signature
+              user:
+                id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                email: ngoc.hoang@example.com
+                fullName: Ngọc & Hoàng
+                phone: null
+                avatarUrl: null
+                role: ROLE_COUPLE
+                hasPlan: true
+                isVerified: true
+                pendingEmail: null
+    UserOk:
+      description: Updated user.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/UserDto'
+    PlanCreated:
+      description: Plan created (`PLANNING`).
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/PlanDto'
+    GuestOk:
+      description: The guest.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/GuestDto'
+    QuoteOk:
+      description: The quote request.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/QuoteRequestDto'
+    QuotePageOk:
+      description: One page of quote requests.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/QuoteRequestDtoPage'
+    ProjectOk:
+      description: The vendor project.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/VendorProjectDto'
+    ProjectPageOk:
+      description: One page of vendor projects.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/VendorProjectDtoPage'
+    VendorServiceOk:
+      description: The vendor's package.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiSuccess'
+              - properties:
+                  data:
+                    $ref: '#/components/schemas/VendorServiceDto'
+
+  schemas:
+    # ------------------------------------------------------------ envelope
+    ApiSuccess:
+      type: object
+      description: Success envelope (`ApiResponse` with `success = true`). `data` is omitted when null.
+      required: [success, code, message]
+      properties:
+        success:
+          type: boolean
+          const: true
+        code:
+          type: string
+          const: SUCCESS
+        message:
+          type: string
+          description: Vietnamese user-facing message.
+          examples: [Thao tác thành công]
+        data:
+          description: Operation payload.
+    ApiError:
+      type: object
+      description: Error envelope (`ApiResponse` with `success = false`). `errors` only on field/parameter validation failures; `data` only on some 409s (e.g. `QUOTE_ALREADY_OPEN`).
+      required: [success, code, message]
+      properties:
+        success:
+          type: boolean
+          const: false
+        code:
+          type: string
+          description: Error code from spec §1.3.
+          examples: [BAD_REQUEST]
+        message:
+          type: string
+          description: Vietnamese user-facing message.
+        data:
+          description: Extra payload pointing at an existing record.
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Request field (or parameter) name.
+        message:
+          type: string
+    PageResponse:
+      type: object
+      description: Page shape of list endpoints (`PageResponse`).
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: {}
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+
+    # ------------------------------------------------------------ shared types
+    Money:
+      type: integer
+      format: int64
+      description: Amount in VND (integer, no decimals).
+      examples: [25000000]
+
+    # ------------------------------------------------------------ enums
+    QuoteRequestStatus:
+      type: string
+      enum: [PENDING, QUOTED, ACCEPTED, DECLINED, CANCELLED]
+      description: §1.6. `ACCEPTED`, `DECLINED`, `CANCELLED` are final.
+    VendorProjectStatus:
+      type: string
+      enum: [UPCOMING, IN_PROGRESS, COMPLETED, CANCELLED]
+      description: §1.6. `COMPLETED`, `CANCELLED` are final.
+    BudgetStatus:
+      type: string
+      enum: [PLANNED, DEPOSITED, PAID_FULL]
+    WeddingStyle:
+      type: string
+      enum: [MODERN, CLASSIC, MINIMAL, ELEGANT]
+
+    # ------------------------------------------------------------ auth / user
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          minLength: 6
+    GoogleLoginRequest:
+      type: object
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+          minLength: 1
+          description: Google ID token obtained by the app.
+    SendOtpRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+    VerifyOtpRequest:
+      type: object
+      required: [email, otpCode]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          description: The address the code was sent to (account e-mail or pending new e-mail).
+        otpCode:
+          type: string
+          pattern: '^[0-9]{4}$'
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT, 2 hours.
+        refreshToken:
+          type: string
+          description: JWT, 30 days. No endpoint accepts it yet.
+        user:
+          $ref: '#/components/schemas/UserDto'
+    UserDto:
+      type: object
+      description: The spec's `user` object.
+      required: [id, email, fullName, phone, avatarUrl, role, hasPlan, isVerified, pendingEmail]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        phone:
+          type: [string, 'null']
+        avatarUrl:
+          type: [string, 'null']
+        role:
+          type: [string, 'null']
+          enum: [ROLE_COUPLE, ROLE_VENDOR, null]
+          description: null until chosen with `PUT /users/role`.
+        hasPlan:
+          type: boolean
+          description: true when the user owns or joined a `PLANNING` plan (a `DRAFT` does not count).
+        isVerified:
+          type: boolean
+        pendingEmail:
+          type: [string, 'null']
+          format: email
+          description: New e-mail waiting for its OTP.
+    RoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [ROLE_COUPLE, ROLE_VENDOR]
+    ProfileRequest:
+      type: object
+      required: [fullName, email]
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 255
+        phone:
+          type: [string, 'null']
+          pattern: '^$|^(03|05|07|08|09)\d{8}$'
+          description: Empty or a Vietnamese mobile number (§1.1); empty clears it.
+
+    # ------------------------------------------------------------ plan
+    CategoryRequest:
+      type: object
+      required: [name, allocatedAmount]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        allocatedAmount:
+          $ref: '#/components/schemas/Money'
+          minimum: 0
+    CreatePlanRequest:
+      type: object
+      required: [weddingDate, totalBudget, categories]
+      properties:
+        weddingDate:
+          type: string
+          format: date
+          description: At least today + 7 days.
+        engagementDate:
+          type: [string, 'null']
+          format: date
+        totalBudget:
+          type: integer
+          format: int64
+          minimum: 10000000
+        categories:
+          type: array
+          minItems: 1
+          maxItems: 30
+          description: Σ `allocatedAmount` ≤ 150 % of `totalBudget`.
+          items:
+            $ref: '#/components/schemas/CategoryRequest'
+    AiGenerateRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        totalBudget:
+          type: [integer, 'null']
+          format: int64
+          minimum: 10000000
+        weddingDate:
+          type: [string, 'null']
+          format: date
+          description: At least today + 7 days; default today + 6 months.
+        guestCount:
+          type: [integer, 'null']
+          exclusiveMinimum: 0
+          maximum: 5000
+        style:
+          oneOf:
+            - $ref: '#/components/schemas/WeddingStyle'
+            - type: 'null'
+    TaskUpdateRequest:
+      type: object
+      required: [isCompleted]
+      properties:
+        isCompleted:
+          type: boolean
+    JoinSyncRequest:
+      type: object
+      required: [syncCode]
+      properties:
+        syncCode:
+          type: string
+          pattern: '^[A-Za-z0-9]{6}$'
+          description: Case-insensitive.
+    PlanDto:
+      type: object
+      required: [planId, weddingDate, engagementDate, daysRemaining, totalBudget, totalSpent, spentPercentage, tasksProgress, partner, budgetItems, tasks]
+      properties:
+        planId:
+          type: string
+          format: uuid
+        weddingDate:
+          type: string
+          format: date
+        engagementDate:
+          type: [string, 'null']
+          format: date
+        daysRemaining:
+          type: integer
+          format: int64
+          minimum: 0
+        totalBudget:
+          $ref: '#/components/schemas/Money'
+        totalSpent:
+          $ref: '#/components/schemas/Money'
+        spentPercentage:
+          type: number
+          description: 1 decimal, HALF_UP.
+        tasksProgress:
+          $ref: '#/components/schemas/TasksProgress'
+        partner:
+          oneOf:
+            - $ref: '#/components/schemas/PartnerDto'
+            - type: 'null'
+        budgetItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetItemDto'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskDto'
+    TasksProgress:
+      type: object
+      required: [totalTasks, completedTasks, progressPercentage]
+      properties:
+        totalTasks:
+          type: integer
+        completedTasks:
+          type: integer
+        progressPercentage:
+          type: number
+          description: 1 decimal, HALF_UP; 0 without tasks.
+    PartnerDto:
+      type: object
+      required: [id, name, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatarUrl:
+          type: [string, 'null']
+    BudgetItemDto:
+      type: object
+      required: [id, categoryName, estimatedAmount, actualAmount, status, notes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        categoryName:
+          type: string
+        estimatedAmount:
+          $ref: '#/components/schemas/Money'
+        actualAmount:
+          $ref: '#/components/schemas/Money'
+        status:
+          $ref: '#/components/schemas/BudgetStatus'
+        notes:
+          type: [string, 'null']
+    TaskDto:
+      type: object
+      required: [id, title, dueDate, monthGroup, isCompleted]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        dueDate:
+          type: string
+          format: date
+        monthGroup:
+          type: string
+          examples: [Trước 6 tháng]
+        isCompleted:
+          type: boolean
+    SyncCodeDto:
+      type: object
+      required: [syncCode, expiresAt]
+      properties:
+        syncCode:
+          type: string
+          pattern: '^[A-HJ-NP-Z2-9]{6}$'
+        expiresAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------ guest
+    GuestRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: [string, 'null']
+          pattern: '^$|^(03|05|07|08|09)\d{8}$'
+        group:
+          type: [string, 'null']
+          maxLength: 100
+        status:
+          type: [string, 'null']
+          description: '`attending`, `pending` or `declined`, case-insensitive (Java `@Pattern("(?i)attending|pending|declined")`); null → `pending`.'
+          examples: [pending]
+        notes:
+          type: [string, 'null']
+          maxLength: 500
+        tableNumber:
+          type: [integer, 'null']
+          exclusiveMinimum: 0
+    GuestDto:
+      type: object
+      required: [id, name, phone, group, status, notes, tableNumber]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: [string, 'null']
+        group:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [attending, pending, declined]
+        notes:
+          type: [string, 'null']
+        tableNumber:
+          type: [integer, 'null']
+    GuestStats:
+      type: object
+      required: [total, attending, pending, declined]
+      properties:
+        total:
+          type: integer
+        attending:
+          type: integer
+        pending:
+          type: integer
+        declined:
+          type: integer
+    GuestListDto:
+      type: object
+      required: [stats, guests]
+      properties:
+        stats:
+          $ref: '#/components/schemas/GuestStats'
+        guests:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuestDto'
+
+    # ------------------------------------------------------------ catalog
+    ServiceDto:
+      type: object
+      required: [id, name, providerId, providerName, price, discountPrice, rating, reviewCount, address, category, thumbnailUrl, description, zaloUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        providerId:
+          type: [string, 'null']
+          format: uuid
+          description: User account id of the vendor; null for a studio package.
+        providerName:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        discountPrice:
+          type: [integer, 'null']
+          format: int64
+          description: Price after discount (VND), null when not discounted.
+        rating:
+          type: number
+          description: 0 for a studio package.
+        reviewCount:
+          type: integer
+        address:
+          type: [string, 'null']
+        category:
+          type: string
+          enum: [photo, decor, restaurant, dress]
+        thumbnailUrl:
+          type: [string, 'null']
+        description:
+          type: [string, 'null']
+        zaloUrl:
+          type: [string, 'null']
+          description: '`https://zalo.me/{phone}`; null when the provider has no number.'
+          examples: ['https://zalo.me/0900000004']
+    ServiceDtoPage:
+      allOf:
+        - $ref: '#/components/schemas/PageResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceDto'
+
+    # ------------------------------------------------------------ notification
+    NotificationDto:
+      type: object
+      required: [id, title, body, kind, isRead, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        kind:
+          type: string
+          enum: [ai, message, sync, reminder]
+          description: Icon hint; missing kind is reported as `reminder`.
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    NotificationDtoPage:
+      allOf:
+        - $ref: '#/components/schemas/PageResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/NotificationDto'
+
+    # ------------------------------------------------------------ message
+    SendMessageRequest:
+      type: object
+      required: [recipientId, content]
+      properties:
+        recipientId:
+          type: string
+          format: uuid
+          description: User account id of the counterpart (e.g. `providerId` from the catalog).
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        attachmentUrl:
+          type: [string, 'null']
+          maxLength: 500
+    MessageDto:
+      type: object
+      required: [id, roomId, senderId, recipientId, content, attachmentUrl, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        content:
+          type: string
+        attachmentUrl:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------ quote
+    SendQuoteRequest:
+      type: object
+      required: [servicePackageId]
+      properties:
+        servicePackageId:
+          type: string
+          format: uuid
+        eventDate:
+          type: [string, 'null']
+          format: date
+          description: Not before today.
+        venue:
+          type: [string, 'null']
+          maxLength: 255
+        guestCount:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 5000
+        message:
+          type: [string, 'null']
+          maxLength: 1000
+    QuoteReply:
+      type: object
+      required: [quotedPrice]
+      properties:
+        quotedPrice:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          description: VND.
+        vendorNote:
+          type: [string, 'null']
+          maxLength: 1000
+    DeclineRequest:
+      type: object
+      properties:
+        vendorNote:
+          type: [string, 'null']
+          maxLength: 1000
+    AcceptRequest:
+      type: object
+      description: Needed only when the request has no event date.
+      properties:
+        eventDate:
+          type: [string, 'null']
+          format: date
+          description: Required (not before today) when the request has no event date; ignored otherwise.
+        venue:
+          type: [string, 'null']
+          maxLength: 255
+          description: When not blank, replaces the request's venue.
+    QuoteRequestDto:
+      type: object
+      required: [id, coupleName, packageId, packageName, vendorName, eventDate, venue, guestCount, message, status, quotedPrice, vendorNote, createdAt, respondedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        coupleName:
+          type: string
+        packageId:
+          type: string
+          format: uuid
+        packageName:
+          type: string
+          description: Snapshot taken when the request was sent.
+        vendorName:
+          type: string
+        eventDate:
+          type: [string, 'null']
+          format: date
+        venue:
+          type: [string, 'null']
+        guestCount:
+          type: [integer, 'null']
+        message:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/QuoteRequestStatus'
+        quotedPrice:
+          type: [integer, 'null']
+          format: int64
+          description: VND.
+        vendorNote:
+          type: [string, 'null']
+        createdAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: [string, 'null']
+          format: date-time
+    QuoteRequestDtoPage:
+      allOf:
+        - $ref: '#/components/schemas/PageResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/QuoteRequestDto'
+
+    # ------------------------------------------------------------ project
+    UpdateStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/VendorProjectStatus'
+    CancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    VendorProjectDto:
+      type: object
+      required: [id, coupleName, vendorName, packageName, eventDate, venue, agreedPrice, status, quoteRequestId, cancelRequestedAt, cancelReason]
+      properties:
+        id:
+          type: string
+          format: uuid
+        coupleName:
+          type: string
+        vendorName:
+          type: string
+        packageName:
+          type: string
+        eventDate:
+          type: string
+          format: date
+        venue:
+          type: [string, 'null']
+        agreedPrice:
+          $ref: '#/components/schemas/Money'
+        status:
+          $ref: '#/components/schemas/VendorProjectStatus'
+        quoteRequestId:
+          type: string
+          format: uuid
+        cancelRequestedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Set only while a cancellation request is pending.
+        cancelReason:
+          type: [string, 'null']
+          description: Reason of the pending request; kept after the vendor approved it.
+    VendorProjectDtoPage:
+      allOf:
+        - $ref: '#/components/schemas/PageResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/VendorProjectDto'
+
+    # ------------------------------------------------------------ vendor
+    DashboardDto:
+      type: object
+      required: [monthlyRevenue, newRequestCount, rating, quoteRequests, upcoming]
+      properties:
+        monthlyRevenue:
+          $ref: '#/components/schemas/Money'
+        newRequestCount:
+          type: integer
+          format: int64
+        rating:
+          type: number
+        quoteRequests:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/QuoteRequestDto'
+        upcoming:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/VendorProjectDto'
+    VendorServiceRequest:
+      type: object
+      required: [name, category, price]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        category:
+          type: string
+          description: '`photo`, `decor`, `restaurant` or `dress`, case-insensitive (Java `@Pattern("(?i)photo|decor|restaurant|dress")`).'
+          examples: [decor]
+        type:
+          type: [string, 'null']
+          maxLength: 50
+          description: Blank → the lower-case category.
+        price:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          description: VND.
+        discountPrice:
+          type: [integer, 'null']
+          format: int64
+          exclusiveMinimum: 0
+          description: VND, lower than `price`; null = no discount.
+        description:
+          type: [string, 'null']
+          maxLength: 2000
+        features:
+          type: [array, 'null']
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        thumbnailUrl:
+          type: [string, 'null']
+          maxLength: 500
+    ActiveRequest:
+      type: object
+      required: [isActive]
+      properties:
+        isActive:
+          type: boolean
+    VendorServiceDto:
+      type: object
+      required: [id, name, category, type, price, discountPrice, description, features, thumbnailUrl, isActive, projectCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+          enum: [photo, decor, restaurant, dress]
+        type:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        discountPrice:
+          type: [integer, 'null']
+          format: int64
+        description:
+          type: [string, 'null']
+        features:
+          type: array
+          items:
+            type: string
+        thumbnailUrl:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+        projectCount:
+          type: integer
+          format: int64
+          description: Projects of this package that are not `CANCELLED`.

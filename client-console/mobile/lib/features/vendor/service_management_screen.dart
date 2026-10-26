@@ -6,8 +6,9 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
+import 'widgets/service_form_sheet.dart';
 
-/// Vendor service packages: list, show/hide (spec §4.3 "Quản lý Danh mục Dịch vụ")
+/// FN-VND-05: the vendor's packages — create, edit (with discount), show/hide
 class ServiceManagementScreen extends StatefulWidget {
   const ServiceManagementScreen({super.key});
 
@@ -23,6 +24,19 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   void initState() {
     super.initState();
     _future = context.read<VendorRepository>().getServices().then((list) => _services = list);
+  }
+
+  Future<void> _edit([VendorService? s]) async {
+    final saved = await showModalBottomSheet<VendorService>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => ServiceFormSheet(service: s),
+    );
+    if (saved == null || !mounted) return;
+    setState(() => _services = s == null ? [saved, ..._services] : [for (final x in _services) x.id == saved.id ? saved : x]);
+    showAppSnack(context, s == null ? 'Đã tạo gói dịch vụ' : 'Đã cập nhật gói dịch vụ');
   }
 
   Future<void> _toggle(VendorService s, bool active) async {
@@ -48,12 +62,13 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                       padding: const EdgeInsets.only(bottom: 16),
                       child: AppCard(
                         padding: const EdgeInsets.all(16),
+                        onTap: () => _edit(s),
                         child: Row(
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: Image.network(
-                                s.imageUrl,
+                                s.thumbnailUrl ?? '',
                                 width: 80,
                                 height: 80,
                                 fit: BoxFit.cover,
@@ -67,7 +82,10 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                                 children: [
                                   Text(s.name, maxLines: 2, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.slate800)),
                                   const SizedBox(height: 4),
-                                  Text(Fmt.vnd(s.price), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.pink600)),
+                                  Text(Fmt.vnd(s.discountPrice ?? s.price), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.pink600)),
+                                  if (s.discountPrice != null)
+                                    Text(Fmt.vnd(s.price),
+                                        style: const TextStyle(fontSize: 12, color: AppColors.slate400, decoration: TextDecoration.lineThrough)),
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
@@ -75,7 +93,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                                           ? const StatusChip(label: 'Đang hoạt động', color: AppColors.emerald600, background: AppColors.emerald50)
                                           : const StatusChip(label: 'Tạm ẩn', color: AppColors.slate500, background: AppColors.slate100),
                                       const Spacer(),
-                                      Text('Đã bán: ${s.bookings}', style: const TextStyle(fontSize: 10, color: AppColors.slate500)),
+                                      Text('Dự án: ${s.projectCount}', style: const TextStyle(fontSize: 10, color: AppColors.slate500)),
                                     ],
                                   ),
                                 ],
@@ -87,8 +105,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                       ),
                     ),
                   OutlinedButton.icon(
-                    // TODO: no vendor service-create endpoint in the spec yet
-                    onPressed: () => showComingSoon(context, 'Thêm dịch vụ mới'),
+                    onPressed: () => _edit(),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(56),
                       backgroundColor: AppColors.pink50,

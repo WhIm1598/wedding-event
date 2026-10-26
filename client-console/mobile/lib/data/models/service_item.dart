@@ -22,15 +22,20 @@ class ServiceItem {
     required this.imageUrl,
     required this.description,
     this.providerId,
+    this.discountPrice,
+    this.zaloUrl,
   });
 
   final String id;
   final String name;
   final String provider;
 
-  /// User id of the vendor (FN-MSG-01 `recipientId`); null for the studio's own packages
+  /// User id of the vendor; null for the studio's own packages
   final String? providerId;
   final int price;
+
+  /// Price after the vendor's discount (FN-VND-05); null = no discount
+  final int? discountPrice;
   final double rating;
   final int reviews;
   final String location;
@@ -38,17 +43,22 @@ class ServiceItem {
   final String imageUrl;
   final String description;
 
+  /// "Liên hệ đặt lịch" opens the provider's Zalo (FN-SVC-02, v1.1.3); null = no number, button hidden
+  final String? zaloUrl;
+
   factory ServiceItem.fromJson(Map<String, dynamic> json) => ServiceItem(
         id: json['id'] as String,
         name: json['name'] as String,
         provider: json['providerName'] as String? ?? '',
         providerId: json['providerId'] as String?,
         price: (json['price'] as num).toInt(),
+        discountPrice: (json['discountPrice'] as num?)?.toInt(),
         rating: (json['rating'] as num?)?.toDouble() ?? 0,
         reviews: json['reviewCount'] as int? ?? 0,
         location: json['address'] as String? ?? '',
         category: ServiceCategory.values.firstWhere((c) => c.name == json['category'], orElse: () => ServiceCategory.photo),
         imageUrl: json['thumbnailUrl'] as String? ?? '',
         description: json['description'] as String? ?? '',
+        zaloUrl: json['zaloUrl'] as String?,
       );
 }

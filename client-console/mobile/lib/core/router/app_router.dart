@@ -12,12 +12,12 @@ import '../../features/plan/create_plan_screen.dart';
 import '../../features/plan/plan_management_screen.dart';
 import '../../features/profile/account_settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/quotes/quote_requests_screen.dart';
 import '../../features/services/search_screen.dart';
 import '../../features/services/service_detail_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/sync/share_plan_screen.dart';
 import '../../features/vendor/service_management_screen.dart';
-import '../../features/vendor/vendor_messages_screen.dart';
 import '../../features/vendor/vendor_projects_screen.dart';
 import '../../state/session_controller.dart';
 
@@ -36,7 +36,6 @@ class Routes {
   static const plan = '/plan';
   static const profile = '/profile';
   static const vendorProjects = '/vendor/projects';
-  static const vendorMessages = '/vendor/messages';
 
   // Full-screen pages
   static const createPlan = '/plan/create';
@@ -47,6 +46,8 @@ class Routes {
   static const serviceDetail = '/services/:id';
   static const accountSettings = '/profile/settings';
   static const serviceManagement = '/vendor/services';
+  static const quoteRequests = '/quote-requests';
+  static const bookedVendors = '/booked-vendors';
 
   static String serviceDetailFor(String id) => '/services/$id';
 }
@@ -77,7 +78,6 @@ GoRouter createRouter(SessionController session) {
           GoRoute(path: Routes.plan, builder: (_, __) => const PlanManagementScreen()),
           GoRoute(path: Routes.profile, builder: (_, __) => const ProfileScreen()),
           GoRoute(path: Routes.vendorProjects, builder: (_, __) => const VendorProjectsScreen()),
-          GoRoute(path: Routes.vendorMessages, builder: (_, __) => const VendorMessagesScreen()),
         ],
       ),
       GoRoute(path: Routes.createPlan, builder: (_, __) => const CreatePlanScreen()),
@@ -88,6 +88,9 @@ GoRouter createRouter(SessionController session) {
       GoRoute(path: Routes.serviceDetail, builder: (_, state) => ServiceDetailScreen(serviceId: state.pathParameters['id']!)),
       GoRoute(path: Routes.accountSettings, builder: (_, __) => const AccountSettingsScreen()),
       GoRoute(path: Routes.serviceManagement, builder: (_, __) => const ServiceManagementScreen()),
+      GoRoute(path: Routes.quoteRequests, builder: (_, __) => const QuoteRequestsScreen()),
+      // The couple's view of FN-VND-04; vendors use the Routes.vendorProjects tab
+      GoRoute(path: Routes.bookedVendors, builder: (_, __) => const VendorProjectsScreen()),
     ],
   );
 }

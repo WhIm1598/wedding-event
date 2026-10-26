@@ -4,6 +4,7 @@ import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.domain.enums.ServiceCategory;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,6 +16,11 @@ public interface ServicePackageRepository extends JpaRepository<ServicePackage, 
 
     /** Studio-owned packages (vendor_id IS NULL), most expensive first */
     List<ServicePackage> findAllByVendorIdIsNullOrderByPriceDesc();
+
+    /** A vendor's own packages, active or not (FN-VND-05), newest first */
+    List<ServicePackage> findAllByVendorIdOrderByCreatedAtDesc(UUID vendorId);
+
+    Optional<ServicePackage> findByIdAndVendorId(UUID id, UUID vendorId);
 
     /**
      * Mobile catalog (FN-SVC-01): active packages of the given categories whose name or provider name matches

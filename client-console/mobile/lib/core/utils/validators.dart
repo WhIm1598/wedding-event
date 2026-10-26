@@ -32,4 +32,25 @@ class Validators {
 
   /// FN-PLAN-01: minimum 10,000,000 VND
   static String? totalBudget(int amount) => amount < 10000000 ? 'Ngân sách tối thiểu 10.000.000 ₫' : null;
+
+  /// Optional discounted price of a vendor package: below the price (FN-VND-05)
+  static String? discountPrice(String? v, int price) {
+    if (v == null || v.trim().isEmpty) return null;
+    final n = int.tryParse(v.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    return n <= 0 || n >= price ? 'Giá sau giảm phải thấp hơn giá gốc' : null;
+  }
+
+  /// Package features, one per line: at most 20, each at most 200 characters (FN-VND-05)
+  static String? features(String? v) {
+    final items = (v ?? '').split('\n').map((f) => f.trim()).where((f) => f.isNotEmpty).toList();
+    if (items.length > 20) return 'Tối đa 20 quyền lợi';
+    return items.any((f) => f.length > 200) ? 'Mỗi quyền lợi tối đa 200 ký tự' : null;
+  }
+
+  /// Optional guest count of a quote request: 1–5000 (FN-VND-01)
+  static String? optionalGuestCount(String? v) {
+    if (v == null || v.trim().isEmpty) return null;
+    final n = int.tryParse(v.trim());
+    return n == null || n < 1 || n > 5000 ? 'Số khách từ 1 đến 5000' : null;
+  }
 }

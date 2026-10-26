@@ -49,6 +49,7 @@ class MockData {
   static const List<ServiceItem> services = [
     ServiceItem(
       id: 'svc-1',
+      zaloUrl: 'https://zalo.me/0901234567',
       name: 'Chụp ảnh Pre-Wedding',
       provider: 'Lumiere Studio',
       price: 15000000,
@@ -62,8 +63,10 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-2',
+      zaloUrl: 'https://zalo.me/0912345678',
       name: 'Trang trí tiệc cưới',
       provider: 'Dreamy Decor',
+      providerId: 'u-dreamy',
       price: 25000000,
       rating: 4.8,
       reviews: 85,
@@ -75,8 +78,10 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-3',
+      zaloUrl: 'https://zalo.me/0987654321',
       name: 'Tiệc cưới sảnh Diamond',
       provider: 'Gem Center',
+      providerId: 'u-gem',
       price: 120000000,
       rating: 4.7,
       reviews: 312,
@@ -87,8 +92,10 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-4',
+      zaloUrl: 'https://zalo.me/0934567890',
       name: 'Thuê váy cưới thiết kế',
       provider: 'Bella Bridal',
+      providerId: 'u-bella',
       price: 8000000,
       rating: 4.6,
       reviews: 64,
@@ -105,27 +112,42 @@ class MockData {
   ];
 
   static VendorDashboard vendorDashboard() => VendorDashboard(
-        monthlyRevenue: 120000000,
-        newRequestCount: 3,
+        // FN-VND-05: completed projects with an event date in the current month
+        monthlyRevenue: vendorProjects
+            .where((p) => p.status == ProjectStatus.completed && p.eventDate.year == DateTime.now().year && p.eventDate.month == DateTime.now().month)
+            .fold(0, (sum, p) => sum + p.agreedPrice),
+        newRequestCount: quoteRequests.where((q) => q.status == QuoteRequestStatus.pending).length,
         rating: 4.9,
-        quoteRequests: const [QuoteRequest(id: 'q-1', customerName: 'Trần Vy', packageName: 'Gói Chụp Pre-Wedding')],
+        quoteRequests: quoteRequests.where((q) => q.status == QuoteRequestStatus.pending).take(5).toList(),
         upcoming: [vendorProjects.first],
       );
 
-  static final List<VendorProject> vendorProjects = [
-    VendorProject(id: 'p-1', name: 'Đám cưới Ngọc & Hoàng', service: 'Chụp Phóng sự', date: DateTime(2026, 10, 20), status: ProjectStatus.upcoming, venue: 'Gem Center, Quận 1'),
-    VendorProject(id: 'p-2', name: 'Lễ cưới Lan & Tuấn', service: 'Chụp Pre-Wedding', date: DateTime(2026, 9, 15), status: ProjectStatus.inProgress),
-    VendorProject(id: 'p-3', name: 'Tiệc cưới Minh & Vy', service: 'Chụp Phóng sự', date: DateTime(2026, 8, 1), status: ProjectStatus.completed),
+  /// Sent by the demo couple (mock "me") or received by the demo vendor — the mock doesn't split the two sides
+  static final List<QuoteRequest> quoteRequests = [
+    QuoteRequest(
+      id: 'q-1',
+      coupleName: 'Trần Vy',
+      packageId: 'vs-1',
+      packageName: 'Gói Chụp Pre-Wedding Ngoại Cảnh',
+      vendorName: 'Lumiere Studio',
+      status: QuoteRequestStatus.pending,
+      createdAt: DateTime(2026, 10, 24, 9, 30),
+      eventDate: DateTime(2027, 1, 16),
+      guestCount: 200,
+      message: 'Bên mình muốn chụp ở Đà Lạt',
+    ),
   ];
 
-  static const List<ChatThread> chatThreads = [
-    ChatThread(id: 'c-1', name: 'Trần Vy', lastMessage: 'Anh ơi, em muốn đổi concept chụp sang phong cách Vintage được không ạ?', timeLabel: '10:30', unread: 2),
-    ChatThread(id: 'c-2', name: 'Lan & Tuấn', lastMessage: 'Cảm ơn anh vì bộ ảnh cưới quá đẹp!', timeLabel: 'Hôm qua'),
+  static final List<VendorProject> vendorProjects = [
+    VendorProject(id: 'p-1', coupleName: 'Ngọc & Hoàng', vendorName: 'Lumiere Studio', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 12, 20), agreedPrice: 18000000, status: ProjectStatus.upcoming, venue: 'Gem Center, Quận 1'),
+    VendorProject(id: 'p-2', coupleName: 'Lan & Tuấn', vendorName: 'Lumiere Studio', packageName: 'Chụp Pre-Wedding', eventDate: DateTime(2026, 10, 15), agreedPrice: 15000000, status: ProjectStatus.inProgress),
+    VendorProject(id: 'p-3', coupleName: 'Minh & Vy', vendorName: 'Lumiere Studio', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 8, 1), agreedPrice: 12000000, status: ProjectStatus.completed),
   ];
+
 
   static final List<VendorService> vendorServices = [
-    const VendorService(id: 'vs-1', name: 'Gói Chụp Pre-Wedding Ngoại Cảnh', price: 15000000, isActive: true, bookings: 24, imageUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=200'),
-    const VendorService(id: 'vs-2', name: 'Chụp Phóng Sự Cưới', price: 8000000, isActive: true, bookings: 42, imageUrl: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=200'),
-    const VendorService(id: 'vs-3', name: 'Quay Phim Highlight', price: 10000000, isActive: false, bookings: 5, imageUrl: 'https://images.unsplash.com/photo-1606800052052-a08af7148866?w=200'),
+    const VendorService(id: 'vs-1', name: 'Gói Chụp Pre-Wedding Ngoại Cảnh', category: ServiceCategory.photo, price: 15000000, discountPrice: 13500000, isActive: true, projectCount: 24, thumbnailUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=200'),
+    const VendorService(id: 'vs-2', name: 'Chụp Phóng Sự Cưới', category: ServiceCategory.photo, price: 8000000, isActive: true, projectCount: 42, thumbnailUrl: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=200'),
+    const VendorService(id: 'vs-3', name: 'Quay Phim Highlight', category: ServiceCategory.photo, price: 10000000, isActive: false, projectCount: 5, thumbnailUrl: 'https://images.unsplash.com/photo-1606800052052-a08af7148866?w=200'),
   ];
 }

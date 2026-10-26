@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/paged_list.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
+import '../../state/session_controller.dart';
+import 'widgets/project_card.dart';
 
+/// FN-VND-04. Vendor: the "Dự án" tab, filterable by status. Couple: the vendors they booked (full-screen page).
 class VendorProjectsScreen extends StatefulWidget {
   const VendorProjectsScreen({super.key});
 
@@ -15,25 +18,34 @@ class VendorProjectsScreen extends StatefulWidget {
 }
 
 class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
+  late final bool _asVendor;
   ProjectStatus? _filter;
-  late Future<List<VendorProject>> _future;
+
+  /// Bumped to restart the list from page 0 (filter change, after an action)
+  int _version = 0;
 
   @override
   void initState() {
     super.initState();
-    _reload();
+    _asVendor = context.read<SessionController>().isVendor;
   }
 
-  void _reload() => _future = context.read<VendorRepository>().getProjects(status: _filter);
+  void _reload() => _version++;
 
-  static ({Color color, Color bg}) _statusStyle(ProjectStatus s) => switch (s) {
-        ProjectStatus.upcoming => (color: AppColors.blue600, bg: AppColors.blue50),
-        ProjectStatus.inProgress => (color: AppColors.amber600, bg: AppColors.amber50),
-        ProjectStatus.completed => (color: AppColors.emerald600, bg: AppColors.emerald50),
-      };
+  Widget _list() => PagedListView<VendorProject>(
+        key: ValueKey('$_filter-$_version'),
+        emptyText: 'Chưa có dự án',
+        fetch: (page) => context.read<VendorRepository>().getProjects(asVendor: _asVendor, status: _filter, page: page),
+        itemBuilder: (_, p) => ProjectCard(project: p, asVendor: _asVendor, onChanged: () => setState(_reload)),
+      );
 
   @override
   Widget build(BuildContext context) {
+    if (!_asVendor) {
+      return Scaffold(
+        body: Column(children: [const ScreenHeader(title: 'Nhà cung cấp đã chốt'), Expanded(child: _list())]),
+      );
+    }
     return Column(
       children: [
         TabHeader(
@@ -51,56 +63,7 @@ class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
             ],
           ),
         ),
-        Expanded(
-          child: AsyncView<List<VendorProject>>(
-            future: _future,
-            builder: (context, projects) => ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: projects.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, i) {
-                final p = projects[i];
-                final style = _statusStyle(p.status);
-                return AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(p.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate800)),
-                                const SizedBox(height: 4),
-                                Text(p.service, style: const TextStyle(fontSize: 14, color: AppColors.slate500)),
-                              ],
-                            ),
-                          ),
-                          StatusChip(label: p.status.label, color: style.color, background: style.bg),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(color: AppColors.slate50, borderRadius: BorderRadius.circular(8)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.calendar_today, size: 14, color: AppColors.slate400),
-                            const SizedBox(width: 8),
-                            Text(Fmt.date(p.date), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate600)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
+        Expanded(child: _list()),
       ],
     );
   }
