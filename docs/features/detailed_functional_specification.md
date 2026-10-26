@@ -533,7 +533,7 @@ stateDiagram-v2
 * **Item:** `{ "id", "title", "body", "kind": "ai|message|sync|reminder", "isRead": false, "createdAt" }` — `kind` quyết định icon trên app (gợi ý AI, tin nhắn mới, đồng bộ bạn đời, nhắc việc/đến hạn).
 * Mọi thông báo gửi qua Push (FCM) đều được lưu tại đây để xem lại. Đánh dấu đã đọc: `PATCH /api/v1/client/notifications/{id}/read`.
 
-#### `FN-NOTI-02: Thiết bị nhận thông báo đẩy (FCM)` 🆕 *(v1.1.5)*
+#### `FN-NOTI-02: Thiết bị nhận thông báo đẩy (FCM)` ✅ *(v1.1.5)*
 * **Mục tiêu:** Thông báo trong hộp thư (FN-NOTI-01) đồng thời được đẩy tới điện thoại qua Firebase Cloud Messaging, kể cả khi app đang đóng; các sự kiện đồng bộ (FN-PLAN-05) tới máy bạn đời. Thiết lập project: `docs/setup/google-cloud-firebase.md`.
 * **Bảng `device_tokens`:** `id`, `user_id` (FK `users`, `ON DELETE CASCADE`), `token` (FCM registration token, ≤ 4096, **unique**), `platform` (`ANDROID|IOS`), `created_at`, `updated_at` (lần đăng ký gần nhất).
 * **Đăng ký:** `PUT /api/v1/users/me/devices` — người dùng đã đăng nhập (kể cả chưa chọn vai trò). Input `{ "token": "fcm-token…", "platform": "ANDROID" }`.
