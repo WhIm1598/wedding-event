@@ -111,8 +111,8 @@ public class FcmPushSender implements PushSender {
                         .POST(HttpRequest.BodyPublishers.ofString(JSONObjectUtils.toJSONString(Map.of("message", message))))
                         .build(),
                 HttpResponse.BodyHandlers.ofString());
-        if (res.statusCode() == 404 || res.body().contains("UNREGISTERED")
-                || (res.statusCode() == 400 && res.body().contains("INVALID_ARGUMENT"))) {
+        // Only when FCM blames the token: a 404/400 for another reason (wrong project id, bad payload) must not wipe devices
+        if (res.body().contains("UNREGISTERED") || (res.statusCode() == 400 && res.body().contains("registration token"))) {
             devices.deleteByTokenValue(token);
         } else if (res.statusCode() >= 300) {
             log.warn("FCM answered {}: {}", res.statusCode(), res.body());

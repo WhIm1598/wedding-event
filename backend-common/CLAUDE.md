@@ -19,7 +19,9 @@ same database. Package root `com.weddingevent.common`. Lombok `@Getter/@Setter` 
 1. Add `V{n}__lower_snake_case.sql` with `n` = highest existing version + 1 (`MigrationConventionsTest` enforces naming and no gaps).
    Never edit, rename or delete an existing migration. Add columns nullable or with a default; tighten later.
 2. Update/add the entity: column names via `@Column(name = "snake_case")`, money `BigDecimal` ↔ `NUMERIC(15,0)`,
-   dates `LocalDate`, timestamps `Instant` ↔ `TIMESTAMPTZ`, enums as strings. Hibernate runs `ddl-auto=validate`,
+   dates `LocalDate`, timestamps `Instant` ↔ `TIMESTAMPTZ`, enums as strings. Business times `LocalTime` ↔ `TIME` hold the
+   Vietnam time as entered: both apps pin the JVM zone to `Asia/Ho_Chi_Minh` (Application class) and must **not** set
+   `hibernate.jdbc.time_zone` (it shifted `TIME` values, #33; `TimeZoneStorageTest` guards this). Hibernate runs `ddl-auto=validate`,
    so any mismatch fails application startup and the integration tests.
 3. Business state transitions belong on the entity (e.g. `Contract.applyPayment`), not in controllers.
 4. Repository queries: derived names or JPQL `@Query` with named `@Param`s; filter "active" rows explicitly (e.g. not `CANCELLED`).

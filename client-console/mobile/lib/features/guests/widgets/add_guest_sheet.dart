@@ -23,6 +23,7 @@ class _AddGuestSheetState extends State<AddGuestSheet> {
   String _group = kGuestGroups.first;
   GuestStatus _status = GuestStatus.pending;
   bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -34,7 +35,10 @@ class _AddGuestSheetState extends State<AddGuestSheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await context.read<GuestRepository>().addGuest(
             Guest(
@@ -48,7 +52,7 @@ class _AddGuestSheetState extends State<AddGuestSheet> {
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) showAppSnack(context, e.toString(), error: true);
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -101,6 +105,7 @@ class _AddGuestSheetState extends State<AddGuestSheet> {
             const SizedBox(height: 12),
             TextFormField(controller: _notes, decoration: const InputDecoration(labelText: 'Ghi chú (VD: Ăn chay)')),
             const SizedBox(height: 20),
+            FormError(_error),
             PrimaryButton(label: 'Lưu khách mời', loading: _saving, onPressed: _save),
           ],
         ),

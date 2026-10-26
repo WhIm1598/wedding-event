@@ -57,6 +57,8 @@ class ApiClient {
   String? _refresh;
   Future<bool>? _refreshing;
 
+  static const _networkError = 'Không kết nối được máy chủ, vui lòng kiểm tra mạng và thử lại';
+
   /// Called when the server refuses the refresh token: the user must sign in again
   void Function()? onSessionExpired;
 
@@ -91,8 +93,9 @@ class ApiClient {
       await setTokens(data['accessToken'] as String, data['refreshToken'] as String);
       return true;
     } on DioException catch (e) {
-      // No answer (offline, timeout): keep the session and let the original call fail
-      if (e.response == null) return false;
+      // Only a refusal ends the session; no answer (offline) or a server error (502 during a deploy) keeps it
+      final status = e.response?.statusCode;
+      if (status != 401 && status != 403) return false;
       await clearTokens();
       onSessionExpired?.call();
       return false;
@@ -131,11 +134,12 @@ class ApiClient {
       if (data is Map<String, dynamic>) {
         throw ApiException(
           code: data['code'] as String? ?? 'NETWORK_ERROR',
-          message: data['message'] as String? ?? 'Lỗi kết nối máy chủ',
+          message: data['message'] as String? ?? _networkError,
           statusCode: e.response?.statusCode,
         );
       }
-      throw ApiException(code: 'NETWORK_ERROR', message: e.message ?? 'Lỗi kết nối máy chủ', statusCode: e.response?.statusCode);
+      // Offline, timeout or a non-envelope answer (gateway HTML): never show Dio's English text
+      throw ApiException(code: 'NETWORK_ERROR', message: _networkError, statusCode: e.response?.statusCode);
     }
   }
 }
