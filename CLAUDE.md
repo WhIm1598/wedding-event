@@ -17,7 +17,7 @@ Two products share one PostgreSQL database and one Java domain library:
 | `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
-| `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml`; `client-api.yml` still to generate); maintained with the `api-documenter` agent | |
+| `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml` for the admin API, `client-api.yml` for the mobile API); maintained with the `api-documenter` agent | |
 | `docs/templates/` | UI reference mock-ups only (look & feel, not code to copy) | |
 | `.github/` | CI (`ci.yml`), spec-to-code agent (`claude-agent.yml`, `scripts/claude_coder.py`) | |
 | `.claude/agents/` | Project subagents: `backend-architect` (read-only design proposal before backend work), `java-architect` (backend Java/Spring implementation + code-level design), `frontend-developer` (admin web implementation), `api-documenter` (OpenAPI `docs/api/*.yml` from the code), `code-reviewer` (read-only review; also runs in CI after code generation) | |
