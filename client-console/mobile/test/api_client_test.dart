@@ -11,9 +11,11 @@ class _FakeServer implements HttpClientAdapter {
   int refreshCalls = 0;
   int refreshStatus = 200;
   bool offline = false;
+  bool down = false;
 
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    if (down) throw DioException.connectionError(requestOptions: options, reason: 'offline');
     if (options.path == '/auth/refresh') {
       refreshCalls++;
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -76,5 +78,14 @@ void main() {
     await expectLater(me(), throwsA(isA<ApiException>()));
     expect(api.refreshToken, 'r1');
     expect(expired, 0);
+  });
+
+  test("a network failure shows a Vietnamese message, never Dio's English text (#30)", () async {
+    server.down = true;
+    await expectLater(
+      me(),
+      throwsA(isA<ApiException>().having((e) => e.message, 'message', startsWith('Không kết nối được máy chủ'))),
+    );
+    expect(api.refreshToken, 'r1');
   });
 }
