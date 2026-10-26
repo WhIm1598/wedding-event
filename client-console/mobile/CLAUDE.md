@@ -1,6 +1,6 @@
 # client-console/mobile — WedPlanner app
 
-Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · url_launcher · flutter_secure_storage · firebase_messaging · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
+Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · url_launcher · flutter_secure_storage · firebase_messaging · flutter_localizations (`vi` only, `appLocale` in `app.dart`) · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
 Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios --org vn.wedplanner` and not committed.
 After generating: revert `analysis_options.yaml`, delete the sample `test/widget_test.dart`, add
 `<application android:usesCleartextTraffic="true"/>` to `android/app/src/debug/AndroidManifest.xml` (local backend is plain http)
@@ -21,7 +21,7 @@ FN-SVC-02, opened with `launchUrl`); FN-MSG-01 stays in the backend but the app 
 | `core/push/push_service.dart` | `PushService` (FN-NOTI-02): only with `--dart-define=FCM_ENABLED=true` and the Firebase app files (`docs/setup/google-cloud-firebase.md`); registers the device after sign-in (`SessionController`), unregisters before logout, `planUpdates` (FN-PLAN-05 data message) makes the plan screen reload, foreground notifications show a snack |
 | `core/router/app_router.dart` | `Routes` path constants + `createRouter(session)`: auth redirects, `ShellRoute` for bottom-nav tabs, plain `GoRoute`s for full-screen pages |
 | `core/theme/` | `AppColors` (rose/pink brand, slate neutrals), `AppTheme.light` |
-| `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>`, `showAppSnack`, `showComingSoon` (Vietnamese "sắp ra mắt" for template buttons without a spec endpoint; dev notes stay in code comments, never in UI text) |
+| `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>`, `showAppSnack` (not inside bottom sheets: they cover it — use `FormError(_error)` above the submit button, #31), `showComingSoon` (Vietnamese "sắp ra mắt" for template buttons without a spec endpoint; dev notes stay in code comments, never in UI text) |
 | `core/widgets/paged_list.dart` | `PagedListView<T>(fetch: (page) => repo.list(page: page), itemBuilder:)`: infinite scroll + pull to refresh over a §1.2 page endpoint; new `key` to restart from page 0 |
 | `core/utils/` | `Fmt` (money, dates), `Validators` (email, VN phone, required) |
 | `data/models/` | Immutable models with `const` constructors and `fromJson`/`toJson` using the spec's JSON names |

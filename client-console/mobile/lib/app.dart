@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +15,14 @@ import 'data/repositories/plan_repository.dart';
 import 'data/repositories/service_repository.dart';
 import 'data/repositories/vendor_repository.dart';
 import 'state/session_controller.dart';
+
+/// The app speaks Vietnamese only (spec: UI text is Vietnamese)
+const appLocale = Locale('vi');
+const appLocalizationsDelegates = [
+  GlobalMaterialLocalizations.delegate,
+  GlobalWidgetsLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
+];
 
 class WedPlannerApp extends StatefulWidget {
   const WedPlannerApp({super.key});
@@ -66,6 +75,10 @@ class _WedPlannerAppState extends State<WedPlannerApp> {
         theme: AppTheme.light,
         routerConfig: _router,
         scaffoldMessengerKey: _messenger,
+        // #32: Material widgets (date picker, tooltips, a11y labels) in Vietnamese, weeks start on Monday
+        locale: appLocale,
+        supportedLocales: const [appLocale],
+        localizationsDelegates: appLocalizationsDelegates,
       ),
     );
   }
