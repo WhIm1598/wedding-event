@@ -5,20 +5,20 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Single-row studio profile printed on contracts (party B, bank details). */
+/** One studio's profile printed on contracts (party B, bank details), keyed by its studio (ADR-0001). */
 @Getter
 @Setter
 @Entity
 @Table(name = "studio_settings")
 public class StudioSettings {
 
-    public static final short SINGLETON_ID = 1;
-
     @Id
-    private short id = SINGLETON_ID;
+    @Column(name = "studio_id")
+    private UUID studioId;
 
     @Column(nullable = false)
     private String name;

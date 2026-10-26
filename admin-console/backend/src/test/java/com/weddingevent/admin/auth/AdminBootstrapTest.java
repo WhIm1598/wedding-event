@@ -26,13 +26,14 @@ class AdminBootstrapTest {
     }
 
     @Test
-    void createsTheAdminFromTheEnvironmentOnAnEmptyDatabase() {
+    void createsThePlatformAdminFromTheEnvironmentOnAnEmptyDatabase() {
         bootstrap(" Owner@Studio.vn ", "Chusohuu2026").run(null);
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(users).save(saved.capture());
         assertThat(saved.getValue().getEmail()).isEqualTo("owner@studio.vn");
-        assertThat(saved.getValue().getRole()).isEqualTo(Role.ROLE_ADMIN);
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.ROLE_PLATFORM_ADMIN);
+        assertThat(saved.getValue().getStudioId()).isNull();
         assertThat(encoder.matches("Chusohuu2026", saved.getValue().getPasswordHash())).isTrue();
     }
 
@@ -51,8 +52,8 @@ class AdminBootstrapTest {
     }
 
     @Test
-    void anExistingAdminWins() {
-        when(users.existsByRole(Role.ROLE_ADMIN)).thenReturn(true);
+    void anExistingPlatformAdminWins() {
+        when(users.existsByRole(Role.ROLE_PLATFORM_ADMIN)).thenReturn(true);
         assertThat(bootstrap("a@studio.vn", "Chusohuu2026").createFirstAdmin("a@studio.vn", "Chusohuu2026")).isFalse();
         verify(users, never()).save(any());
     }

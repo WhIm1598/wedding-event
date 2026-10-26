@@ -12,6 +12,7 @@ import com.weddingevent.common.exception.AppException;
 import com.weddingevent.common.repository.RefreshTokenRepository;
 import com.weddingevent.common.repository.StaffRepository;
 import com.weddingevent.common.repository.UserRepository;
+import com.weddingevent.common.tenant.StudioTenant;
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
@@ -27,8 +28,11 @@ class UserAccountServiceTest {
     private final UserAccountService service = new UserAccountService(users, mock(StaffRepository.class),
             mock(RefreshTokenRepository.class), mock(PasswordEncoder.class), Clock.systemUTC());
 
+    private final UUID studio = UUID.randomUUID();
+
     private User admin() {
         User u = new User();
+        u.setStudioId(studio);
         ReflectionTestUtils.setField(u, "id", UUID.randomUUID());
         u.setRole(Role.ROLE_ADMIN);
         u.setFullName("Quản Lý");
@@ -39,12 +43,12 @@ class UserAccountServiceTest {
     @Test
     void theLastActiveAdminCannotBeLockedOrDemoted() {
         User last = admin();
-        when(users.findActiveAdminsForUpdate()).thenReturn(List.of(last));
+        when(users.findActiveAdminsForUpdate(studio)).thenReturn(List.of(last));
         UUID actor = UUID.randomUUID();
 
         for (UpdateUserRequest req : List.of(new UpdateUserRequest("Quản Lý", Role.ROLE_STAFF, true, null),
                 new UpdateUserRequest("Quản Lý", Role.ROLE_ADMIN, false, null))) {
-            assertThatThrownBy(() -> service.update(actor, last.getId(), req))
+            assertThatThrownBy(() -> StudioTenant.callAs(studio, () -> service.update(actor, last.getId(), req)))
                     .isInstanceOf(AppException.class)
                     .extracting("code").isEqualTo("LAST_ADMIN");
         }
@@ -54,9 +58,10 @@ class UserAccountServiceTest {
     void anAdminCanBeDemotedWhileAnotherStaysActive() {
         User target = admin();
         User other = admin();
-        when(users.findActiveAdminsForUpdate()).thenReturn(List.of(target, other));
+        when(users.findActiveAdminsForUpdate(studio)).thenReturn(List.of(target, other));
 
-        assertThat(service.update(other.getId(), target.getId(), new UpdateUserRequest("Quản Lý", Role.ROLE_STAFF, true, null)).role())
+        assertThat(StudioTenant.callAs(studio, () -> service.update(other.getId(), target.getId(),
+                new UpdateUserRequest("Quản Lý", Role.ROLE_STAFF, true, null))).role())
                 .isEqualTo(Role.ROLE_STAFF);
     }
 }

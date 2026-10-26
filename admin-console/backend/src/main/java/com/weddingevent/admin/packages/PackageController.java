@@ -2,6 +2,7 @@ package com.weddingevent.admin.packages;
 
 import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.common.api.ApiResponse;
 import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.exception.ResourceNotFoundException;
@@ -54,7 +55,7 @@ public class PackageController {
     @GetMapping
     @Transactional(readOnly = true)
     public ApiResponse<List<PackageDto>> list() {
-        return ApiResponse.ok(packages.findAllByVendorIdIsNullOrderByPriceDesc().stream().map(PackageDto::of).toList());
+        return ApiResponse.ok(packages.findAllByStudioIdOrderByPriceDesc(CurrentStudio.require()).stream().map(PackageDto::of).toList());
     }
 
     @PostMapping
@@ -63,6 +64,7 @@ public class PackageController {
     @Transactional
     public ApiResponse<PackageDto> create(@Valid @RequestBody CreatePackageRequest req) {
         ServicePackage p = new ServicePackage();
+        p.setStudioId(CurrentStudio.require());
         p.setName(req.name().trim());
         p.setType(req.type().trim());
         p.setPrice(req.price());
@@ -76,7 +78,7 @@ public class PackageController {
     @PreAuthorize(ADMIN)
     @Transactional
     public ApiResponse<PackageDto> setActive(@PathVariable UUID id, @Valid @RequestBody SetActiveRequest req) {
-        ServicePackage p = packages.findById(id).orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", id));
+        ServicePackage p = packages.findByIdAndStudioId(id, CurrentStudio.require()).orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", id));
         p.setActive(req.isActive());
         return ApiResponse.ok(PackageDto.of(p));
     }

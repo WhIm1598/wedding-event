@@ -1,6 +1,7 @@
 package com.weddingevent.admin.booking;
 
 import com.weddingevent.admin.notification.NotificationService;
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.security.CurrentUser;
 import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.admin.support.DateRange;
@@ -150,7 +151,7 @@ public class BookingService {
             }
         }
         ServicePackage pkg = req.servicePackageId() == null ? (contract == null ? null : contract.getServicePackage())
-                : packages.findById(req.servicePackageId()).orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", req.servicePackageId()));
+                : packages.findByIdAndStudioId(req.servicePackageId(), CurrentStudio.require()).orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", req.servicePackageId()));
         String phone = req.phone() == null || req.phone().isBlank() ? (contract == null ? null : contract.getPhone()) : req.phone();
 
         Booking b = new Booking();

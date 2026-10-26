@@ -51,6 +51,7 @@ class AdminSessionApiTest extends IntegrationTest {
         u.setPasswordHash(passwordEncoder.encode(PASSWORD));
         u.setFullName("Nhân Viên Thử");
         u.setRole(role);
+        u.setStudioId(demoStudioId());
         u.setVerified(true);
         return users.save(u);
     }
@@ -206,8 +207,8 @@ class AdminSessionApiTest extends IntegrationTest {
     // --- #36: first admin on an empty production database ---
 
     @Test
-    void theFirstAdminIsCreatedOnlyWhenNoAdminExists() {
-        // The demo seed already has an admin, so the env account is ignored
+    void thePlatformAdminIsCreatedOnlyWhenNoneExists() {
+        // The demo seed already has a platform admin, so the env account is ignored
         String email = "owner-" + UUID.randomUUID() + "@lumiere.vn";
         assertThat(bootstrap.createFirstAdmin(email, "Chusohuu2026")).isFalse();
         assertThat(users.existsByEmailIgnoreCase(email)).isFalse();

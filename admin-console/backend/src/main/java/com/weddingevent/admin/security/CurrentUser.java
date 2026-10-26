@@ -6,16 +6,18 @@ import java.util.UUID;
 import org.springframework.security.oauth2.jwt.Jwt;
 
 /** The authenticated caller, read from the access token. */
-public record CurrentUser(UUID id, String email, Role role, UUID staffMemberId) {
+public record CurrentUser(UUID id, String email, Role role, UUID staffMemberId, UUID studioId) {
 
     public static CurrentUser from(Jwt jwt) {
         List<String> roles = jwt.getClaimAsStringList(TokenService.CLAIM_ROLES);
         String staffId = jwt.getClaimAsString(TokenService.CLAIM_STAFF_ID);
+        String studioId = jwt.getClaimAsString(TokenService.CLAIM_STUDIO_ID);
         return new CurrentUser(
                 UUID.fromString(jwt.getSubject()),
                 jwt.getClaimAsString(TokenService.CLAIM_EMAIL),
                 Role.valueOf(roles.getFirst()),
-                staffId == null ? null : UUID.fromString(staffId));
+                staffId == null ? null : UUID.fromString(staffId),
+                studioId == null ? null : UUID.fromString(studioId));
     }
 
     public boolean isAdmin() {

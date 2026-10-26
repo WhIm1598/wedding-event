@@ -12,6 +12,7 @@ import type {
   StaffTask,
   StudioSettings,
   Transaction,
+  Studio,
   UserAccount,
   ZaloOaSettings,
 } from '@/types';
@@ -39,6 +40,12 @@ const ref = (id: string) => {
 
 export const db = {
   staff,
+
+  // Studios of the platform (FN-PLT-01); the demo studio is the first one
+  studios: [
+    { id: 'st-1', name: 'LUMIÈRE STUDIOS', status: 'ACTIVE', subscriptionExpiresAt: null, usable: true, adminCount: 1, createdAt: minutesAgo(60 * 24 * 90) },
+    { id: 'st-2', name: 'Studio Hoa Biển', status: 'SUSPENDED', subscriptionExpiresAt: addDays(today, -5), usable: false, adminCount: 1, createdAt: minutesAgo(60 * 24 * 30) },
+  ] as Studio[],
 
   // Login accounts (FN-ADM-USER-01); ids match the demo users in auth.api.ts
   users: [

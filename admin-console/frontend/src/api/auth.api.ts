@@ -6,6 +6,7 @@ import type { AuthUser, LoginResponse, Role } from '@/types';
 const DEMO_USERS: Record<Role, AuthUser> = {
   ROLE_ADMIN: { id: 'u-admin', name: 'Quản Lý Studio', email: 'admin@lumiere.vn', role: 'ROLE_ADMIN', mustChangePassword: false },
   ROLE_STAFF: { id: 'u-staff', name: 'Nhân Viên', email: 'staff@lumiere.vn', role: 'ROLE_STAFF', mustChangePassword: false },
+  ROLE_PLATFORM_ADMIN: { id: 'u-platform', name: 'Quản Trị Nền Tảng', email: 'platform@lumiere.vn', role: 'ROLE_PLATFORM_ADMIN', mustChangePassword: false },
 };
 
 export const authApi = {

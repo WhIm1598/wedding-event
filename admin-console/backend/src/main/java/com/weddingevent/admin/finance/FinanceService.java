@@ -2,6 +2,7 @@ package com.weddingevent.admin.finance;
 
 import com.weddingevent.admin.crm.CustomerStageSync;
 import com.weddingevent.admin.notification.NotificationService;
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.support.DateRange;
 import com.weddingevent.common.domain.Contract;
 import com.weddingevent.common.domain.PaymentTransaction;
@@ -13,8 +14,8 @@ import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.BookingRepository;
 import com.weddingevent.common.repository.ContractRepository;
 import com.weddingevent.common.repository.PaymentTransactionRepository;
-import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.support.CodeGenerator.Code;
+import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.util.VndFormatter;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -132,7 +133,7 @@ public class FinanceService {
             }
         }
         PaymentTransaction t = new PaymentTransaction();
-        t.setCode(codes.next(Code.TRANSACTION));
+        t.setCode(codes.next(Code.TRANSACTION, CurrentStudio.require()));
         t.setType(type);
         t.setAmount(amount);
         t.setCategory(category);

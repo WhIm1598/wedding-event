@@ -10,6 +10,8 @@ import com.weddingevent.common.domain.VendorProfile;
 import com.weddingevent.common.domain.enums.ServiceCategory;
 import com.weddingevent.common.domain.enums.Role;
 import com.weddingevent.common.repository.ServicePackageRepository;
+import com.weddingevent.common.domain.Studio;
+import com.weddingevent.common.repository.StudioRepository;
 import com.weddingevent.common.repository.UserRepository;
 import com.weddingevent.common.repository.VendorProfileRepository;
 import java.math.BigDecimal;
@@ -90,6 +92,14 @@ public abstract class ClientIntegrationTest {
     protected ServicePackageRepository servicePackages;
 
     @Autowired
+    private StudioRepository studios;
+
+    /** The studio V18 created (tests may add others later) */
+    protected UUID studioId() {
+        return studios.findAll().stream().min(java.util.Comparator.comparing(Studio::getCreatedAt)).orElseThrow().getId();
+    }
+
+    @Autowired
     protected TestDoubles.RecordingOtpSender otpSender;
 
     @Autowired
@@ -102,6 +112,8 @@ public abstract class ClientIntegrationTest {
         u.setPasswordHash(passwordEncoder.encode(PASSWORD));
         u.setFullName("Người dùng " + UNIQUE.get());
         u.setRole(role);
+        // A studio account belongs to a studio (ADR-0001, V18 check constraint)
+        u.setStudioId(role == Role.ROLE_ADMIN || role == Role.ROLE_STAFF ? studioId() : null);
         u.setVerified(verified);
         return users.save(u);
     }
@@ -119,6 +131,7 @@ public abstract class ClientIntegrationTest {
     protected ServicePackage createPackage(VendorProfile vendor, long price) {
         ServicePackage p = new ServicePackage();
         p.setVendorId(vendor == null ? null : vendor.getId());
+        p.setStudioId(vendor == null ? studioId() : null);
         p.setName(unique("Gói"));
         p.setType("Trọn gói");
         p.setCategory(ServiceCategory.DECOR);

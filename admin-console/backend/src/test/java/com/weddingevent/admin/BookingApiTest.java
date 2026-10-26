@@ -120,7 +120,7 @@ class BookingApiTest extends IntegrationTest {
         b.setEventDate(date);
         b.setEventTime(LocalTime.of(15, 0));
         b.setStatus(BookingStatus.CANCELLED);
-        bookings.save(b);
+        inDemoStudio(() -> bookings.save(b));
         String admin = adminToken();
 
         mvc.perform(authed(get("/api/v1/admin/bookings/calendar?view=day&date=" + date), admin))
@@ -144,7 +144,7 @@ class BookingApiTest extends IntegrationTest {
         assertThat(read(created, "$.data.contractId")).isEqualTo(contractId);
         assertThat(read(created, "$.data.phone")).isEqualTo(phone);
         assertThat(read(created, "$.data.packageName")).isNotEqualTo("—");
-        Booking saved = bookings.findById(UUID.fromString(read(created, "$.data.id"))).orElseThrow();
+        Booking saved = inDemoStudio(() -> bookings.findById(UUID.fromString(read(created, "$.data.id")))).orElseThrow();
         assertThat(saved.getLead().getId()).hasToString(leadId);
 
         // A contract has many bookings
@@ -161,7 +161,7 @@ class BookingApiTest extends IntegrationTest {
                 {'clientName':'Khách Tư Vấn','type':'Tư vấn hợp đồng','leadId':'%s','eventDate':'%s','eventTime':'15:00','staffIds':[]}
                 """.formatted(leadId, uniqueFutureDate()))), admin);
         assertThat(JsonPath.<Object>read(created, "$.data.contractId")).isNull();
-        Booking saved = bookings.findById(UUID.fromString(read(created, "$.data.id"))).orElseThrow();
+        Booking saved = inDemoStudio(() -> bookings.findById(UUID.fromString(read(created, "$.data.id")))).orElseThrow();
         assertThat(saved.getLead().getId()).hasToString(leadId);
     }
 

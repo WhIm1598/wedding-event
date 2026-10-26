@@ -1,5 +1,6 @@
 package com.weddingevent.admin.zalo;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.zalo.ZaloOaClient.Tokens;
 import com.weddingevent.admin.zalo.ZaloOaClient.ZaloException;
 import com.weddingevent.common.domain.StudioSettings;
@@ -35,7 +36,7 @@ public class ZaloOaTokens {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public String accessToken() {
-        StudioSettings s = settings.findByIdForUpdate(StudioSettings.SINGLETON_ID).filter(StudioSettings::isZaloOaConfigured)
+        StudioSettings s = settings.findByIdForUpdate(CurrentStudio.require()).filter(StudioSettings::isZaloOaConfigured)
                 .orElseThrow(ZaloOaTokens::notConfigured);
         Instant now = clock.instant();
         if (s.getZaloOaAccessToken() != null && s.getZaloOaAccessTokenExpiresAt() != null
@@ -58,7 +59,7 @@ public class ZaloOaTokens {
     /** After Zalo rejected the access token: the next call refreshes */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void invalidate() {
-        settings.findByIdForUpdate(StudioSettings.SINGLETON_ID).ifPresent(s -> s.setZaloOaAccessTokenExpiresAt(null));
+        settings.findByIdForUpdate(CurrentStudio.require()).ifPresent(s -> s.setZaloOaAccessTokenExpiresAt(null));
     }
 
     static AppException notConfigured() {

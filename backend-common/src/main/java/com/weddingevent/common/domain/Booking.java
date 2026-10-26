@@ -24,7 +24,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "bookings")
-public class Booking extends BaseEntity {
+public class Booking extends StudioOwnedEntity {
 
     @Column(name = "customer_name", nullable = false)
     private String customerName;

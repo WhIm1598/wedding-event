@@ -15,10 +15,10 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "assets")
-public class Asset extends BaseEntity {
+public class Asset extends StudioOwnedEntity {
 
     /** e.g. VAY-001, MAY-004 */
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String code;
 
     @Column(nullable = false)

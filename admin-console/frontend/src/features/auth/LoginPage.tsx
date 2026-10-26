@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, Lock, Users } from 'lucide-react';
+import { Building2, Camera, Lock, Users } from 'lucide-react';
 import { env } from '@/config/env';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -64,6 +64,12 @@ export function LoginPage() {
               >
                 <Users size={18} /> Đăng nhập quyền Nhân Viên
               </button>
+              <button
+                onClick={() => handleDemo('ROLE_PLATFORM_ADMIN')}
+                className="w-full flex items-center justify-center gap-3 border border-slate-200 hover:bg-slate-50 text-slate-700 py-3 rounded-xl font-bold transition-all hover:scale-[1.02]"
+              >
+                <Building2 size={18} /> Quản trị nền tảng
+              </button>
               <p className="text-center text-xs text-slate-400 pt-2">Chế độ demo (VITE_USE_MOCK=true)</p>
             </>
           ) : (
@@ -79,7 +85,7 @@ export function LoginPage() {
               </Button>
               {import.meta.env.DEV && (
                 <p className="text-center text-xs text-slate-400 pt-2">
-                  Demo: admin@lumiere.vn / Admin@123 • staff@lumiere.vn / Staff@123
+                  Demo: admin@lumiere.vn / Admin@123 • staff@lumiere.vn / Staff@123 • platform@lumiere.vn / Platform@123
                 </p>
               )}
             </form>

@@ -2,23 +2,21 @@ package com.weddingevent.common.support;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
-/** Human-readable business codes backed by PostgreSQL sequences (see V1__init.sql). */
+/** Human-readable business codes, numbered per studio in {@code studio_counters} (ADR-0001, V18). */
 @Component
 public class CodeGenerator {
 
-    /** Sequence names are fixed here, never taken from user input. */
     public enum Code {
-        STAFF("staff_code_seq", "NV-%03d"),
-        CONTRACT("contract_number_seq", "HD-%d"),
-        TRANSACTION("transaction_code_seq", "TRX-%03d");
+        STAFF("NV-%03d"),
+        CONTRACT("HD-%03d"),
+        TRANSACTION("TRX-%03d");
 
-        private final String sequence;
         private final String format;
 
-        Code(String sequence, String format) {
-            this.sequence = sequence;
+        Code(String format) {
             this.format = format;
         }
     }
@@ -26,9 +24,14 @@ public class CodeGenerator {
     @PersistenceContext
     private EntityManager entityManager;
 
-    public String next(Code code) {
-        Number value = (Number) entityManager
-                .createNativeQuery("select nextval('" + code.sequence + "')")
+    /** The upsert takes a row lock, so concurrent requests of one studio never get the same number */
+    public String next(Code code, UUID studioId) {
+        Number value = (Number) entityManager.createNativeQuery("""
+                        insert into studio_counters (studio_id, kind, last_value) values (:studio, :kind, 1)
+                        on conflict (studio_id, kind) do update set last_value = studio_counters.last_value + 1
+                        returning last_value""")
+                .setParameter("studio", studioId)
+                .setParameter("kind", code.name())
                 .getSingleResult();
         return String.format(code.format, value.longValue());
     }

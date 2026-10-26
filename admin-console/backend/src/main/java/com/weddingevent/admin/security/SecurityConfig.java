@@ -40,6 +40,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     public static final String ADMIN = "hasRole('ADMIN')";
+    public static final String PLATFORM_ADMIN = "hasRole('PLATFORM_ADMIN')";
 
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, JwtDecoder accessTokenDecoder, ConsoleAuthenticationConverter accounts,
@@ -66,6 +67,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/packages/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/admin/settings/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "STAFF")
+                        // Studios are managed by the platform admin only (ADR-0001)
+                        .requestMatchers("/api/v1/platform/**").hasRole("PLATFORM_ADMIN")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.decoder(accessTokenDecoder).jwtAuthenticationConverter(accounts))

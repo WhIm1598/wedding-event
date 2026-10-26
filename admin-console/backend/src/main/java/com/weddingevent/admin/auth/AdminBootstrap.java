@@ -13,8 +13,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * First login of a fresh production database (#36): with env ADMIN_EMAIL + ADMIN_PASSWORD set and no ROLE_ADMIN yet,
- * creates that admin. Afterwards the variables are ignored; the password is changed in the app (FN-ADM-AUTH-04).
+ * First login of a fresh production database (#36): with env ADMIN_EMAIL + ADMIN_PASSWORD set and no platform admin
+ * yet, creates that ROLE_PLATFORM_ADMIN (ADR-0001), who then creates the studios and their admins. Afterwards the
+ * variables are ignored; the password is changed in the app (FN-ADM-AUTH-04).
  */
 @Component
 public class AdminBootstrap implements ApplicationRunner {
@@ -44,7 +45,7 @@ public class AdminBootstrap implements ApplicationRunner {
     /** Returns whether the admin was created; a weak password or a taken e-mail stops the startup */
     @Transactional
     public boolean createFirstAdmin(String email, String password) {
-        if (users.existsByRole(Role.ROLE_ADMIN)) {
+        if (users.existsByRole(Role.ROLE_PLATFORM_ADMIN)) {
             return false;
         }
         if (password.length() < 8 || !password.matches(AuthDtos.PASSWORD_POLICY)) {
@@ -56,11 +57,11 @@ public class AdminBootstrap implements ApplicationRunner {
         User admin = new User();
         admin.setEmail(email.trim().toLowerCase());
         admin.setPasswordHash(passwordEncoder.encode(password));
-        admin.setFullName("Quản Lý Studio");
-        admin.setRole(Role.ROLE_ADMIN);
+        admin.setFullName("Quản Trị Nền Tảng");
+        admin.setRole(Role.ROLE_PLATFORM_ADMIN);
         admin.setVerified(true);
         users.save(admin);
-        log.info("Created the first admin account from ADMIN_EMAIL");
+        log.info("Created the platform admin account from ADMIN_EMAIL");
         return true;
     }
 }

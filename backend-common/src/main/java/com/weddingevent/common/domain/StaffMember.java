@@ -14,10 +14,10 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "staff_members")
-public class StaffMember extends BaseEntity {
+public class StaffMember extends StudioOwnedEntity {
 
     /** Human-readable code, e.g. NV-001 */
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String code;
 
     @Column(name = "full_name", nullable = false)
