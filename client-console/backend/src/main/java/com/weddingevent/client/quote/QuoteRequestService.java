@@ -104,12 +104,12 @@ public class QuoteRequestService {
         if (pkg.getVendorId() == null) {
             throw AppException.badRequest("PACKAGE_NOT_QUOTABLE", "Gói của Studio không nhận yêu cầu báo giá, vui lòng liên hệ Studio qua Zalo");
         }
-        // shortcut: two sends racing past this check hit uq_quote_requests_open and get a 500 instead of 409; fine for one couple tapping once
+        // Locks the couple's row: concurrent sends queue here, so the check below sees the request the first one created
+        User couple = users.findByIdForUpdate(coupleId).orElseThrow();
         requests.findFirstByCoupleIdAndServicePackageIdAndStatusIn(coupleId, pkg.getId(), OPEN).ifPresent(open -> {
             throw AppException.conflict("QUOTE_ALREADY_OPEN", "Bạn đã có yêu cầu báo giá đang mở cho gói này",
                     Map.of("existingId", open.getId().toString()));
         });
-        User couple = users.findById(coupleId).orElseThrow();
         VendorProfile vendor = vendors.findById(pkg.getVendorId()).orElseThrow();
 
         QuoteRequest q = new QuoteRequest();

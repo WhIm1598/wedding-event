@@ -87,6 +87,36 @@ class QuoteRequestApiTest extends ClientIntegrationTest {
         send(coupleToken(), pkg);
     }
 
+    /** Concurrent sends may all pass the check; the unique index then turns the losers into 409, never 500 */
+    @Test
+    void concurrentSendsOpenOneRequestAndRefuseTheRest() throws Exception {
+        String couple = coupleToken();
+        ServicePackage pkg = createPackage(createVendor(), 8_000_000);
+        int threads = 8;
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        try {
+            java.util.List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mvc.perform(authed(post("/api/v1/client/quote-requests"), couple)
+                                    .content(json("{'servicePackageId':'" + pkg.getId() + "'}")))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            java.util.List<Integer> statuses = new java.util.ArrayList<>();
+            for (java.util.concurrent.Future<Integer> r : results) {
+                statuses.add(r.get());
+            }
+            org.assertj.core.api.Assertions.assertThat(statuses).containsOnly(201, 409);
+            org.assertj.core.api.Assertions.assertThat(statuses).filteredOn(s -> s == 201).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     @Test
     void sendValidation() throws Exception {
         String couple = coupleToken();
