@@ -6,7 +6,7 @@ Backend for `admin-console/frontend`. Java 21 · Spring Boot 4.1 · Spring Secur
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # PostgreSQL 16 trên :5432 (từ thư mục gốc repo)
-./gradlew :admin-console:backend:bootRun                 # http://localhost:8082, profile "dev"
+./gradlew :admin-console:backend:bootRun --args='--spring.profiles.active=dev'   # http://localhost:8082; không có profile mặc định (#45)
 
 cd admin-console/frontend && npm run dev:api             # UI http://localhost:5173 gọi API thật qua Vite proxy
 ```

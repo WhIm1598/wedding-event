@@ -110,7 +110,7 @@ flowchart TD
 ```bash
 docker compose -f docker-compose.dev.yml up -d   # PostgreSQL 16 cho môi trường dev
 ./gradlew build                                   # compile + tests (Testcontainers, cần Docker) + cổng coverage JaCoCo ≥ 85%
-./gradlew :admin-console:backend:bootRun          # API http://localhost:8082 + dữ liệu demo
+./gradlew :admin-console:backend:bootRun --args='--spring.profiles.active=dev'   # API http://localhost:8082 + dữ liệu demo
 ```
 Chi tiết API, tài khoản demo và biến môi trường: [admin-console/backend/README.md](admin-console/backend/README.md).
 

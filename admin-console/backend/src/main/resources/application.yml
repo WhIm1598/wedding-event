@@ -5,8 +5,6 @@ server:
 spring:
   application:
     name: admin-backend
-  profiles:
-    default: dev
   threads:
     virtual:
       enabled: true

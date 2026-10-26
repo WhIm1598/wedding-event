@@ -43,7 +43,7 @@ on mobile). JSON field names are identical at every layer; the spec's names win.
 |---|---|
 | Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo); report at `<module>/build/reports/jacoco/test/html/index.html` |
 | One module / one test | `./gradlew :admin-console:backend:test` · `./gradlew :client-console:backend:test --tests '*PlanApiTest'` (modules: `:backend-common`, `:admin-console:backend`, `:client-console:backend`) |
-| Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun` |
+| Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun --args='--spring.profiles.active=dev'` (no default profile) |
 | Run mobile API | same database, then `./gradlew :client-console:backend:bootRun` (port 8081) |
 | Web type-check + build | `cd admin-console/frontend && npm run build` (type-check only: `npm run typecheck`; the web app has no test runner or linter) |
 | Web dev (mock / real API) | `npm run dev` / `npm run dev:api` |
