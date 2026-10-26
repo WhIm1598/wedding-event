@@ -18,6 +18,7 @@
 | 1.1.3 | Không gian Vendor (Module 4B): yêu cầu báo giá → dự án Vendor, dashboard và gói của Vendor (FN-VND-01..05), trạng thái `QuoteRequestStatus`/`VendorProjectStatus` (§1.6), mã lỗi `PACKAGE_NOT_QUOTABLE`, `QUOTE_ALREADY_OPEN` (§1.3). Bảo mật tài khoản mobile: email mới chờ xác nhận (`pendingEmail`, FN-AUTH-04), mã OTP gắn với địa chỉ nhận và tối đa 5 mã/giờ (FN-AUTH-02), Google chỉ nhận email đã xác thực và không gộp vào tài khoản chưa xác thực. FN-ADM-CRM-03: khách chuyển `IN_PROGRESS` khi hợp đồng nhận cọc, không phải khi tạo hợp đồng nháp (khớp sơ đồ). Hợp đồng `DEPOSITED` không có lịch hẹn (chỉ thuê váy) bàn giao được trực tiếp. Duyệt Module 4B: Vendor tạo/sửa gói và giảm giá (`discountPrice`), doanh thu Vendor chỉ tính dự án `COMPLETED`, Cặp đôi xin hủy dự án và Vendor duyệt, gói Studio và Vendor liên hệ qua Zalo (`zaloUrl`; số Studio `zaloPhone` FN-ADM-SET-01, số Vendor = SĐT tài khoản), chat Cặp đôi–Studio/Vendor (FN-MSG-01) tạm ẩn trên app, thanh toán Cặp đôi–Vendor ngoài app. Thuật ngữ thống nhất trong `GLOSSARY.md`. |
 | 1.1.4 | Đối chiếu Phần A với `docs/api/client-api.yml` (sinh từ code). Thêm FN-AUTH-05 (đăng nhập Google) và FN-AUTH-06 (`/auth/me`) đúng như đang chạy; đặc tả mới FN-AUTH-07 làm mới phiên và đăng xuất trên mobile (refresh token xoay vòng, bảng `refresh_tokens`). Đối tượng `user` có đủ `phone`, `avatarUrl`, `pendingEmail`. Envelope: `data` vắng mặt khi không có giá trị (FN-PLAN-02 chưa có kế hoạch). Ghi các quy tắc code đang áp dụng: FN-PLAN-01 (tối đa 30 danh mục), FN-GUEST-01/02 (`tableNumber`, `notes`, giới hạn độ dài, lọc), FN-VND-04 (phân trang phía Cặp đôi, giá trị trạng thái, thông báo khi từ chối yêu cầu hủy). FN-VND-03: khi chốt, địa điểm gửi kèm cập nhật địa điểm; ngày gửi kèm chỉ dùng khi yêu cầu chưa có ngày. `sort=` (§1.2) và `TOO_MANY_REQUESTS` (§1.3) ghi rõ là chưa làm. |
 | 1.1.5 | Thông báo đẩy qua Firebase Cloud Messaging: đăng ký thiết bị (FN-NOTI-02, bảng `device_tokens`), mọi thông báo FN-NOTI-01 đồng thời được push, FN-PLAN-05 gửi sự kiện `plan_updated` cho bạn đời. Hướng dẫn tạo project Google Cloud/Firebase: `docs/setup/google-cloud-firebase.md`. |
+| 1.1.6 | FN-ADM-USER-01 quản lý tài khoản đăng nhập ✅ (mã lỗi mới `STAFF_ALREADY_LINKED`, PATCH gửi đủ trường, migration V16: `must_change_password`, `last_login_at`, mỗi nhân sự tối đa một tài khoản). FN-ADM-AUTH-01 bước 5–6 (`last_login_at`, mật khẩu tạm bắt đổi → `403 PASSWORD_CHANGE_REQUIRED`) và FN-ADM-AUTH-04 ✅. Nhật ký thao tác cho tài khoản chờ §3.2. |
 
 ---
 
@@ -69,6 +70,7 @@
 | `EMAIL_EXISTS` | 409 | Email tài khoản đã tồn tại. |
 | `LAST_ADMIN` | 409 | Không thể hạ quyền/khóa quản lý cuối cùng. |
 | `CANNOT_MODIFY_SELF` | 409 | Không tự khóa / tự hạ quyền chính mình. |
+| `STAFF_ALREADY_LINKED` | 409 | Hồ sơ nhân sự đã gắn với một tài khoản đăng nhập khác (FN-ADM-USER-01). |
 | `STAFF_NOT_FOUND` | 400 | Có nhân sự trong `staffIds` không tồn tại. |
 | `STAFF_SCHEDULE_CONFLICT` | 409 | Nhân sự trùng lịch (kèm tên). |
 | `INVALID_STATUS_TRANSITION` | 409 | Chuyển trạng thái không hợp lệ theo §1.6. |
@@ -638,9 +640,9 @@ flowchart LR
   2. `is_active = false` → `403 ACCOUNT_LOCKED`.
   3. Chống dò mật khẩu: sai 5 lần liên tiếp → khóa đăng nhập 15 phút (`locked_until`), trả `429 TOO_MANY_ATTEMPTS`; đăng nhập đúng reset `failed_login_count`. Giới hạn thêm 20 request/phút/IP ở gateway.
   4. Sinh `accessToken` (JWT HS256, 2 giờ, issuer `app.jwt.issuer`, claim `sub`=userId, `email`, `name`, `roles` (mảng `ROLE_*`), `staffId` (khi tài khoản gắn nhân sự), `typ=access`) và `refreshToken` (30 ngày, cùng claim, `typ=refresh`; *(v1.1)* thêm claim `jti`). Resource server chỉ chấp nhận token `typ=access`.
-  5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). *(v1.1)* cập nhật `last_login_at`.
-  6. *(v1.1)* Nếu `must_change_password = true`: vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài đổi mật khẩu/`me`/`logout` trả `403 PASSWORD_CHANGE_REQUIRED`.
-* **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role" } }`. *(v1.1)* `user` thêm `staffId`, `mustChangePassword`.
+  5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). Cập nhật `last_login_at`.
+  6. Nếu `must_change_password = true` (mật khẩu tạm của FN-ADM-USER-01): vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài `change-password`/`me`/`logout`/`logout-all` trả `403 PASSWORD_CHANGE_REQUIRED`. Kiểm tra theo DB ở mỗi request, nên đặt lại mật khẩu cũng chặn ngay các access token đang dùng.
+* **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role", "mustChangePassword" } }`. *(v1.1)* `user` thêm `staffId`.
 
 #### `FN-ADM-AUTH-02: Làm mới token (Refresh, có xoay vòng)` ✅
 * **Endpoint:** `POST /api/v1/admin/auth/refresh` — Public. Input: `{ "refreshToken": "..." }`.
@@ -650,21 +652,21 @@ flowchart LR
 #### `FN-ADM-AUTH-03: Thông tin người dùng hiện tại` ✅
 * **Endpoint:** `GET /api/v1/admin/auth/me` → `user` như FN-ADM-AUTH-01.
 
-#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` ⚠️
+#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` ✅
 * `POST /api/v1/admin/auth/logout` — Public, body `{ "refreshToken": "..." }`, đánh dấu thu hồi `jti`. Luôn trả 200 (idempotent).
 * `POST /api/v1/admin/auth/logout-all` — thu hồi mọi refresh token của chính mình.
-* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi. *(v1.1, cùng FN-ADM-USER-01)* `must_change_password = false`.
+* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi; đặt `must_change_password = false`. Web: tài khoản có `mustChangePassword` chỉ thấy hộp thoại đổi mật khẩu (hoặc đăng xuất) cho tới khi đổi xong.
 * Access token còn hiệu lực tối đa 2 giờ sau khi thu hồi (chấp nhận được); khóa tài khoản có hiệu lực ngay vì mọi request đọc lại tài khoản trong DB: `is_active = false`, hoặc vai trò / nhân sự gắn khác với token → `401` (frontend làm mới token để nhận vai trò mới).
 * **Tài khoản admin đầu tiên** (DB mới): backend tạo một `ROLE_ADMIN` từ biến môi trường `ADMIN_EMAIL` / `ADMIN_PASSWORD` khi chưa có admin nào; sau đó bỏ qua hai biến này.
 
-#### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` 🆕
+#### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` ✅
 * **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Tài khoản*.
 * **Endpoints:**
-  * `GET /api/v1/admin/users?page&size&role&active` — phân trang. Item: `{ id, email, name, role, staffId, staffName, isActive, lastLoginAt }`.
-  * `POST /api/v1/admin/users` — `{ "email", "name", "role": "ROLE_STAFF|ROLE_ADMIN", "staffId": "uuid|null" }`. Sinh mật khẩu tạm 12 ký tự ngẫu nhiên, trả về **một lần** trong response (`temporaryPassword`), `must_change_password = true`. Email trùng → `409 EMAIL_EXISTS`. `ROLE_STAFF` nên gắn `staffId` (để lọc lịch "của mình"); mỗi nhân sự gắn tối đa 1 tài khoản.
-  * `PATCH /api/v1/admin/users/{id}` — đổi `role`, `isActive`, `staffId`, `name`. Khóa tài khoản → thu hồi mọi refresh token.
-  * `POST /api/v1/admin/users/{id}/reset-password` — sinh mật khẩu tạm mới như trên.
-* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). Mọi thao tác ghi nhật ký (§3.2).
+  * `GET /api/v1/admin/users?page&size&role&active` — phân trang (`size` mặc định 20, tối đa 100), chỉ tài khoản `ROLE_ADMIN`/`ROLE_STAFF` (không có tài khoản mobile). Item: `{ id, email, name, role, staffId, staffName, isActive, lastLoginAt }`.
+  * `POST /api/v1/admin/users` — `{ "email", "name", "role": "ROLE_STAFF|ROLE_ADMIN", "staffId": "uuid|null" }`. Sinh mật khẩu tạm 12 ký tự ngẫu nhiên (có chữ và số, bỏ ký tự dễ nhầm `0/O/1/l/I`), trả về **một lần**: `201 { user: <item>, temporaryPassword }`, `must_change_password = true`. Email trùng (không phân biệt hoa thường, kể cả tài khoản mobile) → `409 EMAIL_EXISTS`. `role` khác hai giá trị trên → `400`. `ROLE_STAFF` nên gắn `staffId` (để lọc lịch "của mình"); `staffId` không tồn tại → `404`; mỗi nhân sự gắn tối đa 1 tài khoản → `409 STAFF_ALREADY_LINKED`.
+  * `PATCH /api/v1/admin/users/{id}` — `{ "name", "role", "isActive", "staffId" }`, **gửi đủ cả bốn trường** (`staffId: null` = bỏ gắn nhân sự). Email không đổi được. Khóa tài khoản → thu hồi mọi refresh token. Trả item.
+  * `POST /api/v1/admin/users/{id}/reset-password` — sinh mật khẩu tạm mới như trên (`{ user, temporaryPassword }`), bật lại `must_change_password`, mở khóa đăng nhập sai và thu hồi mọi refresh token.
+* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). *(v1.2, chưa làm — cùng §3.2)* Mọi thao tác ghi nhật ký.
 
 ---
 

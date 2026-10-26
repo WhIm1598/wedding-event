@@ -57,6 +57,8 @@ tags:
     description: Global header search (Ctrl+K) (Module 9).
   - name: settings
     description: Studio profile printed as party B on contracts (Module 9).
+  - name: users
+    description: Admin-console login accounts (Module 5A, FN-ADM-USER-01). Admin only.
 
 paths:
   # ---------------------------------------------------------------- auth
@@ -1080,6 +1082,216 @@ paths:
                 message: Trang phục VAY-001 đang vướng lịch bảo dưỡng giặt hấp đến ngày 17/10/2026, vui lòng chọn ngày khác hoặc trang phục khác.
 
   # ---------------------------------------------------------------- staff
+  # ---------------------------------------------------------------- users
+  /api/v1/admin/users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: List admin-console accounts
+      description: Only `ROLE_ADMIN` / `ROLE_STAFF` accounts (never mobile accounts), sorted by name then email.
+      x-spec-function: FN-ADM-USER-01
+      x-roles: [ROLE_ADMIN]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Clamped to 1–100.
+          schema:
+            type: integer
+            default: 20
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [ROLE_ADMIN, ROLE_STAFF]
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: One page of accounts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/UserAccountPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: Create an account with a temporary password
+      description: |
+        Generates a random 12-character temporary password (letters and digits, no look-alikes), returned only
+        here; the account has `mustChangePassword = true`. A staff profile has at most one account.
+      x-spec-function: FN-ADM-USER-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              email: tuan@lumiere.vn
+              name: Tuấn Photo
+              role: ROLE_STAFF
+              staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedAccountDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã tạo tài khoản
+                data:
+                  user:
+                    id: 7b1c2d3e-4f50-4a61-8b72-9c83d4e5f601
+                    email: tuan@lumiere.vn
+                    name: Tuấn Photo
+                    role: ROLE_STAFF
+                    staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    staffName: Tuấn Photo
+                    isActive: true
+                    lastLoginAt: null
+                  temporaryPassword: Kq7mWx3pRt9a
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`EMAIL_EXISTS` (case-insensitive, mobile accounts included) or `STAFF_ALREADY_LINKED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/admin/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Account id.
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    patch:
+      tags: [users]
+      operationId: updateUser
+      summary: Change name, role, active flag and staff link
+      description: |
+        Every field is sent. Locking (`isActive = false`) revokes every refresh token; access tokens stop working at
+        once because each request re-reads the account. An admin can't lock or demote themselves, and at least one
+        active admin must remain.
+      x-spec-function: FN-ADM-USER-01
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+            example:
+              name: Tuấn Photo
+              role: ROLE_STAFF
+              isActive: false
+              staffId: null
+      responses:
+        '200':
+          description: Updated account.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/UserAccountDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`CANNOT_MODIFY_SELF`, `LAST_ADMIN` or `STAFF_ALREADY_LINKED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/admin/users/{id}/reset-password:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Account id.
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    post:
+      tags: [users]
+      operationId: resetUserPassword
+      summary: Issue a new temporary password
+      description: Sets `mustChangePassword`, clears the login lockout and revokes every refresh token of the account.
+      x-spec-function: FN-ADM-USER-01
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: New temporary password.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedAccountDto'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã đặt lại mật khẩu
+                data:
+                  user:
+                    id: 7b1c2d3e-4f50-4a61-8b72-9c83d4e5f601
+                    email: tuan@lumiere.vn
+                    name: Tuấn Photo
+                    role: ROLE_STAFF
+                    staffId: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    staffName: Tuấn Photo
+                    isActive: true
+                    lastLoginAt: null
+                  temporaryPassword: Kq7mWx3pRt9a
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/admin/staff:
     get:
       tags: [staff]
@@ -2192,7 +2404,7 @@ components:
             code: UNAUTHORIZED
             message: Phiên đăng nhập không hợp lệ hoặc đã hết hạn
     Forbidden:
-      description: '`FORBIDDEN` — the caller''s role may not perform this operation (admin-only route called by `ROLE_STAFF`).'
+      description: '`FORBIDDEN` — the caller''s role may not perform this operation (admin-only route called by `ROLE_STAFF`), or `PASSWORD_CHANGE_REQUIRED` while the account still has a temporary password.'
       content:
         application/json:
           schema:
@@ -2342,7 +2554,7 @@ components:
           pattern: '^(?=.*\p{L})(?=.*\d).*$'
     AuthUserDto:
       type: object
-      required: [id, name, email, role]
+      required: [id, name, email, role, mustChangePassword]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -2354,6 +2566,11 @@ components:
           format: email
         role:
           $ref: '#/components/schemas/Role'
+        mustChangePassword:
+          type: boolean
+          description: |
+            Temporary password (FN-ADM-USER-01). Until it is changed, every route except `auth/me`,
+            `auth/change-password`, `auth/logout` and `auth/logout-all` answers `403 PASSWORD_CHANGE_REQUIRED`.
     LoginResponse:
       type: object
       required: [accessToken, refreshToken, user]
@@ -2366,6 +2583,97 @@ components:
           description: JWT, 30 days, `typ=refresh`.
         user:
           $ref: '#/components/schemas/AuthUserDto'
+
+    # ------------------------------------------------------------ users
+    UserAccountDto:
+      type: object
+      required: [id, email, name, role, isActive]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        staffId:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        staffName:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+    CreatedAccountDto:
+      type: object
+      required: [user, temporaryPassword]
+      properties:
+        user:
+          $ref: '#/components/schemas/UserAccountDto'
+        temporaryPassword:
+          type: string
+          minLength: 12
+          maxLength: 12
+          description: Shown only in this response; the account must change it at first login.
+    CreateUserRequest:
+      type: object
+      required: [email, name, role]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        role:
+          type: string
+          enum: [ROLE_ADMIN, ROLE_STAFF]
+        staffId:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+    UpdateUserRequest:
+      type: object
+      description: Every field is sent; `staffId = null` unlinks the staff profile.
+      required: [name, role, isActive]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        role:
+          type: string
+          enum: [ROLE_ADMIN, ROLE_STAFF]
+        isActive:
+          type: boolean
+        staffId:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+    UserAccountPage:
+      type: object
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAccountDto'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
 
     # ------------------------------------------------------------ dashboard
     MoneyMetric:
