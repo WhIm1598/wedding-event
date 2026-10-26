@@ -19,6 +19,7 @@ class ProfileScreen extends StatelessWidget {
     final menu = <(IconData, String, VoidCallback)>[
       (Icons.settings_outlined, 'Cài đặt tài khoản', () => context.push(Routes.accountSettings)),
       (Icons.request_quote_outlined, 'Yêu cầu báo giá', () => context.push(Routes.quoteRequests)),
+      if (!isVendor) (Icons.handshake_outlined, 'Nhà cung cấp đã chốt', () => context.push(Routes.bookedVendors)),
       isVendor
           ? (Icons.description_outlined, 'Quản lý dịch vụ', () => context.push(Routes.serviceManagement))
           // TODO: payment methods and security settings have no spec functions yet

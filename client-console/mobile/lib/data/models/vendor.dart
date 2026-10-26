@@ -19,6 +19,7 @@ class VendorProject {
   const VendorProject({
     required this.id,
     required this.coupleName,
+    required this.vendorName,
     required this.packageName,
     required this.eventDate,
     required this.agreedPrice,
@@ -31,6 +32,7 @@ class VendorProject {
 
   final String id;
   final String coupleName;
+  final String vendorName;
   final String packageName;
   final DateTime eventDate;
   final int agreedPrice;
@@ -45,6 +47,7 @@ class VendorProject {
   factory VendorProject.fromJson(Map<String, dynamic> json) => VendorProject(
         id: json['id'] as String,
         coupleName: json['coupleName'] as String,
+        vendorName: json['vendorName'] as String,
         packageName: json['packageName'] as String,
         eventDate: DateTime.parse(json['eventDate'] as String),
         agreedPrice: (json['agreedPrice'] as num).toInt(),
@@ -53,6 +56,29 @@ class VendorProject {
         quoteRequestId: json['quoteRequestId'] as String?,
         cancelRequestedAt: json['cancelRequestedAt'] == null ? null : DateTime.parse(json['cancelRequestedAt'] as String),
         cancelReason: json['cancelReason'] as String?,
+      );
+
+  bool get isOpen => status == ProjectStatus.upcoming || status == ProjectStatus.inProgress;
+
+  /// The vendor's next steps along §1.6 (cancelling is offered separately)
+  List<ProjectStatus> get nextSteps => switch (status) {
+        ProjectStatus.upcoming => const [ProjectStatus.inProgress, ProjectStatus.completed],
+        ProjectStatus.inProgress => const [ProjectStatus.completed],
+        _ => const [],
+      };
+
+  VendorProject copyWith({ProjectStatus? status, DateTime? cancelRequestedAt, String? cancelReason, bool clearCancel = false}) => VendorProject(
+        id: id,
+        coupleName: coupleName,
+        vendorName: vendorName,
+        packageName: packageName,
+        eventDate: eventDate,
+        agreedPrice: agreedPrice,
+        status: status ?? this.status,
+        venue: venue,
+        quoteRequestId: quoteRequestId,
+        cancelRequestedAt: clearCancel ? null : cancelRequestedAt ?? this.cancelRequestedAt,
+        cancelReason: clearCancel ? null : cancelReason ?? this.cancelReason,
       );
 }
 

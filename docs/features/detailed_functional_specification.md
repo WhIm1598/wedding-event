@@ -502,7 +502,7 @@ flowchart LR
 
 **Đối tượng trả về:**
 * `QuoteRequestDto`: `{ id, coupleName, packageId, packageName, vendorName, eventDate, venue, guestCount, message, status, quotedPrice, vendorNote, createdAt, respondedAt }`.
-* `VendorProjectDto`: `{ id, coupleName, packageName, eventDate, venue, agreedPrice, status, quoteRequestId, cancelRequestedAt, cancelReason }`.
+* `VendorProjectDto`: `{ id, coupleName, vendorName, packageName, eventDate, venue, agreedPrice, status, quoteRequestId, cancelRequestedAt, cancelReason }`.
 * `VendorServiceDto`: `{ id, name, category, type, price, discountPrice, description, features, thumbnailUrl, isActive, projectCount }`.
 
 #### `FN-VND-01: Gửi yêu cầu báo giá` ✅
@@ -528,7 +528,7 @@ flowchart LR
 * **Cặp đôi hủy:** `POST /api/v1/client/quote-requests/{id}/cancel` — từ `PENDING`/`QUOTED` → `CANCELLED`.
 * Mọi chuyển trạng thái khác → `409 INVALID_STATUS_TRANSITION`. Yêu cầu không thuộc người gọi → `404 NOT_FOUND`. Hai thao tác đồng thời trên cùng yêu cầu: khóa dòng (`SELECT … FOR UPDATE`) hoặc `@Version` → `409 CONCURRENT_MODIFICATION`.
 
-#### `FN-VND-04: Quản lý Dự án của Vendor` 🆕
+#### `FN-VND-04: Quản lý Dự án của Vendor` ✅
 * **Danh sách:** `GET /api/v1/client/vendor/projects?status=UPCOMING|IN_PROGRESS|COMPLETED|CANCELLED&page=0&size=20` — `ROLE_VENDOR`, chỉ dự án của mình, sắp xếp `event_date` tăng dần (dự án `COMPLETED`/`CANCELLED` giảm dần). Màn hình "Dự án" có 3 tab *Sắp tới / Đang làm / Hoàn thành* tương ứng `UPCOMING / IN_PROGRESS / COMPLETED`.
 * **Cập nhật trạng thái:** `PATCH /api/v1/client/vendor/projects/{id}/status` — `{ "status": "IN_PROGRESS|COMPLETED|CANCELLED" }`, theo §1.6. Thông báo cho cặp đôi khi dự án chuyển `COMPLETED` hoặc `CANCELLED`. Chuyển `IN_PROGRESS`/`COMPLETED` khi đang có yêu cầu hủy → coi như từ chối yêu cầu đó.
 * **Cặp đôi xem:** `GET /api/v1/client/vendor-projects` — `ROLE_COUPLE`, các dự án của mình (để biết nhà cung cấp nào đã chốt).

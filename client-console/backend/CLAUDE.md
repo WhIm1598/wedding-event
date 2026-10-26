@@ -15,7 +15,7 @@ call them, so paths and JSON names must stay identical. Entities, repositories a
 | `plan/ai/` | `AiPlannerClient` (FN-PLAN-03 contract), `HttpAiPlannerClient` (ai-planner-service), `RuleBasedAiPlanner` (fallback when `app.ai-planner.base-url` is empty), `AiPlannerConfig` |
 | `guest/` | `GuestController`/`GuestService` (FN-GUEST-01/02) |
 | `quote/` | `QuoteRequestService` (FN-VND-01..03), `QuoteRequestController` (couple, `/client/quote-requests`), `VendorQuoteRequestController` (vendor, `/client/vendor/quote-requests`) |
-| `project/` | `VendorProjectService` (FN-VND-04; `VendorProjectDto`) — a project is created by `QuoteRequestService.accept` |
+| `project/` | `VendorProjectService` (FN-VND-04: status, couple's cancellation request), `VendorProjectController` (vendor, `/client/vendor/projects`), `CoupleProjectController` (couple, `/client/vendor-projects`) — a project is created by `QuoteRequestService.accept` |
 | `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio) |
 | `notification/` | `ClientNotificationController`/`ClientNotificationService` (FN-NOTI-01 inbox; `notify(userId, kind, title, body)` stores + pushes after commit), `PushSender`/`LoggingPushSender` |
 | `message/` | `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
@@ -29,7 +29,7 @@ Module package = `XxxController` + `XxxService` with request/response **records*
 - **Roles are not in the token.** A mobile user picks the role after signing in, and a locked account must stop working
   at once, so `UserAuthenticationConverter` loads the user on each request. Studio accounts (`ROLE_ADMIN/STAFF`) are
   rejected here (and mobile accounts by the admin backend). Tokens use issuer `wedding-event-client`; admin tokens fail.
-- Authorization in **two** places: URL rule in `SecurityConfig.apiSecurity` (plans/guests/quote-requests → `ROLE_COUPLE`; `/client/vendor/**` → `ROLE_VENDOR`; services and
+- Authorization in **two** places: URL rule in `SecurityConfig.apiSecurity` (plans/guests/quote-requests/vendor-projects → `ROLE_COUPLE`; `/client/vendor/**` → `ROLE_VENDOR`; services and
   messages → couple or vendor; `/auth/me`, `/users/**`, notifications → any signed-in user) **and** `@PreAuthorize`
   (`SecurityConfig.COUPLE`, `VENDOR`, `COUPLE_OR_VENDOR`) on the controller.
 - "My plan" = the `PLANNING` plan the user owns **or** joined as partner (`WeddingPlanRepository.findActiveFor`). A `DRAFT`
@@ -63,8 +63,7 @@ and every business code.
 `PLAN_ALREADY_SYNCED` 409, `INVALID_RECIPIENT` 400, `AI_SERVICE_UNAVAILABLE` 503, plus the generic ones.
 
 ## Not built (no spec yet)
-Vendor workspace beyond quote requests (FN-VND-04..05: project management, dashboard, service management — those
-`VendorRepository` calls work in mock mode only), refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
+Vendor dashboard and service management (FN-VND-05 — those `VendorRepository` calls work in mock mode only), refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
 
 ## Check
 `./gradlew :client-console:backend:build` — tests need Docker (Testcontainers) or an empty PostgreSQL via

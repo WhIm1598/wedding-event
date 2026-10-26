@@ -105,6 +105,7 @@ class VendorRepository {
       final project = VendorProject(
         id: 'p-${MockData.vendorProjects.length + 1}',
         coupleName: accepted.coupleName,
+        vendorName: accepted.vendorName,
         packageName: accepted.packageName,
         eventDate: date,
         agreedPrice: accepted.quotedPrice!,
@@ -137,12 +138,59 @@ class VendorRepository {
     throw UnimplementedError('GET /client/vendor/dashboard');
   }
 
-  /// GET /client/vendor/projects
-  Future<List<VendorProject>> getProjects({ProjectStatus? status}) {
+  /// GET /client/vendor/projects (vendor) or /client/vendor-projects (couple) — FN-VND-04
+  Future<List<VendorProject>> getProjects({required bool asVendor, ProjectStatus? status}) {
     if (Env.useMock) {
       return mockDelay(MockData.vendorProjects.where((p) => status == null || p.status == status).toList(), 250);
     }
-    throw UnimplementedError('GET /client/vendor/projects');
+    return _api.get(
+      asVendor ? '/client/vendor/projects' : '/client/vendor-projects',
+      // shortcut: first 100 projects only, no paging in the app yet
+      query: {if (asVendor && status != null) 'status': status.apiName, 'size': 100},
+      parse: (d) => ((d! as Map<String, dynamic>)['items'] as List<dynamic>)
+          .map((e) => VendorProject.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// PATCH /client/vendor/projects/{id}/status (FN-VND-04) — moving on rejects a pending cancellation request
+  Future<VendorProject> updateProjectStatus(VendorProject project, ProjectStatus status) {
+    if (Env.useMock) {
+      final allowed = status == ProjectStatus.cancelled ? project.isOpen : project.nextSteps.contains(status);
+      return _mockProjectChange(project.id, allowed,
+          (p) => status == ProjectStatus.cancelled ? p.copyWith(status: status) : p.copyWith(status: status, clearCancel: true));
+    }
+    return _api.patch('/client/vendor/projects/${project.id}/status',
+        body: {'status': status.apiName}, parse: (d) => VendorProject.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// POST /client/vendor-projects/{id}/cancel-request (FN-VND-04) — couple asks, the vendor decides
+  Future<VendorProject> requestProjectCancel(VendorProject project, String reason) {
+    if (Env.useMock) {
+      return _mockProjectChange(project.id, project.isOpen && project.cancelRequestedAt == null,
+          (p) => p.copyWith(cancelRequestedAt: DateTime.now(), cancelReason: reason));
+    }
+    return _api.post('/client/vendor-projects/${project.id}/cancel-request',
+        body: {'reason': reason}, parse: (d) => VendorProject.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// POST /client/vendor/projects/{id}/cancel-request/approve|reject (FN-VND-04)
+  Future<VendorProject> decideProjectCancel(VendorProject project, {required bool approve}) {
+    if (Env.useMock) {
+      return _mockProjectChange(project.id, project.isOpen && project.cancelRequestedAt != null,
+          (p) => approve ? p.copyWith(status: ProjectStatus.cancelled) : p.copyWith(clearCancel: true));
+    }
+    return _api.post('/client/vendor/projects/${project.id}/cancel-request/${approve ? 'approve' : 'reject'}',
+        parse: (d) => VendorProject.fromJson(d! as Map<String, dynamic>));
+  }
+
+  Future<VendorProject> _mockProjectChange(String id, bool allowed, VendorProject Function(VendorProject) change) {
+    if (!allowed) {
+      throw const ApiException(code: 'INVALID_STATUS_TRANSITION', message: 'Dự án không còn ở trạng thái cho phép thao tác này');
+    }
+    final i = MockData.vendorProjects.indexWhere((p) => p.id == id);
+    MockData.vendorProjects[i] = change(MockData.vendorProjects[i]);
+    return mockDelay(MockData.vendorProjects[i], 300);
   }
 
   /// GET /client/vendor/conversations

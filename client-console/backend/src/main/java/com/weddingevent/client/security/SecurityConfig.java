@@ -56,7 +56,8 @@ public class SecurityConfig {
                         // WebSocket handshake; the STOMP CONNECT frame carries the token (StompAuthInterceptor)
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
-                        .requestMatchers("/api/v1/client/plans/**", "/api/v1/client/guests/**", "/api/v1/client/quote-requests/**")
+                        .requestMatchers("/api/v1/client/plans/**", "/api/v1/client/guests/**", "/api/v1/client/quote-requests/**",
+                                "/api/v1/client/vendor-projects/**")
                                 .hasRole("COUPLE")
                         .requestMatchers("/api/v1/client/vendor/**").hasRole("VENDOR")
                         .requestMatchers("/api/v1/client/services/**", "/api/v1/messages/**").hasAnyRole("COUPLE", "VENDOR")

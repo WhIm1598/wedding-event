@@ -49,6 +49,7 @@ class Routes {
   static const accountSettings = '/profile/settings';
   static const serviceManagement = '/vendor/services';
   static const quoteRequests = '/quote-requests';
+  static const bookedVendors = '/booked-vendors';
 
   static String serviceDetailFor(String id) => '/services/$id';
 }
@@ -91,6 +92,8 @@ GoRouter createRouter(SessionController session) {
       GoRoute(path: Routes.accountSettings, builder: (_, __) => const AccountSettingsScreen()),
       GoRoute(path: Routes.serviceManagement, builder: (_, __) => const ServiceManagementScreen()),
       GoRoute(path: Routes.quoteRequests, builder: (_, __) => const QuoteRequestsScreen()),
+      // The couple's view of FN-VND-04; vendors use the Routes.vendorProjects tab
+      GoRoute(path: Routes.bookedVendors, builder: (_, __) => const VendorProjectsScreen()),
     ],
   );
 }

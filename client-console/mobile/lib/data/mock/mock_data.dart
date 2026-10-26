@@ -132,9 +132,9 @@ class MockData {
   ];
 
   static final List<VendorProject> vendorProjects = [
-    VendorProject(id: 'p-1', coupleName: 'Ngọc & Hoàng', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 12, 20), agreedPrice: 18000000, status: ProjectStatus.upcoming, venue: 'Gem Center, Quận 1'),
-    VendorProject(id: 'p-2', coupleName: 'Lan & Tuấn', packageName: 'Chụp Pre-Wedding', eventDate: DateTime(2026, 10, 15), agreedPrice: 15000000, status: ProjectStatus.inProgress),
-    VendorProject(id: 'p-3', coupleName: 'Minh & Vy', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 8, 1), agreedPrice: 12000000, status: ProjectStatus.completed),
+    VendorProject(id: 'p-1', coupleName: 'Ngọc & Hoàng', vendorName: 'Lumiere Studio', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 12, 20), agreedPrice: 18000000, status: ProjectStatus.upcoming, venue: 'Gem Center, Quận 1'),
+    VendorProject(id: 'p-2', coupleName: 'Lan & Tuấn', vendorName: 'Lumiere Studio', packageName: 'Chụp Pre-Wedding', eventDate: DateTime(2026, 10, 15), agreedPrice: 15000000, status: ProjectStatus.inProgress),
+    VendorProject(id: 'p-3', coupleName: 'Minh & Vy', vendorName: 'Lumiere Studio', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 8, 1), agreedPrice: 12000000, status: ProjectStatus.completed),
   ];
 
   static const List<ChatThread> chatThreads = [

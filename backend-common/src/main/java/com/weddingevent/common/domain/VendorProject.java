@@ -1,6 +1,7 @@
 package com.weddingevent.common.domain;
 
 import com.weddingevent.common.domain.enums.VendorProjectStatus;
+import com.weddingevent.common.exception.AppException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -67,6 +68,71 @@ public class VendorProject extends BaseEntity {
 
     @Version
     private long version;
+
+    /**
+     * Vendor moves the project along §1.6 ({@code UPCOMING → IN_PROGRESS → COMPLETED}, {@code UPCOMING → COMPLETED},
+     * open → CANCELLED). Moving the work on while the couple asked to cancel rejects that request.
+     *
+     * @return true when a pending cancellation request was rejected by this move
+     */
+    public boolean moveTo(VendorProjectStatus next) {
+        boolean allowed = switch (status) {
+            case UPCOMING -> next != VendorProjectStatus.UPCOMING;
+            case IN_PROGRESS -> next == VendorProjectStatus.COMPLETED || next == VendorProjectStatus.CANCELLED;
+            case COMPLETED, CANCELLED -> false;
+        };
+        if (!allowed) {
+            throw refused("Không thể chuyển dự án từ " + status + " sang " + next);
+        }
+        boolean rejected = next != VendorProjectStatus.CANCELLED && hasPendingCancelRequest();
+        if (rejected) {
+            clearCancelRequest();
+        }
+        status = next;
+        return rejected;
+    }
+
+    /** The couple asks to cancel; the status stays until the vendor approves or rejects */
+    public void requestCancel(String reason, Instant at) {
+        if (!isOpen() || hasPendingCancelRequest()) {
+            throw refused("Dự án đã kết thúc hoặc đang chờ Vendor duyệt yêu cầu hủy");
+        }
+        cancelRequestedAt = at;
+        cancelReason = reason;
+    }
+
+    public void approveCancel() {
+        requirePendingCancel();
+        status = VendorProjectStatus.CANCELLED; // the reason stays on record
+    }
+
+    public void rejectCancel() {
+        requirePendingCancel();
+        clearCancelRequest();
+    }
+
+    public boolean hasPendingCancelRequest() {
+        return cancelRequestedAt != null && isOpen();
+    }
+
+    private boolean isOpen() {
+        return status == VendorProjectStatus.UPCOMING || status == VendorProjectStatus.IN_PROGRESS;
+    }
+
+    private void requirePendingCancel() {
+        if (!hasPendingCancelRequest()) {
+            throw refused("Dự án không có yêu cầu hủy đang chờ duyệt");
+        }
+    }
+
+    private void clearCancelRequest() {
+        cancelRequestedAt = null;
+        cancelReason = null;
+    }
+
+    private static AppException refused(String message) {
+        return AppException.conflict("INVALID_STATUS_TRANSITION", message);
+    }
 
     /** The project an accepted quote request turns into: the quoted price is the agreed price */
     public static VendorProject from(QuoteRequest q, LocalDate eventDate, String venue) {

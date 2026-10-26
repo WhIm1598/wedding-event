@@ -14,6 +14,7 @@ void main() {
     final p = VendorProject.fromJson({
       'id': 'p1',
       'coupleName': 'Ngọc & Hoàng',
+      'vendorName': 'Dreamy Decor',
       'packageName': 'Trang trí cổng hoa',
       'eventDate': '2026-12-20',
       'venue': null,
@@ -26,5 +27,6 @@ void main() {
     expect(p.status, ProjectStatus.inProgress);
     expect(p.eventDate, DateTime(2026, 12, 20));
     expect(p.cancelRequestedAt, isNotNull);
+    expect(p.nextSteps, [ProjectStatus.completed]);
   });
 }
