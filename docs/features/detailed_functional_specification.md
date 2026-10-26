@@ -285,7 +285,7 @@ stateDiagram-v2
 * **Endpoint:** `GET /api/v1/auth/me` — mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò).
 * **Output (200):** đối tượng `user` như FN-AUTH-01. App gọi khi khởi động để khôi phục phiên. Token sai/hết hạn, hoặc tài khoản đã bị khóa/xóa (người dùng được đọc lại từ DB mỗi request) → `401 UNAUTHORIZED`.
 
-#### `FN-AUTH-07: Làm mới phiên & Đăng xuất trên mobile` 🆕 *(v1.1.4)*
+#### `FN-AUTH-07: Làm mới phiên & Đăng xuất trên mobile` ✅ *(v1.1.4)*
 * **Mục tiêu:** Người dùng app giữ phiên đăng nhập tới 30 ngày mà không phải đăng nhập lại mỗi 2 giờ; token bị lộ có thể bị thu hồi.
 * **Lưu trữ:** bảng `refresh_tokens` (migration mới): `id` (UUID = claim `jti` của refresh token), `user_id` (FK `users`, `ON DELETE CASCADE`), `expires_at`, `used_at` (nullable), `revoked_at` (nullable), `created_at`. Không lưu chuỗi token. Mỗi lần cấp token (FN-AUTH-01, FN-AUTH-05, làm mới) tạo một dòng; refresh token mang thêm claim `jti`.
 * **Làm mới:** `POST /api/v1/auth/refresh` — Public. Input: `{ "refreshToken": "..." }` (bắt buộc).

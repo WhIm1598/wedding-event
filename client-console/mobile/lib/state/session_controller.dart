@@ -8,6 +8,20 @@ import '../data/repositories/auth_repository.dart';
 class SessionController extends ChangeNotifier {
   SessionController(this._auth);
 
+  /// Splash: signs back in with the saved tokens (FN-AUTH-07). Only a verified account counts as a session.
+  Future<void> restore() async {
+    final user = await _auth.restoreSession();
+    if (user != null && user.isVerified) _setUser(user);
+  }
+
+  /// ApiClient calls this when the server refuses the refresh token: back to the login screen
+  void sessionExpired() {
+    if (_user == null) return;
+    _user = null;
+    _pendingUser = null;
+    notifyListeners();
+  }
+
   final AuthRepository _auth;
 
   AppUser? _user;
@@ -61,7 +75,7 @@ class SessionController extends ChangeNotifier {
   }
 
   void logout() {
-    _auth.logout();
+    _auth.logout().ignore();
     _user = null;
     _pendingUser = null;
     notifyListeners();

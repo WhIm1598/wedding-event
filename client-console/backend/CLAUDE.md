@@ -11,7 +11,7 @@ agent) whenever an endpoint, DTO, validation rule or error code changes.
 ## Layout (`src/main/java/com/weddingevent/client/`)
 | Package | Contents |
 |---|---|
-| `auth/` | `AuthController` (`/auth/login`, `/google`, `/send-otp`, `/verify-otp`, `/me`), `AuthService` (FN-AUTH-01, Google), `OtpService` (FN-AUTH-02), adapters `OtpSender`/`LoggingOtpSender`, `GoogleIdTokenVerifier`/`NimbusGoogleIdTokenVerifier`, `AuthConfig` (their beans) |
+| `auth/` | `AuthController` (`/auth/login`, `/google`, `/send-otp`, `/verify-otp`, `/me`, `/refresh`, `/logout`, `/logout-all`), `AuthService` (FN-AUTH-01, Google, FN-AUTH-07 refresh rotation), `RefreshTokenCleanup` (daily job), `OtpService` (FN-AUTH-02), adapters `OtpSender`/`LoggingOtpSender`, `GoogleIdTokenVerifier`/`NimbusGoogleIdTokenVerifier`, `AuthConfig` (their beans) |
 | `user/` | `UserController` (`/users/role`, `/users/me`), `UserService` (FN-AUTH-03/04, `VN_PHONE`), `UserDto` (the spec's `user` object) |
 | `plan/` | `PlanController`/`PlanService` (FN-PLAN-01..05), `PlanDtos` (response records + the % formulas), `DefaultChecklist`, `WeddingStyle` |
 | `plan/ai/` | `AiPlannerClient` (FN-PLAN-03 contract), `HttpAiPlannerClient` (ai-planner-service), `RuleBasedAiPlanner` (fallback when `app.ai-planner.base-url` is empty), `AiPlannerConfig` |
@@ -22,7 +22,7 @@ agent) whenever an endpoint, DTO, validation rule or error code changes.
 | `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio; `zaloUrl` from `studio_settings.zalo_phone` or the vendor account's phone) |
 | `notification/` | `ClientNotificationController`/`ClientNotificationService` (FN-NOTI-01 inbox; `notify(userId, kind, title, body)` stores + pushes after commit), `PushSender`/`LoggingPushSender` |
 | `message/` | FN-MSG-01, not used by the app for now (v1.1.3: couples contact providers on Zalo). `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
-| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService`, `UserAuthenticationConverter` (role **from the DB** per request), `CurrentUser.id(jwt)`, `SecurityErrorHandler` |
+| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService` (pair + `refresh_tokens` row per refresh token, own refresh decoder — the only `JwtDecoder` bean stays the access one), `UserAuthenticationConverter` (role **from the DB** per request), `CurrentUser.id(jwt)`, `SecurityErrorHandler` |
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, otp, google, ai-planner, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `demo/` | `ClientDemoDataSeeder` — demo couple/vendors/catalog when `app.demo-data.enabled` (dev, test) |
 
@@ -69,7 +69,7 @@ and every business code.
 `QUOTE_ALREADY_OPEN` 409 (+ `data.existingId`), `INVALID_STATUS_TRANSITION` 409, `CONCURRENT_MODIFICATION` 409, plus the generic ones.
 
 ## Not built (no spec yet)
-Refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
+Conversation history, e-mail delivery, FCM, Redis-backed presence.
 
 ## Check
 `./gradlew :client-console:backend:build` — tests need Docker (Testcontainers) or an empty PostgreSQL via

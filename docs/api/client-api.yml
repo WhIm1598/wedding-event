@@ -217,6 +217,96 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Exchange a refresh token for a new pair (rotation)
+      description: |
+        The refresh token must be one of this service's (`typ = refresh`, with a `jti`) and its `refresh_tokens` row
+        must be neither revoked nor expired. The row is locked, marked used, and a new pair is issued (the new refresh
+        token lives 30 days from now). A token that was already exchanged is a copy: every session of the user is
+        revoked and `401` is returned. Clients must refresh single-flight. A locked account gets `403 ACCOUNT_LOCKED`.
+      x-spec-function: FN-AUTH-07
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refreshToken: eyJhbGciOiJIUzI1NiJ9...
+      responses:
+        '200':
+          $ref: '#/components/responses/LoginOk'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: '`INVALID_REFRESH_TOKEN` — not a refresh token of this service, unknown, revoked, expired or already used.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_REFRESH_TOKEN
+                message: Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại
+        '403':
+          $ref: '#/components/responses/AccountLocked'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke this device's refresh token
+      description: Always `200`, also for invalid or already revoked tokens (reveals nothing). The access token stays valid until it expires (2 h).
+      x-spec-function: FN-AUTH-07
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Signed out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã đăng xuất
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutAll
+      summary: Revoke every refresh token of the caller
+      description: Every device has to sign in again once its access token expires.
+      x-spec-function: FN-AUTH-07
+      x-roles: [authenticated]
+      responses:
+        '200':
+          description: All sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã đăng xuất khỏi mọi thiết bị
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/auth/send-otp:
     post:
       tags: [auth]
@@ -2159,6 +2249,13 @@ components:
         password:
           type: string
           minLength: 6
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
     GoogleLoginRequest:
       type: object
       required: [idToken]

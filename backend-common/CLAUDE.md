@@ -5,7 +5,7 @@ same database. Package root `com.weddingevent.common`. Lombok `@Getter/@Setter` 
 
 | Path | Contents |
 |---|---|
-| `domain/` | JPA entities extending `BaseEntity` (UUID id, `createdAt`, `updatedAt`). Studio: `User`, `StaffMember`, `StaffTask`, `ServicePackage`, `Booking`, `Asset`, `AssetReservation`, `Lead`, `Contract`, `PaymentTransaction`, `Notification`, `StudioSettings` (single row, id 1). Mobile: `WeddingPlan` (+ `BudgetItem`, `PlanTask`), `Guest`, `PlanSyncCode`, `EmailOtp`, `VendorProfile`, `QuoteRequest` → `VendorProject`, `ChatRoom`, `ChatMessage` |
+| `domain/` | JPA entities extending `BaseEntity` (UUID id, `createdAt`, `updatedAt`). Studio: `User`, `StaffMember`, `StaffTask`, `ServicePackage`, `Booking`, `Asset`, `AssetReservation`, `Lead`, `Contract`, `PaymentTransaction`, `Notification`, `StudioSettings` (single row, id 1). Mobile: `WeddingPlan` (+ `BudgetItem`, `PlanTask`), `Guest`, `PlanSyncCode`, `EmailOtp`, `RefreshToken`, `VendorProfile`, `QuoteRequest` → `VendorProject`, `ChatRoom`, `ChatMessage` |
 | `domain/enums/` | One enum per file; values exactly as the spec (§1.6 state machines). Stored as `VARCHAR` (`@Enumerated(EnumType.STRING)`) |
 | `repository/` | Spring Data repositories, **one top-level interface per file** (nested interfaces are not scanned). Projection interfaces may be nested |
 | `api/ApiResponse` | Envelope `{success, code, message, data, errors}`: `ApiResponse.ok(data[, message])`, `FieldError(field, message)` |

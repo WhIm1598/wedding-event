@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'core/network/api_client.dart';
+import 'core/network/token_store.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
@@ -21,8 +22,14 @@ class WedPlannerApp extends StatefulWidget {
 }
 
 class _WedPlannerAppState extends State<WedPlannerApp> {
-  final ApiClient _api = ApiClient();
+  final ApiClient _api = ApiClient(store: TokenStore());
   late final SessionController _session = SessionController(AuthRepository(_api));
+
+  @override
+  void initState() {
+    super.initState();
+    _api.onSessionExpired = _session.sessionExpired;
+  }
   late final GoRouter _router = createRouter(_session);
 
   @override

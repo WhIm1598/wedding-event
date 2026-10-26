@@ -1,6 +1,6 @@
 # client-console/mobile — WedPlanner app
 
-Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · url_launcher · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
+Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · url_launcher · flutter_secure_storage · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
 Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios --org vn.wedplanner` and not committed.
 After generating: revert `analysis_options.yaml`, delete the sample `test/widget_test.dart`, add
 `<application android:usesCleartextTraffic="true"/>` to `android/app/src/debug/AndroidManifest.xml` (local backend is plain http)
@@ -17,7 +17,7 @@ FN-SVC-02, opened with `launchUrl`); FN-MSG-01 stays in the backend but the app 
 |---|---|
 | `main.dart`, `app.dart` | Bootstrap; `MultiProvider` registering `ApiClient`, `SessionController` and every repository |
 | `core/config/env.dart` | `Env.useMock` (`--dart-define=USE_MOCK=false`), `Env.apiBaseUrl` (`API_BASE_URL`, default `http://10.0.2.2:8081/api/v1`), Google Sign-In ids `GOOGLE_SERVER_CLIENT_ID` (Web client) / `GOOGLE_IOS_CLIENT_ID` |
-| `core/network/` | `ApiClient.get/post/put/patch(path, {body/query, parse:})` unwrapping the `{success, code, message, data}` envelope; `ApiException(code:, message:, statusCode:)`; `mockDelay(value, [ms])` |
+| `core/network/` | `ApiClient.get/post/put/patch(path, {body/query, parse:})` unwrapping the `{success, code, message, data}` envelope; session (FN-AUTH-07): `setTokens`/`clearTokens`/`restoreTokens` persisted by `TokenStore` (secure storage), a 401 triggers one single-flight `/auth/refresh` and a retry, a refused refresh calls `onSessionExpired`; `ApiException(code:, message:, statusCode:)`; `mockDelay(value, [ms])` |
 | `core/router/app_router.dart` | `Routes` path constants + `createRouter(session)`: auth redirects, `ShellRoute` for bottom-nav tabs, plain `GoRoute`s for full-screen pages |
 | `core/theme/` | `AppColors` (rose/pink brand, slate neutrals), `AppTheme.light` |
 | `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>`, `showAppSnack`, `showComingSoon` (Vietnamese "sắp ra mắt" for template buttons without a spec endpoint; dev notes stay in code comments, never in UI text) |

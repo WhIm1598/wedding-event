@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../state/session_controller.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -21,9 +23,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    // TODO: restore a saved session here before deciding the next route
-    _timer = Timer(const Duration(seconds: 2), () {
-      if (mounted) context.go(Routes.login);
+    // Restoring the session (FN-AUTH-07) runs alongside the 2-second splash; once signed in, the router redirects
+    final restored = context.read<SessionController>().restore();
+    _timer = Timer(const Duration(seconds: 2), () async {
+      await restored;
+      if (mounted && !context.read<SessionController>().isLoggedIn) context.go(Routes.login);
     });
   }
 

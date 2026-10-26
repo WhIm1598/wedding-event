@@ -6,16 +6,32 @@ import '../../core/network/api_exception.dart';
 import '../mock/mock_data.dart';
 import '../models/app_user.dart';
 
-/// Module 1: Authentication & Onboarding (FN-AUTH-01..04, Google login)
+/// Module 1: Authentication & Onboarding (FN-AUTH-01..07)
 class AuthRepository {
   AuthRepository(this._api);
 
   final ApiClient _api;
 
-  AppUser _readLogin(Object? data) {
-    final map = data! as Map<String, dynamic>;
-    _api.accessToken = map['accessToken'] as String?;
-    return AppUser.fromJson(map['user'] as Map<String, dynamic>);
+  /// Keeps the token pair of a login response (FN-AUTH-01 step 4) and returns its user
+  Future<AppUser> _signIn(Future<Map<String, dynamic>> call) async {
+    final data = await call;
+    await _api.setTokens(data['accessToken'] as String, data['refreshToken'] as String);
+    return AppUser.fromJson(data['user'] as Map<String, dynamic>);
+  }
+
+  static Map<String, dynamic> _map(Object? d) => d! as Map<String, dynamic>;
+
+  /// FN-AUTH-06 with the tokens saved by an earlier run; null when there is no session to restore
+  Future<AppUser?> restoreSession() async {
+    if (Env.useMock || !await _api.restoreTokens()) return null;
+    try {
+      // An expired access token is refreshed by ApiClient on the way
+      return await _api.get('/auth/me', parse: (d) => AppUser.fromJson(_map(d)));
+    } on ApiException catch (e) {
+      // Offline: keep the tokens for the next start; refused: the session is gone
+      if (e.statusCode != null) await _api.clearTokens();
+      return null;
+    }
   }
 
   /// POST /auth/login
@@ -23,7 +39,7 @@ class AuthRepository {
     if (Env.useMock) {
       return mockDelay(AppUser(id: 'u-1', email: email, fullName: 'Ngọc & Hoàng', isVerified: false), 800);
     }
-    return _api.post('/auth/login', body: {'email': email, 'password': password}, parse: _readLogin);
+    return _signIn(_api.post('/auth/login', body: {'email': email, 'password': password}, parse: _map));
   }
 
   bool _googleReady = false;
@@ -55,7 +71,7 @@ class AuthRepository {
     if (idToken == null) {
       throw const ApiException(code: 'INVALID_GOOGLE_TOKEN', message: 'Google không trả về ID token');
     }
-    return _api.post('/auth/google', body: {'idToken': idToken}, parse: _readLogin);
+    return _signIn(_api.post('/auth/google', body: {'idToken': idToken}, parse: _map));
   }
 
   /// POST /auth/verify-otp — 4 digits, valid 5 minutes, max 5 attempts
@@ -107,9 +123,14 @@ class AuthRepository {
     );
   }
 
-  /// Also signs out of Google, so the next Google login shows the account picker again
-  void logout() {
-    _api.accessToken = null;
-    if (!Env.useMock && _googleReady) GoogleSignIn.instance.signOut();
+  /// POST /auth/logout (FN-AUTH-07) revokes this device's refresh token; also signs out of Google, so the next
+  /// Google login shows the account picker again. Signing out locally never waits on or fails because of the server.
+  Future<void> logout() async {
+    final refresh = _api.refreshToken;
+    if (!Env.useMock && refresh != null) {
+      _api.post('/auth/logout', body: {'refreshToken': refresh}, parse: (_) {}).ignore();
+    }
+    await _api.clearTokens();
+    if (!Env.useMock && _googleReady) await GoogleSignIn.instance.signOut();
   }
 }
