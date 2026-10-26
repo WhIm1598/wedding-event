@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'core/network/api_client.dart';
+import 'core/network/token_store.dart';
+import 'core/push/push_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
@@ -21,8 +23,21 @@ class WedPlannerApp extends StatefulWidget {
 }
 
 class _WedPlannerAppState extends State<WedPlannerApp> {
-  final ApiClient _api = ApiClient();
-  late final SessionController _session = SessionController(AuthRepository(_api));
+  final ApiClient _api = ApiClient(store: TokenStore());
+  late final PushService _push = PushService(_api);
+  late final SessionController _session = SessionController(AuthRepository(_api), push: _push);
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _api.onSessionExpired = _session.sessionExpired;
+    _push.onOpenNotifications = () => _router.push(Routes.notifications);
+    _push.onForegroundNotification = (title, body) => _messenger.currentState?.showSnackBar(SnackBar(
+          content: Text(body.isEmpty ? title : '$title: $body'),
+          action: SnackBarAction(label: 'Xem', onPressed: () => _router.push(Routes.notifications)),
+        ));
+  }
   late final GoRouter _router = createRouter(_session);
 
   @override
@@ -37,6 +52,7 @@ class _WedPlannerAppState extends State<WedPlannerApp> {
     return MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: _api),
+        Provider<PushService>.value(value: _push),
         ChangeNotifierProvider<SessionController>.value(value: _session),
         Provider<PlanRepository>(create: (_) => PlanRepository(_api)),
         Provider<GuestRepository>(create: (_) => GuestRepository(_api)),
@@ -49,6 +65,7 @@ class _WedPlannerAppState extends State<WedPlannerApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         routerConfig: _router,
+        scaffoldMessengerKey: _messenger,
       ),
     );
   }

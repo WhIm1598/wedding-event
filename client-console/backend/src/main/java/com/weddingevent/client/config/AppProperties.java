@@ -7,7 +7,7 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("app")
-public record AppProperties(ZoneId zone, Jwt jwt, Cors cors, Otp otp, Google google, AiPlanner aiPlanner, DemoData demoData) {
+public record AppProperties(ZoneId zone, Jwt jwt, Cors cors, Otp otp, Google google, AiPlanner aiPlanner, Fcm fcm, DemoData demoData) {
 
     public record Jwt(String secret, String issuer, Duration accessTokenTtl, Duration refreshTokenTtl) {
         public Jwt {
@@ -31,6 +31,13 @@ public record AppProperties(ZoneId zone, Jwt jwt, Cors cors, Otp otp, Google goo
 
     /** FN-PLAN-03 in-house AI planner; blank base URL = built-in rule-based planner */
     public record AiPlanner(String baseUrl, Duration timeout) {}
+
+    /** FN-NOTI-02 push via FCM HTTP v1; blank credentials file = pushes are only logged (dev, test) */
+    public record Fcm(String projectId, String credentialsFile, String baseUrl) {
+        public boolean enabled() {
+            return credentialsFile != null && !credentialsFile.isBlank();
+        }
+    }
 
     public record DemoData(boolean enabled) {}
 }

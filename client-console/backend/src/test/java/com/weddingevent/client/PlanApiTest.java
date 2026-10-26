@@ -299,6 +299,12 @@ class PlanApiTest extends ClientIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(authed(get("/api/v1/client/plans/my-plan"), ownerToken))
                 .andExpect(jsonPath("$.data.tasksProgress.completedTasks").value(1));
+        // FN-PLAN-05 (v1.1.5): only the other half's devices are told to reload, silently
+        assertThat(pushSender.sentTo(owner.getId())).anySatisfy(p -> {
+            assertThat(p.title()).isNull();
+            assertThat(p.data()).containsEntry("type", "plan_updated").containsEntry("planId", planId);
+        });
+        assertThat(pushSender.sentTo(partner.getId())).noneMatch(p -> p.data() != null && "plan_updated".equals(p.data().get("type")));
 
         // Both are notified, in the inbox and by push
         for (User u : new User[] {owner, partner}) {

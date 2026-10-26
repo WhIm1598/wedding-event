@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/push/push_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -21,10 +22,27 @@ class _PlanManagementScreenState extends State<PlanManagementScreen> {
   late Future<WeddingPlan?> _future;
   WeddingPlan? _plan;
 
+  late final PushService _push = context.read<PushService>();
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
     _load();
+    // FN-PLAN-05 (v1.1.5): the partner ticked a task, or we come back from the background (a push may have been missed)
+    _push.planUpdates.addListener(_reload);
+    _lifecycle = AppLifecycleListener(onResume: _reload);
+  }
+
+  @override
+  void dispose() {
+    _push.planUpdates.removeListener(_reload);
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  void _reload() {
+    if (mounted) setState(_load);
   }
 
   void _load() {

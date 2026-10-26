@@ -63,5 +63,10 @@ app:
     # In-house AI planner (FN-PLAN-03), e.g. http://ai-planner-service:8000. Empty = built-in rule-based planner.
     base-url: ${AI_PLANNER_BASE_URL:}
     timeout: 30s
+  fcm:
+    # FN-NOTI-02, see docs/setup/google-cloud-firebase.md. Empty credentials file = pushes are only logged.
+    project-id: ${FCM_PROJECT_ID:}
+    credentials-file: ${FCM_CREDENTIALS_FILE:}
+    base-url: https://fcm.googleapis.com
   demo-data:
     enabled: false

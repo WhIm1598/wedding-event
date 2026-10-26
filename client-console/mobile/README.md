@@ -54,8 +54,7 @@ lib/
 
 ## Việc cần làm khi triển khai thật (TODO)
 
-- Lưu token vào secure storage (`flutter_secure_storage`) + refresh token; khôi phục phiên ở Splash.
 - Google Sign-In: code đã có (`google_sign_in`); còn tạo OAuth client Web/Android/iOS trên Google Cloud và truyền `--dart-define=GOOGLE_SERVER_CLIENT_ID=...` (xem `CLAUDE.md`).
-- Firebase Cloud Messaging cho push notification. Chat Cặp đôi–Studio/Vendor (FN-MSG-01, WebSocket STOMP) đã có ở backend nhưng tạm ẩn trên app: liên hệ qua Zalo.
+- Push (FCM): bật bằng `--dart-define=FCM_ENABLED=true` sau khi làm theo `docs/setup/google-cloud-firebase.md`. Chat Cặp đôi–Studio/Vendor (FN-MSG-01, WebSocket STOMP) đã có ở backend nhưng tạm ẩn trên app: liên hệ qua Zalo.
 - Không gian Vendor (FN-VND-01..05): đã chạy với backend thật (báo giá, dự án, dashboard, quản lý gói và giảm giá). Chat trợ lý AI chưa có trong spec — đang dùng mock.
 - Bật lại `prefer_const_constructors` trong `analysis_options.yaml` rồi chạy `dart fix --apply`.

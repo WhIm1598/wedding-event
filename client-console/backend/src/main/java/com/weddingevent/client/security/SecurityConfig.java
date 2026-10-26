@@ -52,7 +52,8 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/google",
-                                "/api/v1/auth/send-otp", "/api/v1/auth/verify-otp").permitAll()
+                                "/api/v1/auth/send-otp", "/api/v1/auth/verify-otp", "/api/v1/auth/refresh",
+                                "/api/v1/auth/logout").permitAll()
                         // WebSocket handshake; the STOMP CONNECT frame carries the token (StompAuthInterceptor)
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
@@ -62,7 +63,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/client/vendor/**").hasRole("VENDOR")
                         .requestMatchers("/api/v1/client/services/**", "/api/v1/messages/**").hasAnyRole("COUPLE", "VENDOR")
                         // Signed in, any role (or none yet): profile, role picker, inbox
-                        .requestMatchers("/api/v1/auth/me", "/api/v1/users/**", "/api/v1/client/notifications/**").authenticated()
+                        .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout-all", "/api/v1/users/**", "/api/v1/client/notifications/**").authenticated()
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.decoder(accessTokenDecoder).jwtAuthenticationConverter(converter))

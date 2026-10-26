@@ -6,13 +6,17 @@ import com.weddingevent.client.security.TokenService.TokenPair;
 import com.weddingevent.client.security.UserAuthenticationConverter;
 import com.weddingevent.client.user.UserDto;
 import com.weddingevent.client.user.UserService;
+import com.weddingevent.common.domain.RefreshToken;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.exception.AppException;
+import com.weddingevent.common.repository.RefreshTokenRepository;
 import com.weddingevent.common.repository.UserRepository;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,18 +41,24 @@ public class AuthService {
 
     public record LoginResponse(String accessToken, String refreshToken, UserDto user) {}
 
+    public record RefreshRequest(@NotBlank(message = "Thiếu refresh token") String refreshToken) {}
+
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokens;
     private final OtpService otp;
     private final GoogleIdTokenVerifier google;
     private final UserService userService;
+    private final RefreshTokenRepository refreshTokens;
+    private final Clock clock;
     /** Compared against when the email is unknown, so response time doesn't reveal which emails exist */
     private final String dummyHash;
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder, TokenService tokens, OtpService otp,
-            GoogleIdTokenVerifier google, UserService userService) {
+            GoogleIdTokenVerifier google, UserService userService, RefreshTokenRepository refreshTokens, Clock clock) {
         this.users = users;
+        this.refreshTokens = refreshTokens;
+        this.clock = clock;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
         this.otp = otp;
@@ -114,6 +124,51 @@ public class AuthService {
             user.setAvatarUrl(profile.pictureUrl());
         }
         return signIn(user);
+    }
+
+    /**
+     * FN-AUTH-07: exchanges a refresh token for a new pair (rotation). A token seen again after it was exchanged has
+     * been copied: every session of the user is revoked. That revocation must be kept although the call fails, hence
+     * no rollback for business errors.
+     */
+    @Transactional(noRollbackFor = AppException.class)
+    public LoginResponse refresh(RefreshRequest req) {
+        RefreshToken row = refreshTokens.findByIdForUpdate(tokens.refreshTokenId(req.refreshToken()))
+                .orElseThrow(TokenService::invalidRefreshToken);
+        Instant now = clock.instant();
+        User user = row.getUser();
+        if (!row.isUsable(now) || !UserAuthenticationConverter.isMobileUser(user)) {
+            throw TokenService.invalidRefreshToken();
+        }
+        if (row.getUsedAt() != null) {
+            refreshTokens.revokeAll(user.getId(), now);
+            throw TokenService.invalidRefreshToken();
+        }
+        if (!user.isActive()) {
+            throw AppException.forbidden("ACCOUNT_LOCKED", "Tài khoản đã bị khóa, vui lòng liên hệ hỗ trợ");
+        }
+        row.setUsedAt(now);
+        // Not signIn(): refreshing must not send another OTP to an unverified account
+        TokenPair pair = tokens.issue(user);
+        return new LoginResponse(pair.accessToken(), pair.refreshToken(), userService.dto(user));
+    }
+
+    /** FN-AUTH-07: revokes this refresh token; silent about invalid ones (always 200) */
+    @Transactional
+    public void logout(String refreshToken) {
+        UUID id;
+        try {
+            id = tokens.refreshTokenId(refreshToken);
+        } catch (AppException e) {
+            return;
+        }
+        refreshTokens.findById(id).filter(t -> t.getRevokedAt() == null).ifPresent(t -> t.setRevokedAt(clock.instant()));
+    }
+
+    /** FN-AUTH-07: every device of the caller has to sign in again (access tokens run out within 2 h) */
+    @Transactional
+    public void logoutAll(UUID userId) {
+        refreshTokens.revokeAll(userId, clock.instant());
     }
 
     @Transactional(readOnly = true)

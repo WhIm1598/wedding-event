@@ -36,7 +36,12 @@ class IntegrationAdaptersTest {
     void loggingSendersNeverFail() {
         assertThatCode(() -> new LoggingOtpSender(true).send("ngoc@example.com", "1234")).doesNotThrowAnyException();
         assertThatCode(() -> new LoggingOtpSender(false).send("ngoc@example.com", "1234")).doesNotThrowAnyException();
-        assertThatCode(() -> new LoggingPushSender().send(UUID.randomUUID(), "Tiêu đề", "Nội dung")).doesNotThrowAnyException();
+        assertThatCode(() -> new LoggingPushSender().send(UUID.randomUUID(),
+                new com.weddingevent.client.notification.PushSender.PushMessage("Tiêu đề", "Nội dung", java.util.Map.of())))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> new LoggingPushSender().send(UUID.randomUUID(),
+                com.weddingevent.client.notification.PushSender.PushMessage.dataOnly(java.util.Map.of("type", "plan_updated"))))
+                .doesNotThrowAnyException();
     }
 
     @Test
