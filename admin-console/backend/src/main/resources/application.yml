@@ -49,8 +49,6 @@ app:
     refresh-token-ttl: 30d
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
-  # Link sent to customers in the Zalo message (contract viewer, TODO)
-  public-base-url: ${PUBLIC_BASE_URL:http://localhost}
   demo-data:
     enabled: false
   # First admin of an empty production database (#36); ignored once any ROLE_ADMIN exists

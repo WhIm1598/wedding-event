@@ -5,7 +5,6 @@ import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 import com.weddingevent.admin.contract.ContractService.ContractDto;
 import com.weddingevent.admin.contract.ContractService.CreateContractRequest;
 import com.weddingevent.admin.contract.ContractService.Document;
-import com.weddingevent.admin.contract.ContractService.ShareZaloRequest;
 import com.weddingevent.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -67,11 +66,5 @@ public class ContractController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(doc.fileName()).build().toString())
                 .body(doc.content());
-    }
-
-    @PostMapping("/{id}/share-zalo")
-    public ApiResponse<Void> shareZalo(@PathVariable UUID id, @Valid @RequestBody(required = false) ShareZaloRequest req) {
-        service.shareZalo(id, req == null ? null : req.phoneNumber());
-        return ApiResponse.ok(null, "Đã gửi hợp đồng qua Zalo");
     }
 }

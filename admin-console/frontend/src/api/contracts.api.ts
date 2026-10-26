@@ -60,10 +60,4 @@ export const contractsApi = {
     a.click();
     URL.revokeObjectURL(url);
   },
-
-  /** POST /admin/contracts/{id}/share-zalo */
-  shareZalo(contract: Contract): Promise<void> {
-    if (!env.useMock) return http.post(`/admin/contracts/${contract.id}/share-zalo`, { phoneNumber: contract.phone });
-    return delay(undefined, 500);
-  },
 };

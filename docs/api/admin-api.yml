@@ -1635,62 +1635,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/admin/contracts/{id}/share-zalo:
-    post:
-      tags: [contracts]
-      operationId: shareContractZalo
-      summary: Send the contract link via Zalo
-      description: |
-        Sends the contract link (`{PUBLIC_BASE_URL}/contracts/{id}`) to `phoneNumber`, or to the contract phone when
-        the body/`phoneNumber` is missing or blank. Without `phoneNumber` and with `hasZalo = false` →
-        `400 ZALO_NOT_AVAILABLE`. The Zalo client is currently a logging stub (no message is actually sent).
-      x-spec-function: FN-ADM-CONTR-01
-      x-roles: [ROLE_ADMIN, ROLE_STAFF]
-      parameters:
-        - $ref: '#/components/parameters/ContractId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ShareZaloRequest'
-            example:
-              phoneNumber: '0900000024'
-      responses:
-        '200':
-          description: Sent. No `data`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccess'
-              example:
-                success: true
-                code: SUCCESS
-                message: Đã gửi hợp đồng qua Zalo
-        '400':
-          description: '`BAD_REQUEST` (invalid `phoneNumber`, malformed body or id) or `ZALO_NOT_AVAILABLE`.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                validation:
-                  value:
-                    success: false
-                    code: BAD_REQUEST
-                    message: Dữ liệu không hợp lệ
-                    errors:
-                      - { field: phoneNumber, message: Số điện thoại không hợp lệ }
-                zaloNotAvailable:
-                  value:
-                    success: false
-                    code: ZALO_NOT_AVAILABLE
-                    message: Số điện thoại của khách chưa đăng ký Zalo
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   # ---------------------------------------------------------------- financials
   /api/v1/admin/financials/transactions:
     get:
@@ -2798,14 +2742,6 @@ components:
         notes:
           type: [string, 'null']
           maxLength: 1000
-    ShareZaloRequest:
-      type: object
-      properties:
-        phoneNumber:
-          type: [string, 'null']
-          pattern: '^$|^0(3|5|7|8|9)[0-9]{8}$'
-          description: Recipient; empty/missing → the contract phone.
-
     # ------------------------------------------------------------ financials
     TransactionDto:
       type: object

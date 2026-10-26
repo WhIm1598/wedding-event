@@ -38,7 +38,6 @@ TEST_DATABASE_USERNAME=wedding_admin TEST_DATABASE_PASSWORD=... ./gradlew build
 | `SPRING_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | `jdbc:postgresql://localhost:5432/wedding_db` | |
 | `JWT_SECRET` | — (dev có giá trị mặc định) | **Bắt buộc** ngoài dev, tối thiểu 32 bytes |
 | `CORS_ALLOWED_ORIGINS` | dev: `http://localhost:5173` | Không cần khi đi qua Vite proxy / nginx gateway |
-| `PUBLIC_BASE_URL` | `http://localhost` | Link gửi khách qua Zalo |
 | `SERVER_PORT` | `8082` | |
 
 ## Cấu trúc

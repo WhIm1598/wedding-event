@@ -894,7 +894,7 @@ flowchart LR
 * **Mục tiêu:** Tạo văn bản hợp đồng pháp lý đầy đủ, hỗ trợ xuất PDF và chia sẻ qua Zalo.
 * **Endpoint 1:** `GET /api/v1/admin/contracts/{id}/preview-html` (`text/html`, dùng để render xem trước trong modal; mọi dữ liệu người dùng nhập phải được escape HTML).
 * **Endpoint 2:** `GET /api/v1/admin/contracts/{id}/export-pdf` (Trả về file nhị phân `application/pdf` chuẩn kích thước A4: 210mm x 297mm, tên file `HD-xxx.pdf`, font nhúng hỗ trợ tiếng Việt). *(v1.1)* PDF của hợp đồng không còn `DRAFT` được lưu MinIO (bucket `contracts`, key `{contractNumber}-v{version}.pdf`) và tái sử dụng; render lại khi hợp đồng thay đổi.
-* **Endpoint 3:** `POST /api/v1/admin/contracts/{id}/share-zalo`
+* **Endpoint 3:** 🆕 `POST /api/v1/admin/contracts/{id}/share-zalo` — *chưa làm (cần tài khoản Zalo OA/ZNS và FN-PUB-CONTR-01). Bản giả chỉ ghi log đã bị gỡ (#39); hiện nút "Nhắn Zalo" mở `https://zalo.me/{sđt}` để nhân viên tự gửi file PDF.*
   * Body (tùy chọn): `{ "phoneNumber": "0901112222" }` — mặc định SĐT trên hợp đồng.
   * Không truyền `phoneNumber` và hợp đồng `hasZalo = false` → `400 ZALO_NOT_AVAILABLE`.
   * Logic: Gửi tin nhắn Zalo ZNS tới khách kèm **link công khai có token** (FN-PUB-CONTR-01) và thông tin chuyển khoản *(v1.1 — không còn gửi link chứa UUID hợp đồng)*. Ghi activity "Đã gửi Zalo" vào hồ sơ khách.
