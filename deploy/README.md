@@ -50,8 +50,8 @@ docker compose -f docker-compose.prod.yml ps        # admin-backend phải "heal
 2. Đổi mật khẩu ngay (nút chìa khoá cạnh nút Đăng xuất).
 3. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
 4. Vào *Cài đặt* nhập thông tin studio.
-
-Tài khoản nhân viên: chưa có màn hình quản lý tài khoản (FN-ADM-USER-01 chưa làm). Đến khi có, studio dùng tài khoản admin.
+5. *Cài đặt → Tài khoản*: tạo tài khoản cho từng nhân viên (gắn hồ sơ nhân sự). Mật khẩu tạm chỉ hiện một lần; nhân viên phải đổi khi đăng nhập lần đầu.
+6. *(Tuỳ chọn)* *Cài đặt → Zalo OA*: kết nối Zalo OA của studio để nút **Gửi Zalo** gửi hợp đồng qua ZNS — làm theo [docs/setup/zalo-oa-zns.md](../docs/setup/zalo-oa-zns.md). Link trong tin dùng `https://<DOMAIN>/c/...` (compose tự đặt `PUBLIC_BASE_URL`).
 
 ## 4. Sao lưu và khôi phục
 
@@ -92,4 +92,5 @@ Migration mới chạy tự động khi backend khởi động. Chạy một b�
 - HTTPS bắt buộc (HTTP chuyển hướng 301), HSTS; header CSP / X-Frame-Options trên trang web.
 - Đăng nhập: tối đa 20 request/phút/IP ở gateway; sai mật khẩu 5 lần liên tiếp thì khoá 15 phút.
 - Chỉ `/api/v1/admin/**` và `/api/v1/public/**` đi vào backend; actuator và các API khác không ra ngoài.
+- Trang hợp đồng công khai `/api/v1/public/**`: tối đa 30 request/phút/IP; gateway ghi đè `X-Forwarded-For` bằng IP thật của khách.
 - Log: `docker compose -f docker-compose.prod.yml logs -f admin-backend` (không ghi mật khẩu, token).

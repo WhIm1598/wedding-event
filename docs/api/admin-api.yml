@@ -59,6 +59,8 @@ tags:
     description: Studio profile printed as party B on contracts (Module 9).
   - name: users
     description: Admin-console login accounts (Module 5A, FN-ADM-USER-01). Admin only.
+  - name: public
+    description: The customer's contract page behind the Zalo link (FN-PUB-CONTR-01). No login; the token is the credential; the gateway allows 30 requests/minute/IP.
 
 paths:
   # ---------------------------------------------------------------- auth
@@ -1082,6 +1084,102 @@ paths:
                 message: Trang phục VAY-001 đang vướng lịch bảo dưỡng giặt hấp đến ngày 17/10/2026, vui lòng chọn ngày khác hoặc trang phục khác.
 
   # ---------------------------------------------------------------- staff
+  # ---------------------------------------------------------------- public
+  /api/v1/public/contracts/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Public link token (base64url, 43 characters) from the Zalo message.
+        schema:
+          type: string
+    get:
+      tags: [public]
+      operationId: getPublicContract
+      summary: The customer's view of a shared contract
+      description: Phone masked (`0901***222`); no ids or internal notes. Installments are the fixed 30/50/20 split until FN-ADM-FIN-02.
+      x-spec-function: FN-PUB-CONTR-01
+      security: []
+      responses:
+        '200':
+          description: Contract.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PublicContractDto'
+        '410':
+          description: '`SHARE_LINK_EXPIRED` — unknown, expired or revoked link.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/public/contracts/{token}/pdf:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Public link token (base64url, 43 characters) from the Zalo message.
+        schema:
+          type: string
+    get:
+      tags: [public]
+      operationId: getPublicContractPdf
+      summary: The shared contract as PDF
+      x-spec-function: FN-PUB-CONTR-01
+      security: []
+      responses:
+        '200':
+          description: PDF file, same as export-pdf.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '410':
+          description: '`SHARE_LINK_EXPIRED` — unknown, expired or revoked link.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/public/contracts/{token}/accept:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Public link token (base64url, 43 characters) from the Zalo message.
+        schema:
+          type: string
+    post:
+      tags: [public]
+      operationId: acceptPublicContract
+      summary: '"Tôi đã đọc và đồng ý"'
+      description: Records `acceptedAt`, client IP and user agent the first time and notifies the studio; later calls return the same `acceptedAt`.
+      x-spec-function: FN-PUB-CONTR-01
+      security: []
+      responses:
+        '200':
+          description: Contract with acceptedAt.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/PublicContractDto'
+        '410':
+          description: '`SHARE_LINK_EXPIRED` — unknown, expired or revoked link.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   # ---------------------------------------------------------------- users
   /api/v1/admin/users:
     get:
@@ -1947,6 +2045,80 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/admin/contracts/{id}/share-zalo:
+    post:
+      tags: [contracts]
+      operationId: shareContractZalo
+      summary: Send the contract link by Zalo ZNS
+      description: |
+        Issues a new 30-day public link (the previous link of the contract stops working) and sends the studio's
+        approved ZNS template from its own Zalo OA (FN-ADM-SET-02) with `template_data`
+        `{customer_name, contract_number, total_amount, contract_url}`. Nothing is saved when Zalo refuses the message.
+        The OA access token is refreshed in its own transaction, so the rotated single-use refresh token is kept.
+      x-spec-function: FN-ADM-CONTR-01
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareZaloRequest'
+            example:
+              phoneNumber: '0901112222'
+      responses:
+        '200':
+          description: Message accepted by Zalo.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ShareResultDto'
+        '400':
+          description: '`ZALO_NOT_AVAILABLE` (no phoneNumber and the customer has no Zalo), `ZALO_OA_NOT_CONFIGURED`, or `BAD_REQUEST` for an invalid phoneNumber.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: '`ZALO_OA_AUTH_FAILED` (token refresh refused: reconnect the OA) or `ZALO_SEND_FAILED` (message refused; the message carries Zalos error code).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/admin/contracts/{id}/revoke-link:
+    post:
+      tags: [contracts]
+      operationId: revokeContractLink
+      summary: Revoke the public contract link
+      description: The shared link answers `410 SHARE_LINK_EXPIRED` from now on; sharing again issues a new one.
+      x-spec-function: FN-PUB-CONTR-01
+      x-roles: [ROLE_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Link revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ---------------------------------------------------------------- financials
   /api/v1/admin/financials/transactions:
     get:
@@ -2271,6 +2443,66 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   # ---------------------------------------------------------------- settings
+  /api/v1/admin/settings/zalo-oa:
+    get:
+      tags: [settings]
+      operationId: getZaloOaSettings
+      summary: The studio's Zalo OA connection
+      description: Never returns the app secret, refresh token or access token.
+      x-spec-function: FN-ADM-SET-02
+      x-roles: [ROLE_ADMIN]
+      responses:
+        '200':
+          description: Connection state.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ZaloOaSettingsDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      tags: [settings]
+      operationId: updateZaloOaSettings
+      summary: Connect or update the studio's Zalo OA
+      description: Empty `appSecret` / `refreshToken` keep the stored values. A new app, secret or refresh token drops the cached access token.
+      x-spec-function: FN-ADM-SET-02
+      x-roles: [ROLE_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateZaloOaRequest'
+            example:
+              appId: '1234567890123456789'
+              appSecret: ''
+              refreshToken: 'paste-from-api-explorer'
+              templateId: '301234'
+      responses:
+        '200':
+          description: Saved connection state.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ZaloOaSettingsDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/admin/settings/studio:
     get:
       tags: [settings]
@@ -2583,6 +2815,120 @@ components:
           description: JWT, 30 days, `typ=refresh`.
         user:
           $ref: '#/components/schemas/AuthUserDto'
+
+    # ------------------------------------------------------------ zalo sharing / public contract
+    ShareZaloRequest:
+      type: object
+      properties:
+        phoneNumber:
+          type: [string, 'null']
+          description: Defaults to the contract's phone; required when the contract has `hasZalo = false`.
+          pattern: '^$|^0(3|5|7|8|9)[0-9]{8}$'
+    ShareResultDto:
+      type: object
+      required: [sentTo, publicUrl, shareExpiresAt]
+      properties:
+        sentTo:
+          type: string
+          examples: ['0901***222']
+        publicUrl:
+          type: string
+          format: uri
+          examples: ['https://admin.example.vn/c/3q2-ZpM1n0cT9rjqK0x8sQZ6y2f4kz3xv8c1m5Jtq4E']
+        shareExpiresAt:
+          type: string
+          format: date-time
+    ZaloOaSettingsDto:
+      type: object
+      required: [hasAppSecret, hasRefreshToken, configured]
+      properties:
+        appId:
+          type: [string, 'null']
+        templateId:
+          type: [string, 'null']
+        hasAppSecret:
+          type: boolean
+        hasRefreshToken:
+          type: boolean
+        configured:
+          type: boolean
+          description: App ID, secret, refresh token and template are all set.
+        accessTokenExpiresAt:
+          type: [string, 'null']
+          format: date-time
+    UpdateZaloOaRequest:
+      type: object
+      required: [appId, templateId]
+      properties:
+        appId:
+          type: string
+          minLength: 1
+          maxLength: 50
+        appSecret:
+          type: [string, 'null']
+          maxLength: 255
+        refreshToken:
+          type: [string, 'null']
+          maxLength: 2000
+        templateId:
+          type: string
+          minLength: 1
+          maxLength: 50
+    PublicContractDto:
+      type: object
+      required: [contractNumber, studio, customerName, phone, packageName, features, totalAmount, paidAmount, remainingAmount, installments, status]
+      properties:
+        contractNumber:
+          type: string
+        studio:
+          type: object
+          required: [name, address, bankInfo]
+          properties:
+            name:
+              type: string
+            address:
+              type: string
+            bankInfo:
+              type: string
+        customerName:
+          type: string
+        phone:
+          type: string
+          description: Masked.
+          examples: ['0901***222']
+        packageName:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        totalAmount:
+          type: integer
+        paidAmount:
+          type: integer
+        remainingAmount:
+          type: integer
+        installments:
+          type: array
+          items:
+            type: object
+            required: [label, percent, amount]
+            properties:
+              label:
+                type: string
+              percent:
+                type: integer
+              amount:
+                type: integer
+        eventDate:
+          type: [string, 'null']
+          format: date
+        status:
+          type: string
+          enum: [DRAFT, DEPOSITED, IN_PROGRESS, COMPLETED]
+        acceptedAt:
+          type: [string, 'null']
+          format: date-time
 
     # ------------------------------------------------------------ users
     UserAccountDto:
