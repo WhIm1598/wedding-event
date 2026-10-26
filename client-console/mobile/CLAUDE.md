@@ -21,9 +21,11 @@ FN-SVC-02, opened with `launchUrl`); FN-MSG-01 stays in the backend but the app 
 | `core/router/app_router.dart` | `Routes` path constants + `createRouter(session)`: auth redirects, `ShellRoute` for bottom-nav tabs, plain `GoRoute`s for full-screen pages |
 | `core/theme/` | `AppColors` (rose/pink brand, slate neutrals), `AppTheme.light` |
 | `core/widgets/common.dart` | `AppCard`, `ScreenHeader`, `TabHeader`, `IconBubble`, `StatusChip`, `PrimaryButton`, `BottomActionBar`, `FieldLabel`, `AsyncView<T>`, `showAppSnack`, `showComingSoon` (Vietnamese "sắp ra mắt" for template buttons without a spec endpoint; dev notes stay in code comments, never in UI text) |
+| `core/widgets/paged_list.dart` | `PagedListView<T>(fetch: (page) => repo.list(page: page), itemBuilder:)`: infinite scroll + pull to refresh over a §1.2 page endpoint; new `key` to restart from page 0 |
 | `core/utils/` | `Fmt` (money, dates), `Validators` (email, VN phone, required) |
 | `data/models/` | Immutable models with `const` constructors and `fromJson`/`toJson` using the spec's JSON names |
 | `data/repositories/` | One per API module (`auth`, `plan`, `guest`, `service`, `vendor`, `notification`) |
+| `data/models/page_result.dart` | `PageResult<T>` (`items`, `page`, `totalPages`, `hasMore`): `PageResult.fromJson(json, Item.fromJson)`; mock branches return `PageResult.slice(all, page, size)` |
 | `data/mock/mock_data.dart` | `MockData` seed data used by every mock branch |
 | `state/session_controller.dart` | `SessionController` (ChangeNotifier): user, `isLoggedIn`, `needsRole`, `isVendor`, `hasPlan`, login/OTP/role/profile |
 | `features/<feature>/` | Screens (`*_screen.dart`) + `widgets/` for that feature: `auth`, `home`, `plan`, `ai_chat`, `guests`, `sync`, `services`, `quotes` (quote requests, both roles), `notifications`, `profile`, `vendor`, `shell` |

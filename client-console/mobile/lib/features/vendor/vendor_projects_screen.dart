@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/paged_list.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
 import '../../state/session_controller.dart';
@@ -19,28 +20,23 @@ class VendorProjectsScreen extends StatefulWidget {
 class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
   late final bool _asVendor;
   ProjectStatus? _filter;
-  late Future<List<VendorProject>> _future;
+
+  /// Bumped to restart the list from page 0 (filter change, after an action)
+  int _version = 0;
 
   @override
   void initState() {
     super.initState();
     _asVendor = context.read<SessionController>().isVendor;
-    _reload();
   }
 
-  void _reload() => _future = context.read<VendorRepository>().getProjects(asVendor: _asVendor, status: _filter);
+  void _reload() => _version++;
 
-  Widget _list() => AsyncView<List<VendorProject>>(
-        future: _future,
-        builder: (context, projects) => projects.isEmpty
-            ? const Center(child: Text('Chưa có dự án', style: TextStyle(color: AppColors.slate400)))
-            : ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: projects.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                itemBuilder: (context, i) =>
-                    ProjectCard(project: projects[i], asVendor: _asVendor, onChanged: () => setState(_reload)),
-              ),
+  Widget _list() => PagedListView<VendorProject>(
+        key: ValueKey('$_filter-$_version'),
+        emptyText: 'Chưa có dự án',
+        fetch: (page) => context.read<VendorRepository>().getProjects(asVendor: _asVendor, status: _filter, page: page),
+        itemBuilder: (_, p) => ProjectCard(project: p, asVendor: _asVendor, onChanged: () => setState(_reload)),
       );
 
   @override

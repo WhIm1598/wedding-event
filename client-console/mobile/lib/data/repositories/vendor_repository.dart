@@ -3,6 +3,7 @@ import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/utils/formatters.dart';
 import '../mock/mock_data.dart';
+import '../models/page_result.dart';
 import '../models/service_item.dart';
 import '../models/vendor.dart';
 
@@ -50,18 +51,15 @@ class VendorRepository {
     );
   }
 
-  /// GET /client/quote-requests (couple: sent) or /client/vendor/quote-requests (vendor: received) — FN-VND-02
-  Future<List<QuoteRequest>> getQuoteRequests({required bool asVendor, QuoteRequestStatus? status}) {
+  /// GET /client/quote-requests (couple: sent) or /client/vendor/quote-requests (vendor: received) — FN-VND-02, newest first
+  Future<PageResult<QuoteRequest>> getQuoteRequests({required bool asVendor, QuoteRequestStatus? status, int page = 0, int size = 20}) {
     if (Env.useMock) {
-      return mockDelay(MockData.quoteRequests.where((q) => status == null || q.status == status).toList(), 250);
+      return mockDelay(PageResult.slice(MockData.quoteRequests.where((q) => status == null || q.status == status).toList(), page, size), 250);
     }
     return _api.get(
       asVendor ? '/client/vendor/quote-requests' : '/client/quote-requests',
-      // shortcut: first 100 requests only, no paging in the app yet; add infinite scroll when vendors get more
-      query: {if (status != null) 'status': status.apiName, 'size': 100},
-      parse: (d) => ((d! as Map<String, dynamic>)['items'] as List<dynamic>)
-          .map((e) => QuoteRequest.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      query: {if (status != null) 'status': status.apiName, 'page': page, 'size': size},
+      parse: (d) => PageResult.fromJson(d! as Map<String, dynamic>, QuoteRequest.fromJson),
     );
   }
 
@@ -137,18 +135,15 @@ class VendorRepository {
     return _api.get('/client/vendor/dashboard', parse: (d) => VendorDashboard.fromJson(d! as Map<String, dynamic>));
   }
 
-  /// GET /client/vendor/projects (vendor) or /client/vendor-projects (couple) — FN-VND-04
-  Future<List<VendorProject>> getProjects({required bool asVendor, ProjectStatus? status}) {
+  /// GET /client/vendor/projects (vendor) or /client/vendor-projects (couple) — FN-VND-04, by event date
+  Future<PageResult<VendorProject>> getProjects({required bool asVendor, ProjectStatus? status, int page = 0, int size = 20}) {
     if (Env.useMock) {
-      return mockDelay(MockData.vendorProjects.where((p) => status == null || p.status == status).toList(), 250);
+      return mockDelay(PageResult.slice(MockData.vendorProjects.where((p) => status == null || p.status == status).toList(), page, size), 250);
     }
     return _api.get(
       asVendor ? '/client/vendor/projects' : '/client/vendor-projects',
-      // shortcut: first 100 projects only, no paging in the app yet
-      query: {if (asVendor && status != null) 'status': status.apiName, 'size': 100},
-      parse: (d) => ((d! as Map<String, dynamic>)['items'] as List<dynamic>)
-          .map((e) => VendorProject.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      query: {if (asVendor && status != null) 'status': status.apiName, 'page': page, 'size': size},
+      parse: (d) => PageResult.fromJson(d! as Map<String, dynamic>, VendorProject.fromJson),
     );
   }
 

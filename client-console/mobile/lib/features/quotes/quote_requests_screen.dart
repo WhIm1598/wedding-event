@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
+import '../../core/widgets/paged_list.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
 import '../../state/session_controller.dart';
@@ -19,17 +20,18 @@ class QuoteRequestsScreen extends StatefulWidget {
 
 class _QuoteRequestsScreenState extends State<QuoteRequestsScreen> {
   late final bool _asVendor;
-  late Future<List<QuoteRequest>> _future;
   QuoteRequestStatus? _status;
+
+  /// Bumped to restart the list from page 0 (filter change, after an action)
+  int _version = 0;
 
   @override
   void initState() {
     super.initState();
     _asVendor = context.read<SessionController>().isVendor;
-    _load();
   }
 
-  void _load() => _future = context.read<VendorRepository>().getQuoteRequests(asVendor: _asVendor, status: _status);
+  void _load() => _version++;
 
   @override
   Widget build(BuildContext context) {
@@ -61,16 +63,12 @@ class _QuoteRequestsScreenState extends State<QuoteRequestsScreen> {
             ),
           ),
           Expanded(
-            child: AsyncView<List<QuoteRequest>>(
-              future: _future,
-              builder: (context, items) => items.isEmpty
-                  ? const Center(child: Text('Chưa có yêu cầu báo giá', style: TextStyle(color: AppColors.slate400)))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(24),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) => _QuoteCard(quote: items[i], asVendor: _asVendor, onChanged: () => setState(_load)),
-                    ),
+            child: PagedListView<QuoteRequest>(
+              key: ValueKey('$_status-$_version'),
+              padding: const EdgeInsets.all(24),
+              emptyText: 'Chưa có yêu cầu báo giá',
+              fetch: (page) => context.read<VendorRepository>().getQuoteRequests(asVendor: _asVendor, status: _status, page: page),
+              itemBuilder: (_, q) => _QuoteCard(quote: q, asVendor: _asVendor, onChanged: () => setState(_load)),
             ),
           ),
         ],
