@@ -1,5 +1,7 @@
 package com.weddingevent.client.quote;
 
+import com.weddingevent.client.project.VendorProjectService.VendorProjectDto;
+import com.weddingevent.client.quote.QuoteRequestService.AcceptRequest;
 import com.weddingevent.client.quote.QuoteRequestService.QuoteRequestDto;
 import com.weddingevent.client.quote.QuoteRequestService.SendQuoteRequest;
 import com.weddingevent.client.security.CurrentUser;
@@ -23,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** FN-VND-01..02, couple side — ROLE_COUPLE */
+/** FN-VND-01..03, couple side — ROLE_COUPLE */
 @RestController
 @RequestMapping("/api/v1/client/quote-requests")
 @PreAuthorize(SecurityConfig.COUPLE)
@@ -52,5 +54,17 @@ public class QuoteRequestController {
     @GetMapping("/{id}")
     public ApiResponse<QuoteRequestDto> get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return ApiResponse.ok(quotes.getSent(CurrentUser.id(jwt), id));
+    }
+
+    @PostMapping("/{id}/accept")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<VendorProjectDto> accept(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+            @Valid @RequestBody(required = false) AcceptRequest req) {
+        return ApiResponse.ok(quotes.accept(CurrentUser.id(jwt), id, req), "Đã chốt báo giá");
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<QuoteRequestDto> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return ApiResponse.ok(quotes.cancel(CurrentUser.id(jwt), id), "Đã hủy yêu cầu báo giá");
     }
 }

@@ -15,6 +15,7 @@ call them, so paths and JSON names must stay identical. Entities, repositories a
 | `plan/ai/` | `AiPlannerClient` (FN-PLAN-03 contract), `HttpAiPlannerClient` (ai-planner-service), `RuleBasedAiPlanner` (fallback when `app.ai-planner.base-url` is empty), `AiPlannerConfig` |
 | `guest/` | `GuestController`/`GuestService` (FN-GUEST-01/02) |
 | `quote/` | `QuoteRequestService` (FN-VND-01..03), `QuoteRequestController` (couple, `/client/quote-requests`), `VendorQuoteRequestController` (vendor, `/client/vendor/quote-requests`) |
+| `project/` | `VendorProjectService` (FN-VND-04; `VendorProjectDto`) — a project is created by `QuoteRequestService.accept` |
 | `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio) |
 | `notification/` | `ClientNotificationController`/`ClientNotificationService` (FN-NOTI-01 inbox; `notify(userId, kind, title, body)` stores + pushes after commit), `PushSender`/`LoggingPushSender` |
 | `message/` | `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
@@ -62,7 +63,7 @@ and every business code.
 `PLAN_ALREADY_SYNCED` 409, `INVALID_RECIPIENT` 400, `AI_SERVICE_UNAVAILABLE` 503, plus the generic ones.
 
 ## Not built (no spec yet)
-Vendor workspace beyond quote requests (FN-VND-03..05: quoting, projects, dashboard, service management — those
+Vendor workspace beyond quote requests (FN-VND-04..05: project management, dashboard, service management — those
 `VendorRepository` calls work in mock mode only), refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
 
 ## Check

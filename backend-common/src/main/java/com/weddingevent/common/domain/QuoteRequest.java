@@ -1,6 +1,7 @@
 package com.weddingevent.common.domain;
 
 import com.weddingevent.common.domain.enums.QuoteRequestStatus;
+import com.weddingevent.common.exception.AppException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -64,4 +65,45 @@ public class QuoteRequest extends BaseEntity {
 
     @Version
     private long version;
+
+    /** Vendor quotes; quoting again replaces the price and the note (PENDING/QUOTED → QUOTED) */
+    public void quote(BigDecimal price, String note, Instant at) {
+        requireOpen();
+        quotedPrice = price;
+        vendorNote = note;
+        respondedAt = at;
+        status = QuoteRequestStatus.QUOTED;
+    }
+
+    /** Vendor declines (PENDING/QUOTED → DECLINED) */
+    public void decline(String note, Instant at) {
+        requireOpen();
+        vendorNote = note;
+        respondedAt = at;
+        status = QuoteRequestStatus.DECLINED;
+    }
+
+    /** Couple withdraws the request (PENDING/QUOTED → CANCELLED) */
+    public void cancel() {
+        requireOpen();
+        status = QuoteRequestStatus.CANCELLED;
+    }
+
+    /** Couple accepts the quote (QUOTED → ACCEPTED); the caller then creates the Vendor Project */
+    public void accept() {
+        if (status != QuoteRequestStatus.QUOTED) {
+            throw refused();
+        }
+        status = QuoteRequestStatus.ACCEPTED;
+    }
+
+    private void requireOpen() {
+        if (!status.isOpen()) {
+            throw refused();
+        }
+    }
+
+    private AppException refused() {
+        return AppException.conflict("INVALID_STATUS_TRANSITION", "Yêu cầu báo giá đang ở trạng thái " + status + ", không thể thực hiện thao tác này");
+    }
 }

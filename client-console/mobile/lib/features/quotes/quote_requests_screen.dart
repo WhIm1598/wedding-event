@@ -7,8 +7,9 @@ import '../../core/widgets/common.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
 import '../../state/session_controller.dart';
+import 'widgets/quote_reply_sheet.dart';
 
-/// FN-VND-02: a couple's sent quote requests, or the requests a vendor received
+/// FN-VND-02/03: a couple's sent quote requests (accept / cancel), or the requests a vendor received (quote / decline)
 class QuoteRequestsScreen extends StatefulWidget {
   const QuoteRequestsScreen({super.key});
 
@@ -68,7 +69,7 @@ class _QuoteRequestsScreenState extends State<QuoteRequestsScreen> {
                       padding: const EdgeInsets.all(24),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) => _QuoteCard(quote: items[i], asVendor: _asVendor),
+                      itemBuilder: (_, i) => _QuoteCard(quote: items[i], asVendor: _asVendor, onChanged: () => setState(_load)),
                     ),
             ),
           ),
@@ -79,10 +80,78 @@ class _QuoteRequestsScreenState extends State<QuoteRequestsScreen> {
 }
 
 class _QuoteCard extends StatelessWidget {
-  const _QuoteCard({required this.quote, required this.asVendor});
+  const _QuoteCard({required this.quote, required this.asVendor, required this.onChanged});
 
   final QuoteRequest quote;
   final bool asVendor;
+  final VoidCallback onChanged;
+
+  Future<void> _reply(BuildContext context) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => QuoteReplySheet(request: quote),
+    );
+    if (changed == true) onChanged();
+  }
+
+  Future<void> _accept(BuildContext context) async {
+    final repo = context.read<VendorRepository>();
+    DateTime? date = quote.eventDate;
+    if (date == null) {
+      final now = DateTime.now();
+      date = await showDatePicker(
+        context: context,
+        helpText: 'Chọn ngày tổ chức',
+        initialDate: now,
+        firstDate: DateTime(now.year, now.month, now.day),
+        lastDate: DateTime(now.year + 5),
+      );
+      if (date == null) return;
+    }
+    try {
+      await repo.acceptQuote(quote, eventDate: quote.eventDate == null ? date : null);
+      if (context.mounted) showAppSnack(context, 'Đã chốt báo giá với ${quote.vendorName}');
+      onChanged();
+    } catch (e) {
+      if (context.mounted) showAppSnack(context, e.toString(), error: true);
+    }
+  }
+
+  Future<void> _cancel(BuildContext context) async {
+    final repo = context.read<VendorRepository>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hủy yêu cầu báo giá?'),
+        content: Text('Yêu cầu gửi ${quote.vendorName} sẽ được đóng lại.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Không')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hủy yêu cầu')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await repo.cancelQuoteRequest(quote.id);
+      onChanged();
+    } catch (e) {
+      if (context.mounted) showAppSnack(context, e.toString(), error: true);
+    }
+  }
+
+  List<Widget> _actions(BuildContext context) => [
+        if (asVendor && quote.status.isOpen)
+          TextButton(
+            onPressed: () => _reply(context),
+            child: Text(quote.status == QuoteRequestStatus.quoted ? 'Báo giá lại' : 'Phản hồi'),
+          ),
+        if (!asVendor && quote.status.isOpen) TextButton(onPressed: () => _cancel(context), child: const Text('Hủy')),
+        if (!asVendor && quote.status == QuoteRequestStatus.quoted)
+          FilledButton(onPressed: () => _accept(context), child: const Text('Chấp nhận')),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +189,8 @@ class _QuoteCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Báo giá: ${Fmt.vnd(quote.quotedPrice!)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.pink600)),
           ],
+          if (quote.vendorNote != null) Text(quote.vendorNote!, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+          if (_actions(context).isNotEmpty) Row(mainAxisAlignment: MainAxisAlignment.end, children: _actions(context)),
         ],
       ),
     );

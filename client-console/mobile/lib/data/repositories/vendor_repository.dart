@@ -66,6 +66,71 @@ class VendorRepository {
     );
   }
 
+  /// POST /client/vendor/quote-requests/{id}/quote (FN-VND-03) — vendor quotes, or quotes again
+  Future<QuoteRequest> quote(String id, int quotedPrice, {String? vendorNote}) {
+    if (Env.useMock) {
+      return _mockTransition(id, (q) => q.status.isOpen,
+          (q) => q.copyWith(status: QuoteRequestStatus.quoted, quotedPrice: quotedPrice, vendorNote: vendorNote, respondedAt: DateTime.now()));
+    }
+    return _api.post('/client/vendor/quote-requests/$id/quote',
+        body: {'quotedPrice': quotedPrice, if (vendorNote != null && vendorNote.isNotEmpty) 'vendorNote': vendorNote},
+        parse: (d) => QuoteRequest.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// POST /client/vendor/quote-requests/{id}/decline (FN-VND-03)
+  Future<QuoteRequest> decline(String id, {String? vendorNote}) {
+    if (Env.useMock) {
+      return _mockTransition(id, (q) => q.status.isOpen,
+          (q) => q.copyWith(status: QuoteRequestStatus.declined, vendorNote: vendorNote, respondedAt: DateTime.now()));
+    }
+    return _api.post('/client/vendor/quote-requests/$id/decline',
+        body: {if (vendorNote != null && vendorNote.isNotEmpty) 'vendorNote': vendorNote},
+        parse: (d) => QuoteRequest.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// POST /client/quote-requests/{id}/cancel (FN-VND-03) — couple withdraws an open request
+  Future<QuoteRequest> cancelQuoteRequest(String id) {
+    if (Env.useMock) return _mockTransition(id, (q) => q.status.isOpen, (q) => q.copyWith(status: QuoteRequestStatus.cancelled));
+    return _api.post('/client/quote-requests/$id/cancel', parse: (d) => QuoteRequest.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// POST /client/quote-requests/{id}/accept (FN-VND-03) — creates the Vendor Project. [eventDate] is required when the
+  /// request had none.
+  Future<VendorProject> acceptQuote(QuoteRequest request, {DateTime? eventDate, String? venue}) async {
+    if (Env.useMock) {
+      final date = request.eventDate ?? eventDate;
+      if (date == null) throw const ApiException(code: 'BAD_REQUEST', message: 'Vui lòng chọn ngày tổ chức');
+      final accepted = await _mockTransition(request.id, (q) => q.status == QuoteRequestStatus.quoted,
+          (q) => q.copyWith(status: QuoteRequestStatus.accepted, eventDate: date, venue: venue));
+      final project = VendorProject(
+        id: 'p-${MockData.vendorProjects.length + 1}',
+        coupleName: accepted.coupleName,
+        packageName: accepted.packageName,
+        eventDate: date,
+        agreedPrice: accepted.quotedPrice!,
+        status: ProjectStatus.upcoming,
+        venue: accepted.venue,
+        quoteRequestId: accepted.id,
+      );
+      MockData.vendorProjects.add(project);
+      return project;
+    }
+    return _api.post('/client/quote-requests/${request.id}/accept',
+        body: {if (eventDate != null) 'eventDate': Fmt.isoDate(eventDate), if (venue != null && venue.isNotEmpty) 'venue': venue},
+        parse: (d) => VendorProject.fromJson(d! as Map<String, dynamic>));
+  }
+
+  /// Mock of the §1.6 state machine: 409 INVALID_STATUS_TRANSITION unless [allowed]
+  Future<QuoteRequest> _mockTransition(String id, bool Function(QuoteRequest) allowed, QuoteRequest Function(QuoteRequest) change) {
+    final i = MockData.quoteRequests.indexWhere((q) => q.id == id);
+    if (i < 0) throw const ApiException(code: 'NOT_FOUND', message: 'Không tìm thấy yêu cầu báo giá');
+    if (!allowed(MockData.quoteRequests[i])) {
+      throw const ApiException(code: 'INVALID_STATUS_TRANSITION', message: 'Yêu cầu báo giá không còn ở trạng thái cho phép thao tác này');
+    }
+    MockData.quoteRequests[i] = change(MockData.quoteRequests[i]);
+    return mockDelay(MockData.quoteRequests[i], 300);
+  }
+
   /// GET /client/vendor/dashboard
   Future<VendorDashboard> getDashboard() {
     if (Env.useMock) return mockDelay(MockData.vendorDashboard());

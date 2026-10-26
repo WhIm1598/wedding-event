@@ -9,6 +9,7 @@ import '../../core/widgets/common.dart';
 import '../../data/models/vendor.dart';
 import '../../data/repositories/vendor_repository.dart';
 import '../../state/session_controller.dart';
+import '../quotes/widgets/quote_reply_sheet.dart';
 import 'couple_home.dart' show NotificationBellButton;
 
 class VendorHome extends StatefulWidget {
@@ -25,6 +26,17 @@ class _VendorHomeState extends State<VendorHome> {
   void initState() {
     super.initState();
     _dashboard = context.read<VendorRepository>().getDashboard();
+  }
+
+  Future<void> _reply(BuildContext context, QuoteRequest q) async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => QuoteReplySheet(request: q),
+    );
+    if (changed == true && mounted) setState(() => _dashboard = context.read<VendorRepository>().getDashboard());
   }
 
   @override
@@ -103,8 +115,7 @@ class _VendorHomeState extends State<VendorHome> {
                           ),
                           TextButton(
                             style: TextButton.styleFrom(backgroundColor: AppColors.pink50, foregroundColor: AppColors.pink600),
-                            // TODO: open the FN-MSG-01 conversation with this customer
-                            onPressed: () => showComingSoon(context, 'Phản hồi báo giá'),
+                            onPressed: () => _reply(context, q),
                             child: const Text('Phản hồi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ],
@@ -167,8 +178,8 @@ class _UpcomingCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('TH ${project.date.month}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.blue600)),
-                Text('${project.date.day}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.blue600)),
+                Text('TH ${project.eventDate.month}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.blue600)),
+                Text('${project.eventDate.day}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.blue600)),
               ],
             ),
           ),
@@ -177,7 +188,7 @@ class _UpcomingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(project.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                Text(project.coupleName, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.slate800)),
                 if (project.venue != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

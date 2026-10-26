@@ -521,7 +521,7 @@ flowchart LR
 * Phân trang §1.2, mới nhất trước. `status` (tùy chọn) là một giá trị `QuoteRequestStatus`; giá trị khác → `400`.
 * Chi tiết: `GET /api/v1/client/quote-requests/{id}` (cặp đôi gửi) và `GET /api/v1/client/vendor/quote-requests/{id}` (Vendor nhận). Yêu cầu không thuộc người gọi → `404 NOT_FOUND`.
 
-#### `FN-VND-03: Báo giá, Từ chối, Chấp nhận & Hủy yêu cầu` 🆕
+#### `FN-VND-03: Báo giá, Từ chối, Chấp nhận & Hủy yêu cầu` ✅
 * **Vendor báo giá:** `POST /api/v1/client/vendor/quote-requests/{id}/quote` — `{ "quotedPrice": 18000000, "vendorNote": "Đã gồm vận chuyển nội thành" }`. `quotedPrice > 0` (bắt buộc), `vendorNote` ≤ 1000. Cho phép khi `PENDING` hoặc `QUOTED` (báo lại giá mới). Ghi `responded_at`. Thông báo cho cặp đôi (`kind = message`, "Đã có báo giá").
 * **Vendor từ chối:** `POST /api/v1/client/vendor/quote-requests/{id}/decline` — `{ "vendorNote": "Ngày này bên mình đã kín lịch" }` (tùy chọn). Từ `PENDING`/`QUOTED` → `DECLINED`. Thông báo cho cặp đôi.
 * **Cặp đôi chấp nhận:** `POST /api/v1/client/quote-requests/{id}/accept` — chỉ khi `QUOTED` và yêu cầu có `eventDate` (nếu thiếu: body `{ "eventDate": "YYYY-MM-DD", "venue": "..." }` bắt buộc `eventDate`, không trước hôm nay). Chuyển `ACCEPTED` và tạo **một** Vendor Project `UPCOMING` với `agreed_price = quoted_price`, `couple_name`, `package_name`, `event_date`, `venue` lấy từ yêu cầu. Thông báo cho Vendor ("Báo giá đã được chấp nhận"). Trả `201` + `VendorProjectDto`.

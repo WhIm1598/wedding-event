@@ -1,21 +1,59 @@
+/// `VendorProjectStatus` (spec §1.6); the API uses the upper-case names
 enum ProjectStatus {
   upcoming('Sắp tới'),
   inProgress('Đang làm'),
-  completed('Hoàn thành');
+  completed('Hoàn thành'),
+  cancelled('Đã hủy');
 
   const ProjectStatus(this.label);
   final String label;
+
+  /// `inProgress` → `IN_PROGRESS`
+  String get apiName => name.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]}').toUpperCase();
+
+  static ProjectStatus fromApi(String value) => values.firstWhere((s) => s.apiName == value);
 }
 
+/// `VendorProjectDto` (FN-VND-03/04): an accepted quote request
 class VendorProject {
-  const VendorProject({required this.id, required this.name, required this.service, required this.date, required this.status, this.venue});
+  const VendorProject({
+    required this.id,
+    required this.coupleName,
+    required this.packageName,
+    required this.eventDate,
+    required this.agreedPrice,
+    required this.status,
+    this.venue,
+    this.quoteRequestId,
+    this.cancelRequestedAt,
+    this.cancelReason,
+  });
 
   final String id;
-  final String name;
-  final String service;
-  final DateTime date;
+  final String coupleName;
+  final String packageName;
+  final DateTime eventDate;
+  final int agreedPrice;
   final ProjectStatus status;
   final String? venue;
+  final String? quoteRequestId;
+
+  /// Set while the couple's cancellation request waits for the vendor (FN-VND-04)
+  final DateTime? cancelRequestedAt;
+  final String? cancelReason;
+
+  factory VendorProject.fromJson(Map<String, dynamic> json) => VendorProject(
+        id: json['id'] as String,
+        coupleName: json['coupleName'] as String,
+        packageName: json['packageName'] as String,
+        eventDate: DateTime.parse(json['eventDate'] as String),
+        agreedPrice: (json['agreedPrice'] as num).toInt(),
+        status: ProjectStatus.fromApi(json['status'] as String),
+        venue: json['venue'] as String?,
+        quoteRequestId: json['quoteRequestId'] as String?,
+        cancelRequestedAt: json['cancelRequestedAt'] == null ? null : DateTime.parse(json['cancelRequestedAt'] as String),
+        cancelReason: json['cancelReason'] as String?,
+      );
 }
 
 /// `QuoteRequestStatus` (spec §1.6); the API uses the upper-case names
@@ -68,6 +106,24 @@ class QuoteRequest {
   final int? quotedPrice;
   final String? vendorNote;
   final DateTime? respondedAt;
+
+  QuoteRequest copyWith({QuoteRequestStatus? status, int? quotedPrice, String? vendorNote, DateTime? respondedAt, DateTime? eventDate, String? venue}) =>
+      QuoteRequest(
+        id: id,
+        coupleName: coupleName,
+        packageId: packageId,
+        packageName: packageName,
+        vendorName: vendorName,
+        status: status ?? this.status,
+        createdAt: createdAt,
+        eventDate: eventDate ?? this.eventDate,
+        venue: venue ?? this.venue,
+        guestCount: guestCount,
+        message: message,
+        quotedPrice: quotedPrice ?? this.quotedPrice,
+        vendorNote: vendorNote ?? this.vendorNote,
+        respondedAt: respondedAt ?? this.respondedAt,
+      );
 
   factory QuoteRequest.fromJson(Map<String, dynamic> json) => QuoteRequest(
         id: json['id'] as String,

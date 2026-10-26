@@ -30,6 +30,7 @@ class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
         ProjectStatus.upcoming => (color: AppColors.blue600, bg: AppColors.blue50),
         ProjectStatus.inProgress => (color: AppColors.amber600, bg: AppColors.amber50),
         ProjectStatus.completed => (color: AppColors.emerald600, bg: AppColors.emerald50),
+        ProjectStatus.cancelled => (color: AppColors.slate500, bg: AppColors.slate100),
       };
 
   @override
@@ -72,9 +73,9 @@ class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(p.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                                Text(p.coupleName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate800)),
                                 const SizedBox(height: 4),
-                                Text(p.service, style: const TextStyle(fontSize: 14, color: AppColors.slate500)),
+                                Text(p.packageName, style: const TextStyle(fontSize: 14, color: AppColors.slate500)),
                               ],
                             ),
                           ),
@@ -90,7 +91,7 @@ class _VendorProjectsScreenState extends State<VendorProjectsScreen> {
                           children: [
                             const Icon(Icons.calendar_today, size: 14, color: AppColors.slate400),
                             const SizedBox(width: 8),
-                            Text(Fmt.date(p.date), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate600)),
+                            Text(Fmt.date(p.eventDate), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate600)),
                           ],
                         ),
                       ),
