@@ -9,6 +9,9 @@ class Env {
   /// true -> repositories return in-memory mock data (lib/data/mock), no backend required.
   static const bool useMock = bool.fromEnvironment('USE_MOCK', defaultValue: true);
 
+  /// FN-NOTI-02: Firebase Cloud Messaging; needs the Firebase app files (docs/setup/google-cloud-firebase.md)
+  static const bool fcmEnabled = bool.fromEnvironment('FCM_ENABLED');
+
   /// Google Sign-In: the **Web** OAuth client id. Android needs it to issue an ID token, and it must be one of the
   /// backend's `app.google.client-ids` (the token's audience). Empty = Google login unavailable in real mode.
   static const String googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');

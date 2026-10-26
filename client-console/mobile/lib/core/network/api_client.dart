@@ -108,6 +108,9 @@ class ApiClient {
   Future<T> put<T>(String path, {Object? body, required JsonParser<T> parse}) =>
       _send(() => _dio.put<Json>(path, data: body), parse);
 
+  Future<T> delete<T>(String path, {Map<String, dynamic>? query, required JsonParser<T> parse}) =>
+      _send(() => _dio.delete<Json>(path, queryParameters: query), parse);
+
   Future<T> patch<T>(String path, {Object? body, required JsonParser<T> parse}) =>
       _send(() => _dio.patch<Json>(path, data: body), parse);
 

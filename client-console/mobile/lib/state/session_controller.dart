@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/models/app_user.dart';
+import '../core/push/push_service.dart';
 import '../data/repositories/auth_repository.dart';
 
 /// App-wide session state: who is logged in, their role and whether they have a plan.
 /// The router listens to this to redirect between auth / onboarding / main flows.
 class SessionController extends ChangeNotifier {
-  SessionController(this._auth);
+  SessionController(this._auth, {PushService? push}) : _push = push;
+
+  final PushService? _push;
 
   /// Splash: signs back in with the saved tokens (FN-AUTH-07). Only a verified account counts as a session.
   Future<void> restore() async {
@@ -16,6 +19,7 @@ class SessionController extends ChangeNotifier {
 
   /// ApiClient calls this when the server refuses the refresh token: back to the login screen
   void sessionExpired() {
+    _pushStarted = false;
     if (_user == null) return;
     _user = null;
     _pendingUser = null;
@@ -75,14 +79,28 @@ class SessionController extends ChangeNotifier {
   }
 
   void logout() {
-    _auth.logout().ignore();
+    final push = _push;
+    // Unregister the device while the access token still works, then revoke the session
+    () async {
+      await push?.stop();
+      await _auth.logout();
+    }()
+        .ignore();
+    _pushStarted = false;
     _user = null;
     _pendingUser = null;
     notifyListeners();
   }
 
+  bool _pushStarted = false;
+
   void _setUser(AppUser user) {
     _user = user;
     notifyListeners();
+    // FN-NOTI-02: once per sign-in, register this device for pushes
+    if (!_pushStarted && user.isVerified) {
+      _pushStarted = true;
+      _push?.start();
+    }
   }
 }
