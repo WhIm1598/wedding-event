@@ -196,6 +196,24 @@ class BottomActionBar extends StatelessWidget {
   }
 }
 
+/// Error of a form inside a bottom sheet (#31): a SnackBar would show under the sheet, so the message lives in the
+/// sheet itself, just above its submit button. Renders nothing when [message] is null.
+class FormError extends StatelessWidget {
+  const FormError(this.message, {super.key});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = message;
+    if (text == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(text, style: const TextStyle(color: AppColors.red600, fontSize: 13, fontWeight: FontWeight.w500)),
+    );
+  }
+}
+
 class FieldLabel extends StatelessWidget {
   const FieldLabel(this.text, {super.key});
 

@@ -31,6 +31,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
   late final _thumbnail = TextEditingController(text: widget.service?.thumbnailUrl ?? '');
   late ServiceCategory _category = widget.service?.category ?? ServiceCategory.photo;
   bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -44,7 +45,10 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       final saved = await context.read<VendorRepository>().saveService(VendorService(
             id: widget.service?.id ?? '',
@@ -61,7 +65,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
           ));
       if (mounted) Navigator.of(context).pop(saved);
     } catch (e) {
-      if (mounted) showAppSnack(context, e.toString(), error: true);
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -143,6 +147,7 @@ class _ServiceFormSheetState extends State<ServiceFormSheet> {
                 decoration: const InputDecoration(labelText: 'Link ảnh đại diện', counterText: ''),
               ),
               const SizedBox(height: 16),
+              FormError(_error),
               PrimaryButton(label: 'Lưu gói dịch vụ', loading: _saving, onPressed: _save),
             ],
           ),

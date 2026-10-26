@@ -25,6 +25,7 @@ class _QuoteRequestSheetState extends State<QuoteRequestSheet> {
   final _message = TextEditingController();
   DateTime? _eventDate;
   bool _sending = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -47,7 +48,10 @@ class _QuoteRequestSheetState extends State<QuoteRequestSheet> {
 
   Future<void> _send() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
     try {
       await context.read<VendorRepository>().sendQuoteRequest(
             widget.service,
@@ -58,7 +62,7 @@ class _QuoteRequestSheetState extends State<QuoteRequestSheet> {
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) showAppSnack(context, e.toString(), error: true);
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -105,6 +109,7 @@ class _QuoteRequestSheetState extends State<QuoteRequestSheet> {
               decoration: const InputDecoration(labelText: 'Lời nhắn cho nhà cung cấp'),
             ),
             const SizedBox(height: 12),
+            FormError(_error),
             PrimaryButton(label: 'Gửi yêu cầu', loading: _sending, onPressed: _send),
           ],
         ),

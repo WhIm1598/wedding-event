@@ -23,6 +23,7 @@ class _QuoteReplySheetState extends State<QuoteReplySheet> {
   late final _price = TextEditingController(text: widget.request.quotedPrice?.toString() ?? '');
   late final _note = TextEditingController(text: widget.request.vendorNote ?? '');
   bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -32,12 +33,15 @@ class _QuoteReplySheetState extends State<QuoteReplySheet> {
   }
 
   Future<void> _run(Future<void> Function(VendorRepository repo) action) async {
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await action(context.read<VendorRepository>());
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) showAppSnack(context, e.toString(), error: true);
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -79,6 +83,7 @@ class _QuoteReplySheetState extends State<QuoteReplySheet> {
               decoration: const InputDecoration(labelText: 'Ghi chú cho cặp đôi'),
             ),
             const SizedBox(height: 12),
+            FormError(_error),
             PrimaryButton(label: 'Gửi báo giá', loading: _saving, onPressed: _quote),
             const SizedBox(height: 8),
             TextButton(
