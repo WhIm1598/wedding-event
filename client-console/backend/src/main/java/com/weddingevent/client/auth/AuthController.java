@@ -3,6 +3,7 @@ package com.weddingevent.client.auth;
 import com.weddingevent.client.auth.AuthService.GoogleLoginRequest;
 import com.weddingevent.client.auth.AuthService.LoginRequest;
 import com.weddingevent.client.auth.AuthService.LoginResponse;
+import com.weddingevent.client.auth.AuthService.RefreshRequest;
 import com.weddingevent.client.auth.AuthService.SendOtpRequest;
 import com.weddingevent.client.auth.AuthService.VerifyOtpRequest;
 import com.weddingevent.client.security.CurrentUser;
@@ -57,5 +58,24 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<UserDto> me(@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.ok(auth.me(CurrentUser.id(jwt)));
+    }
+
+    /** FN-AUTH-07 */
+    @PostMapping("/refresh")
+    public ApiResponse<LoginResponse> refresh(@Valid @RequestBody RefreshRequest req) {
+        return ApiResponse.ok(auth.refresh(req));
+    }
+
+    /** FN-AUTH-07: always 200 */
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest req) {
+        auth.logout(req.refreshToken());
+        return ApiResponse.ok(null, "Đã đăng xuất");
+    }
+
+    @PostMapping("/logout-all")
+    public ApiResponse<Void> logoutAll(@AuthenticationPrincipal Jwt jwt) {
+        auth.logoutAll(CurrentUser.id(jwt));
+        return ApiResponse.ok(null, "Đã đăng xuất khỏi mọi thiết bị");
     }
 }
