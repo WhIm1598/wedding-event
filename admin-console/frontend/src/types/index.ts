@@ -8,6 +8,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  /** Temporary password: only change-password works until it is changed (FN-ADM-AUTH-01 step 6) */
+  mustChangePassword: boolean;
 }
 
 export interface LoginResponse {
@@ -238,3 +240,38 @@ export interface ApiResponse<T> {
   data: T;
   errors?: unknown[];
 }
+
+// --- Login accounts (FN-ADM-USER-01) ---
+export interface PageResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  staffId: string | null;
+  staffName: string | null;
+  isActive: boolean;
+  lastLoginAt: string | null;
+}
+
+/** temporaryPassword is shown once and never again */
+export interface CreatedAccount {
+  user: UserAccount;
+  temporaryPassword: string;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  name: string;
+  role: Role;
+  staffId: string | null;
+}
+
+export type UpdateUserRequest = Pick<UserAccount, 'name' | 'role' | 'isActive' | 'staffId'>;

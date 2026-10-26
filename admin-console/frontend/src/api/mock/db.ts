@@ -12,6 +12,7 @@ import type {
   StaffTask,
   StudioSettings,
   Transaction,
+  UserAccount,
 } from '@/types';
 
 const today = todayISO();
@@ -37,6 +38,12 @@ const ref = (id: string) => {
 
 export const db = {
   staff,
+
+  // Login accounts (FN-ADM-USER-01); ids match the demo users in auth.api.ts
+  users: [
+    { id: 'u-admin', email: 'admin@lumiere.vn', name: 'Quản Lý Studio', role: 'ROLE_ADMIN', staffId: null, staffName: null, isActive: true, lastLoginAt: minutesAgo(5) },
+    { id: 'u-staff', email: 'staff@lumiere.vn', name: 'Nhân Viên', role: 'ROLE_STAFF', staffId: 'nv-02', staffName: 'Hương Sale', isActive: true, lastLoginAt: minutesAgo(180) },
+  ] as UserAccount[],
 
   packages: [
     { id: 'pkg-1', name: 'Gói Kim Cương (Ngày Cưới)', price: 25_000_000, type: 'Trọn gói', isActive: true,

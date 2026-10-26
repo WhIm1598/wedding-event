@@ -24,6 +24,8 @@ import org.springframework.stereotype.Component;
 public class ConsoleAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
 
     public static final Set<Role> CONSOLE_ROLES = Set.of(Role.ROLE_ADMIN, Role.ROLE_STAFF);
+    /** The only authority of an account that still has to change its temporary password (FN-ADM-AUTH-01 step 6) */
+    public static final String PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED";
 
     private final UserRepository users;
 
@@ -39,7 +41,9 @@ public class ConsoleAuthenticationConverter implements Converter<Jwt, AbstractAu
                 .filter(u -> u.getRole() == claims.role() && isConsoleUser(u))
                 .filter(u -> Objects.equals(staffId(u), claims.staffMemberId()))
                 .orElseThrow(() -> new InvalidBearerTokenException("Account locked or changed"));
-        return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(user.getRole().name())), user.getId().toString());
+        // A temporary password grants no role, so only the routes SecurityConfig opens to any signed-in user work
+        String authority = user.isMustChangePassword() ? PASSWORD_CHANGE_REQUIRED : user.getRole().name();
+        return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(authority)), user.getId().toString());
     }
 
     /** Mobile accounts (couple/vendor, or no role yet) can't use the admin console. Set.of(...).contains(null) throws. */

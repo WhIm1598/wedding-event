@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Building, FileText, Users, type LucideIcon } from 'lucide-react';
+import { Building, FileText, KeyRound, Users, type LucideIcon } from 'lucide-react';
 import { errorMessage } from '@/api/http';
 import { settingsApi } from '@/api/system.api';
 import { useAsync } from '@/hooks/useAsync';
@@ -10,11 +10,13 @@ import { Card } from '@/components/ui/Card';
 import { Field, Input, Textarea } from '@/components/ui/Form';
 import { Spinner } from '@/components/ui/States';
 import { cn } from '@/lib/cn';
+import { AccountsSection } from './AccountsSection';
 
-type Section = 'studio' | 'contract' | 'roles';
+type Section = 'studio' | 'accounts' | 'contract' | 'roles';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: LucideIcon }> = [
   { id: 'studio', label: 'Thông tin Studio', icon: Building },
+  { id: 'accounts', label: 'Tài Khoản', icon: KeyRound },
   { id: 'contract', label: 'Mẫu Hợp Đồng', icon: FileText },
   { id: 'roles', label: 'Phân Quyền', icon: Users },
 ];
@@ -26,7 +28,7 @@ export function SettingsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-slate-900">Cài Đặt Hệ Thống</h2>
-        <p className="text-slate-500 text-sm">Cấu hình thông tin Studio, mẫu hợp đồng, và phân quyền.</p>
+        <p className="text-slate-500 text-sm">Cấu hình thông tin Studio, tài khoản đăng nhập, mẫu hợp đồng và phân quyền.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -47,6 +49,7 @@ export function SettingsPage() {
 
         <Card className="p-6 md:col-span-2 space-y-5">
           {section === 'studio' && <StudioForm />}
+          {section === 'accounts' && <AccountsSection />}
           {section === 'contract' && <ContractTemplateInfo />}
           {section === 'roles' && <RolesMatrix />}
         </Card>

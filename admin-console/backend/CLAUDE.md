@@ -6,10 +6,10 @@ Entities, enums, repositories and migrations live in **backend-common**, not her
 
 ## Layout (`src/main/java/com/weddingevent/admin/`)
 One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`, `staff`, `crm`, `contract`, `finance`,
-`notification`, `search`, `settings`. Shared code:
+`notification`, `search`, `settings`, `user` (FN-ADM-USER-01 login accounts). Shared code:
 | Package | Contents |
 |---|---|
-| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService` (refresh tokens are `refresh_tokens` rows keyed by `jti`, rotated in `AuthService.refresh`), `ConsoleAuthenticationConverter` (reloads the account on every request: locked / role or staff link changed → 401), `CurrentUser.from(jwt)` (`id`, `role`, `staffMemberId`, `isAdmin()`), `SecurityErrorHandler` |
+| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService` (refresh tokens are `refresh_tokens` rows keyed by `jti`, rotated in `AuthService.refresh`), `ConsoleAuthenticationConverter` (reloads the account on every request: locked / role or staff link changed → 401; a temporary password grants only `PASSWORD_CHANGE_REQUIRED`, so routes not opened with `.authenticated()` answer 403 `PASSWORD_CHANGE_REQUIRED`), `CurrentUser.from(jwt)` (`id`, `role`, `staffMemberId`, `isAdmin()`), `SecurityErrorHandler` |
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `support/` | `DateRange` (day / Monday-based week / month, instant bounds) |
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |

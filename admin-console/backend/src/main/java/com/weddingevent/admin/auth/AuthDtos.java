@@ -25,9 +25,9 @@ public final class AuthDtos {
 
     public static final String PASSWORD_POLICY = "^(?=.*\\p{L})(?=.*\\d).*$";
 
-    public record AuthUserDto(String id, String name, String email, String role) {
+    public record AuthUserDto(String id, String name, String email, String role, boolean mustChangePassword) {
         public static AuthUserDto of(User u) {
-            return new AuthUserDto(u.getId().toString(), u.getFullName(), u.getEmail(), u.getRole().name());
+            return new AuthUserDto(u.getId().toString(), u.getFullName(), u.getEmail(), u.getRole().name(), u.isMustChangePassword());
         }
     }
 
