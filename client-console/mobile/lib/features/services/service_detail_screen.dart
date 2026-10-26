@@ -124,7 +124,9 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(Fmt.vnd(s.price), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.pink600)),
+                        Text(Fmt.vnd(s.discountPrice ?? s.price), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.pink600)),
+                        if (s.discountPrice != null)
+                          Text(Fmt.vnd(s.price), style: const TextStyle(color: AppColors.slate400, decoration: TextDecoration.lineThrough)),
                         Text('${s.reviews} đánh giá', style: const TextStyle(fontSize: 12, color: AppColors.slate400)),
                         const Divider(height: 32, color: AppColors.slate100),
                         const Text('Mô tả dịch vụ', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.slate800)),

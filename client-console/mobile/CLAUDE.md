@@ -8,7 +8,7 @@ Keep `PUB_CACHE` on the project's drive: Kotlin incremental compile fails on plu
 (`this and base files have different roots`); otherwise add `kotlin.incremental=false` to `android/gradle.properties`.
 The app runs on mock data by default; `--dart-define=USE_MOCK=false` calls `client-console/backend` (port 8081, see its
 CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sending messages; the vendor workspace
-(`VendorRepository`, spec FN-VND-01..05) is real for quote requests and projects (FN-VND-01..04); dashboard and service management (FN-VND-05) work in mock mode only. List endpoints return the spec's page shape
+(`VendorRepository`, spec FN-VND-01..05) runs on the real API (FN-VND-01..05); only the vendor chat threads (no spec) are mock-only. List endpoints return the spec's page shape
 `{items, page, size, totalElements, totalPages}`.
 
 ## Where things go (`lib/`)

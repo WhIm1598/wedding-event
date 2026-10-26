@@ -1,3 +1,5 @@
+import 'service_item.dart';
+
 /// `VendorProjectStatus` (spec §1.6); the API uses the upper-case names
 enum ProjectStatus {
   upcoming('Sắp tới'),
@@ -183,6 +185,14 @@ class VendorDashboard {
   final double rating;
   final List<QuoteRequest> quoteRequests;
   final List<VendorProject> upcoming;
+
+  factory VendorDashboard.fromJson(Map<String, dynamic> json) => VendorDashboard(
+        monthlyRevenue: (json['monthlyRevenue'] as num).toInt(),
+        newRequestCount: (json['newRequestCount'] as num).toInt(),
+        rating: (json['rating'] as num).toDouble(),
+        quoteRequests: [for (final q in json['quoteRequests'] as List<dynamic>) QuoteRequest.fromJson(q as Map<String, dynamic>)],
+        upcoming: [for (final p in json['upcoming'] as List<dynamic>) VendorProject.fromJson(p as Map<String, dynamic>)],
+      );
 }
 
 class ChatThread {
@@ -195,23 +205,75 @@ class ChatThread {
   final int unread;
 }
 
+/// `VendorServiceDto` (FN-VND-05): one of the vendor's own packages
 class VendorService {
   const VendorService({
     required this.id,
     required this.name,
+    required this.category,
     required this.price,
     required this.isActive,
-    required this.bookings,
-    required this.imageUrl,
+    required this.projectCount,
+    this.type,
+    this.discountPrice,
+    this.description,
+    this.features = const [],
+    this.thumbnailUrl,
   });
 
   final String id;
   final String name;
+  final ServiceCategory category;
+  final String? type;
   final int price;
-  final bool isActive;
-  final int bookings;
-  final String imageUrl;
 
-  VendorService copyWith({bool? isActive}) =>
-      VendorService(id: id, name: name, price: price, isActive: isActive ?? this.isActive, bookings: bookings, imageUrl: imageUrl);
+  /// Price after the vendor's discount; null = no discount
+  final int? discountPrice;
+  final String? description;
+  final List<String> features;
+  final String? thumbnailUrl;
+  final bool isActive;
+
+  /// Vendor Projects of this package that weren't cancelled (GLOSSARY: not "bookings")
+  final int projectCount;
+
+  factory VendorService.fromJson(Map<String, dynamic> json) => VendorService(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: ServiceCategory.values.firstWhere((c) => c.name == json['category'], orElse: () => ServiceCategory.photo),
+        type: json['type'] as String?,
+        price: (json['price'] as num).toInt(),
+        discountPrice: (json['discountPrice'] as num?)?.toInt(),
+        description: json['description'] as String?,
+        features: [for (final f in json['features'] as List<dynamic>? ?? const []) f as String],
+        thumbnailUrl: json['thumbnailUrl'] as String?,
+        isActive: json['isActive'] as bool,
+        projectCount: (json['projectCount'] as num).toInt(),
+      );
+
+  /// Body of POST/PUT /client/vendor/services
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'category': category.name,
+        'type': type,
+        'price': price,
+        'discountPrice': discountPrice,
+        'description': description,
+        'features': features,
+        'thumbnailUrl': thumbnailUrl,
+      };
+
+  VendorService copyWith({bool? isActive}) => VendorService(
+        id: id,
+        name: name,
+        category: category,
+        type: type,
+        price: price,
+        discountPrice: discountPrice,
+        description: description,
+        features: features,
+        thumbnailUrl: thumbnailUrl,
+        isActive: isActive ?? this.isActive,
+        projectCount: projectCount,
+      );
 }

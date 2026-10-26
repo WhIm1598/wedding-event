@@ -7,7 +7,6 @@ import '../models/service_item.dart';
 import '../models/vendor.dart';
 
 /// Vendor workspace, detailed spec Module 4B (FN-VND-01..05), both the couple's and the vendor's side.
-/// Calls still throwing [UnimplementedError] work in mock mode only until their ticket lands.
 class VendorRepository {
   VendorRepository(this._api);
 
@@ -132,10 +131,10 @@ class VendorRepository {
     return mockDelay(MockData.quoteRequests[i], 300);
   }
 
-  /// GET /client/vendor/dashboard
+  /// GET /client/vendor/dashboard (FN-VND-05)
   Future<VendorDashboard> getDashboard() {
     if (Env.useMock) return mockDelay(MockData.vendorDashboard());
-    throw UnimplementedError('GET /client/vendor/dashboard');
+    return _api.get('/client/vendor/dashboard', parse: (d) => VendorDashboard.fromJson(d! as Map<String, dynamic>));
   }
 
   /// GET /client/vendor/projects (vendor) or /client/vendor-projects (couple) — FN-VND-04
@@ -199,19 +198,43 @@ class VendorRepository {
     throw UnimplementedError('GET /client/vendor/conversations');
   }
 
-  /// GET /client/vendor/services
+  /// GET /client/vendor/services (FN-VND-05) — hidden packages included
   Future<List<VendorService>> getServices() {
     if (Env.useMock) return mockDelay(List.of(MockData.vendorServices), 250);
-    throw UnimplementedError('GET /client/vendor/services');
+    return _api.get('/client/vendor/services',
+        parse: (d) => [for (final e in d! as List<dynamic>) VendorService.fromJson(e as Map<String, dynamic>)]);
   }
 
-  /// PATCH /client/vendor/services/{id}/active — show/hide a package
+  /// POST /client/vendor/services, or PUT /client/vendor/services/{id} when [service] has an id (FN-VND-05)
+  Future<VendorService> saveService(VendorService service) {
+    if (Env.useMock) {
+      if (service.discountPrice != null && service.discountPrice! >= service.price) {
+        throw const ApiException(code: 'BAD_REQUEST', message: 'Giá sau giảm phải thấp hơn giá gốc');
+      }
+      final i = MockData.vendorServices.indexWhere((s) => s.id == service.id);
+      final saved = VendorService.fromJson({
+        ...service.toJson(),
+        'id': i < 0 ? 'vs-${MockData.vendorServices.length + 1}' : service.id,
+        'isActive': i < 0 || MockData.vendorServices[i].isActive,
+        'projectCount': i < 0 ? 0 : MockData.vendorServices[i].projectCount,
+      });
+      i < 0 ? MockData.vendorServices.insert(0, saved) : MockData.vendorServices[i] = saved;
+      return mockDelay(saved, 300);
+    }
+    VendorService parse(Object? d) => VendorService.fromJson(d! as Map<String, dynamic>);
+    return service.id.isEmpty
+        ? _api.post('/client/vendor/services', body: service.toJson(), parse: parse)
+        : _api.put('/client/vendor/services/${service.id}', body: service.toJson(), parse: parse);
+  }
+
+  /// PATCH /client/vendor/services/{id}/active (FN-VND-05) — show/hide a package in the catalog
   Future<VendorService> setServiceActive(String id, bool isActive) {
     if (Env.useMock) {
       final i = MockData.vendorServices.indexWhere((s) => s.id == id);
       MockData.vendorServices[i] = MockData.vendorServices[i].copyWith(isActive: isActive);
       return mockDelay(MockData.vendorServices[i], 200);
     }
-    throw UnimplementedError('PATCH /client/vendor/services/$id/active');
+    return _api.patch('/client/vendor/services/$id/active',
+        body: {'isActive': isActive}, parse: (d) => VendorService.fromJson(d! as Map<String, dynamic>));
   }
 }

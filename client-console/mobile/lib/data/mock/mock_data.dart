@@ -108,8 +108,11 @@ class MockData {
   ];
 
   static VendorDashboard vendorDashboard() => VendorDashboard(
-        monthlyRevenue: 120000000,
-        newRequestCount: 3,
+        // FN-VND-05: completed projects with an event date in the current month
+        monthlyRevenue: vendorProjects
+            .where((p) => p.status == ProjectStatus.completed && p.eventDate.year == DateTime.now().year && p.eventDate.month == DateTime.now().month)
+            .fold(0, (sum, p) => sum + p.agreedPrice),
+        newRequestCount: quoteRequests.where((q) => q.status == QuoteRequestStatus.pending).length,
         rating: 4.9,
         quoteRequests: quoteRequests.where((q) => q.status == QuoteRequestStatus.pending).take(5).toList(),
         upcoming: [vendorProjects.first],
@@ -143,8 +146,8 @@ class MockData {
   ];
 
   static final List<VendorService> vendorServices = [
-    const VendorService(id: 'vs-1', name: 'Gói Chụp Pre-Wedding Ngoại Cảnh', price: 15000000, isActive: true, bookings: 24, imageUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=200'),
-    const VendorService(id: 'vs-2', name: 'Chụp Phóng Sự Cưới', price: 8000000, isActive: true, bookings: 42, imageUrl: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=200'),
-    const VendorService(id: 'vs-3', name: 'Quay Phim Highlight', price: 10000000, isActive: false, bookings: 5, imageUrl: 'https://images.unsplash.com/photo-1606800052052-a08af7148866?w=200'),
+    const VendorService(id: 'vs-1', name: 'Gói Chụp Pre-Wedding Ngoại Cảnh', category: ServiceCategory.photo, price: 15000000, discountPrice: 13500000, isActive: true, projectCount: 24, thumbnailUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=200'),
+    const VendorService(id: 'vs-2', name: 'Chụp Phóng Sự Cưới', category: ServiceCategory.photo, price: 8000000, isActive: true, projectCount: 42, thumbnailUrl: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=200'),
+    const VendorService(id: 'vs-3', name: 'Quay Phim Highlight', category: ServiceCategory.photo, price: 10000000, isActive: false, projectCount: 5, thumbnailUrl: 'https://images.unsplash.com/photo-1606800052052-a08af7148866?w=200'),
   ];
 }

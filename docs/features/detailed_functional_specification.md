@@ -536,7 +536,7 @@ flowchart LR
   * `POST /api/v1/client/vendor-projects/{id}/cancel-request` — `ROLE_COUPLE`, `{ "reason": "Đổi địa điểm tổ chức" }` (bắt buộc, ≤ 500). Chỉ khi `UPCOMING`/`IN_PROGRESS` và chưa có yêu cầu hủy đang chờ, nếu không `409 INVALID_STATUS_TRANSITION`. Ghi `cancel_requested_at`, `cancel_reason`; trạng thái **giữ nguyên**. Thông báo cho Vendor ("Cặp đôi xin hủy dự án").
   * `POST /api/v1/client/vendor/projects/{id}/cancel-request/approve` — `ROLE_VENDOR`: dự án → `CANCELLED`. `.../cancel-request/reject` — xóa yêu cầu, dự án tiếp tục. Không có yêu cầu đang chờ → `409 INVALID_STATUS_TRANSITION`. Thông báo kết quả cho cặp đôi.
 
-#### `FN-VND-05: Bảng điều khiển Vendor & Gói dịch vụ của Vendor` 🆕
+#### `FN-VND-05: Bảng điều khiển Vendor & Gói dịch vụ của Vendor` ✅
 * **Dashboard:** `GET /api/v1/client/vendor/dashboard` — `ROLE_VENDOR`.
   ```json
   {

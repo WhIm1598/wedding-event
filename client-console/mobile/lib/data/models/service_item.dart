@@ -22,6 +22,7 @@ class ServiceItem {
     required this.imageUrl,
     required this.description,
     this.providerId,
+    this.discountPrice,
   });
 
   final String id;
@@ -31,6 +32,9 @@ class ServiceItem {
   /// User id of the vendor (FN-MSG-01 `recipientId`); null for the studio's own packages
   final String? providerId;
   final int price;
+
+  /// Price after the vendor's discount (FN-VND-05); null = no discount
+  final int? discountPrice;
   final double rating;
   final int reviews;
   final String location;
@@ -44,6 +48,7 @@ class ServiceItem {
         provider: json['providerName'] as String? ?? '',
         providerId: json['providerId'] as String?,
         price: (json['price'] as num).toInt(),
+        discountPrice: (json['discountPrice'] as num?)?.toInt(),
         rating: (json['rating'] as num?)?.toDouble() ?? 0,
         reviews: json['reviewCount'] as int? ?? 0,
         location: json['address'] as String? ?? '',

@@ -16,6 +16,7 @@ call them, so paths and JSON names must stay identical. Entities, repositories a
 | `guest/` | `GuestController`/`GuestService` (FN-GUEST-01/02) |
 | `quote/` | `QuoteRequestService` (FN-VND-01..03), `QuoteRequestController` (couple, `/client/quote-requests`), `VendorQuoteRequestController` (vendor, `/client/vendor/quote-requests`) |
 | `project/` | `VendorProjectService` (FN-VND-04: status, couple's cancellation request), `VendorProjectController` (vendor, `/client/vendor/projects`), `CoupleProjectController` (couple, `/client/vendor-projects`) — a project is created by `QuoteRequestService.accept` |
+| `vendor/` | `VendorWorkspaceService` + `VendorWorkspaceController` (`/client/vendor/dashboard`, `/client/vendor/services`: FN-VND-05 dashboard, create/edit packages with `discountPrice`, show/hide) |
 | `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio) |
 | `notification/` | `ClientNotificationController`/`ClientNotificationService` (FN-NOTI-01 inbox; `notify(userId, kind, title, body)` stores + pushes after commit), `PushSender`/`LoggingPushSender` |
 | `message/` | `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
@@ -63,7 +64,7 @@ and every business code.
 `PLAN_ALREADY_SYNCED` 409, `INVALID_RECIPIENT` 400, `AI_SERVICE_UNAVAILABLE` 503, plus the generic ones.
 
 ## Not built (no spec yet)
-Vendor dashboard and service management (FN-VND-05 — those `VendorRepository` calls work in mock mode only), refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
+Refresh-token endpoint, conversation history, e-mail delivery, FCM, Redis-backed presence.
 
 ## Check
 `./gradlew :client-console:backend:build` — tests need Docker (Testcontainers) or an empty PostgreSQL via
