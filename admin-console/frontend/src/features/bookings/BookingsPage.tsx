@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { bookingsApi } from '@/api/bookings.api';
+import { errorMessage } from '@/api/http';
 import { useAsync } from '@/hooks/useAsync';
+import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { BOOKING_STATUS } from '@/constants/labels';
 import { todayISO } from '@/lib/date';
 import { cn } from '@/lib/cn';
-import type { CalendarView } from '@/types';
+import type { Booking, BookingProgressStatus, CalendarView } from '@/types';
 import { MonthCalendar } from './components/MonthCalendar';
 import { ScheduleList } from './components/ScheduleList';
 import { CreateBookingModal } from './components/CreateBookingModal';
@@ -19,6 +22,7 @@ const VIEWS: Array<{ id: CalendarView; label: string }> = [
 ];
 
 export function BookingsPage() {
+  const showToast = useToast();
   const [params, setParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [view, setView] = useState<CalendarView>('day');
@@ -33,6 +37,20 @@ export function BookingsPage() {
   const handleCreated = () => {
     schedule.reload();
     month.reload();
+  };
+
+  const [savingId, setSavingId] = useState<string>();
+  const changeStatus = async (booking: Booking, status: BookingProgressStatus) => {
+    setSavingId(booking.id);
+    try {
+      const updated = await bookingsApi.updateStatus(booking.id, status);
+      schedule.setData((prev) => prev?.map((b) => (b.id === updated.id ? updated : b)));
+      showToast(`Đã chuyển lịch sang "${BOOKING_STATUS[updated.status].label}"`);
+    } catch (err) {
+      showToast(errorMessage(err), 'error');
+    } finally {
+      setSavingId(undefined);
+    }
   };
 
   return (
@@ -68,10 +86,13 @@ export function BookingsPage() {
           bookings={schedule.data ?? []}
           loading={schedule.loading}
           onCreate={() => setCreateOpen(true)}
+          onStatusChange={changeStatus}
+          savingId={savingId}
         />
       </div>
 
-      <CreateBookingModal isOpen={isCreateOpen} defaultDate={selectedDate} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
+      {/* key: a fresh form (and contract list) on every open, so a closed draft never carries over */}
+      <CreateBookingModal key={isCreateOpen ? 'open' : 'closed'} isOpen={isCreateOpen} defaultDate={selectedDate} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
     </div>
   );
 }

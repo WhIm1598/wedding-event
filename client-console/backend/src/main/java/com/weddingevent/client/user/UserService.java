@@ -85,7 +85,11 @@ public class UserService {
         return dto(user);
     }
 
-    /** FN-AUTH-04. A new e-mail must be verified again (OTP, FN-AUTH-02). */
+    /**
+     * FN-AUTH-04. A new e-mail is only kept as {@code pendingEmail} and an OTP is sent to it; it replaces the current
+     * one when that OTP is confirmed (FN-AUTH-02). Until then the account keeps its proven address, so nobody can
+     * claim an address they don't own. Sending the current e-mail again cancels a pending change.
+     */
     @Transactional
     public UserDto updateProfile(UUID userId, ProfileRequest req) {
         User user = load(userId);
@@ -96,10 +100,11 @@ public class UserService {
         }
         user.setFullName(req.fullName().trim());
         user.setPhone(req.phone() == null || req.phone().isBlank() ? null : req.phone());
-        user.setEmail(email);
-        if (emailChanged) {
-            user.setVerified(false);
-            otp.issue(user);
+        if (!emailChanged) {
+            user.setPendingEmail(null);
+        } else if (!email.equalsIgnoreCase(user.getPendingEmail())) {
+            user.setPendingEmail(email);
+            otp.issue(user, email);
         }
         return dto(user);
     }

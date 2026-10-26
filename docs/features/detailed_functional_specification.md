@@ -1,6 +1,6 @@
 # TÀI LIỆU ĐẶC TẢ CHI TIẾT CHỨC NĂNG (DETAILED FUNCTIONAL SPECIFICATION)
 **Dự án:** Wedding Event & Studio Management Monorepo Platform  
-**Phiên bản:** 1.1.2  
+**Phiên bản:** 1.1.3  
 **Mục tiêu:** Cung cấp thông số kỹ thuật, quy tắc nghiệp vụ (Business Rules), Schema Request/Response và quy trình xử lý chi tiết từng function cho AI Agent / Kỹ sư phần mềm triển khai mã nguồn chính xác 100%.
 
 **Ký hiệu trạng thái triển khai** (gắn ở đầu mỗi function phía Admin):
@@ -15,6 +15,7 @@
 | 1.1.0 | **Nhóm A — làm rõ spec:** vòng đời trạng thái Hợp đồng/Lịch hẹn/Lead (§1.6); xác thực Admin tách `/api/v1/admin/auth/**`, thu hồi token, đăng xuất (Module 5A); ma trận phân quyền (§1.5); danh mục mã lỗi (§1.3); công thức KPI chống chia cho 0; bộ đệm bảo dưỡng kiểm tra hai chiều; bổ sung các endpoint đã có nhưng chưa được đặc tả (gói dịch vụ, nhân sự, thông báo, tìm kiếm, cài đặt). **Nhóm B — tính năng mới:** UI giữ lịch trang phục, hành trình khách hàng liền mạch, lịch thanh toán 30/50/20 + nhắc nợ, sửa/hủy, quản lý tài khoản, trang hợp đồng công khai, tự phục vụ cho nhân viên, phân trang & điều hướng tìm kiếm, yêu cầu phi chức năng (§3). |
 | 1.1.1 | Đối chiếu với mã nguồn: các mục chưa có trong code được gắn *(v1.1)* (JWT claim `typ`, kết quả tìm kiếm `contract`/`lead`, `completedThisMonth` tính đến hôm nay, địa chỉ Bên A); bổ sung endpoint mobile đang dùng nhưng chưa đặc tả (FN-AUTH-04, FN-PLAN-05, FN-SVC-02, FN-NOTI-01) và `budgetItems`/`tasks` trong FN-PLAN-02. |
 | 1.1.2 | Triển khai `client-console/backend` (Phần A): bảng mã lỗi phía mobile (§1.3); `users.role` để trống tới khi chọn vai trò, vai trò chỉ chọn một lần (FN-AUTH-03); kế hoạch `DRAFT` không tính là có kế hoạch; quy tắc OTP/gửi lại mã (FN-AUTH-02); `providerId` trong FN-SVC-01; mặc định ngày cưới và lỗi dịch vụ AI (FN-PLAN-03); quy tắc mã kết nối (FN-PLAN-04); người nhận hợp lệ và thông báo khi offline (FN-MSG-01); làm tròn `progressPercentage`. |
+| 1.1.3 | Không gian Vendor (Module 4B): yêu cầu báo giá → dự án Vendor, dashboard và gói của Vendor (FN-VND-01..05), trạng thái `QuoteRequestStatus`/`VendorProjectStatus` (§1.6), mã lỗi `PACKAGE_NOT_QUOTABLE`, `QUOTE_ALREADY_OPEN` (§1.3). Bảo mật tài khoản mobile: email mới chờ xác nhận (`pendingEmail`, FN-AUTH-04), mã OTP gắn với địa chỉ nhận và tối đa 5 mã/giờ (FN-AUTH-02), Google chỉ nhận email đã xác thực và không gộp vào tài khoản chưa xác thực. FN-ADM-CRM-03: khách chuyển `IN_PROGRESS` khi hợp đồng nhận cọc, không phải khi tạo hợp đồng nháp (khớp sơ đồ). Hợp đồng `DEPOSITED` không có lịch hẹn (chỉ thuê váy) bàn giao được trực tiếp. Duyệt Module 4B: Vendor tạo/sửa gói và giảm giá (`discountPrice`), doanh thu Vendor chỉ tính dự án `COMPLETED`, Cặp đôi xin hủy dự án và Vendor duyệt, gói Studio và Vendor liên hệ qua Zalo (`zaloUrl`; số Studio `zaloPhone` FN-ADM-SET-01, số Vendor = SĐT tài khoản), chat Cặp đôi–Studio/Vendor (FN-MSG-01) tạm ẩn trên app, thanh toán Cặp đôi–Vendor ngoài app. Thuật ngữ thống nhất trong `GLOSSARY.md`. |
 
 ---
 
@@ -83,7 +84,7 @@
 **Mã nghiệp vụ phía Mobile (Phần A)** *(v1.1.2)* — dùng chung `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `EMAIL_EXISTS` ở trên:
 | Mã | HTTP | Ngữ cảnh |
 | :--- | :--- | :--- |
-| `INVALID_GOOGLE_TOKEN` | 401 | Google ID token sai/hết hạn, hoặc đăng nhập Google chưa được cấu hình. |
+| `INVALID_GOOGLE_TOKEN` | 401 | Google ID token sai/hết hạn, đăng nhập Google chưa được cấu hình, hoặc *(v1.1.3)* email Google chưa được Google xác thực. Đăng nhập Google vào một tài khoản có sẵn nhưng chưa xác thực email → `409 EMAIL_EXISTS` (không gộp tài khoản). Tài khoản được nhận diện theo mã người dùng Google (`sub`, cột `users.google_sub`) nên vẫn đúng khi email Google đổi; lần đầu đăng nhập Google, tài khoản cùng email được gắn với `sub` đó; email đã gắn với một `sub` khác (địa chỉ Gmail bị tái sử dụng) → `409 EMAIL_EXISTS`. |
 | `INVALID_OTP` | 400 | Mã OTP sai, hoặc không có mã nào đang chờ cho email này. |
 | `OTP_EXPIRED` | 400 | Mã quá 5 phút hoặc đã sai 5 lần — phải gửi lại mã (`POST /auth/send-otp`). |
 | `ROLE_ALREADY_SET` | 409 | Tài khoản đã chọn vai trò (FN-AUTH-03 chỉ gọi một lần). |
@@ -93,6 +94,8 @@
 | `PLAN_ALREADY_SYNCED` | 409 | Kế hoạch đã có bạn đời (tạo mã mới hoặc tham gia đều bị chặn). |
 | `INVALID_RECIPIENT` | 400 | Người nhận tin nhắn không tồn tại, bị khóa, là chính mình, hoặc không phải cặp Cặp đôi ↔ Vendor. |
 | `AI_SERVICE_UNAVAILABLE` | 503 | Dịch vụ AI planner lỗi/quá thời gian hoặc trả về kế hoạch rỗng. |
+| `PACKAGE_NOT_QUOTABLE` | 400 | Gửi yêu cầu báo giá cho gói của Studio (chỉ gói của Vendor nhận báo giá — FN-VND-01). |
+| `QUOTE_ALREADY_OPEN` | 409 | Cặp đôi đã có yêu cầu báo giá đang mở (`PENDING`/`QUOTED`) cho cùng gói (kèm `data.existingId`). |
 
 ### 1.4. Định tuyến API qua Nginx Gateway *(v1.1)*
 | Tiền tố | Service | Ghi chú |
@@ -137,8 +140,9 @@ Mọi chuyển trạng thái ngoài các mũi tên dưới đây trả `409 INVA
 stateDiagram-v2
     [*] --> DRAFT: Tạo hợp đồng (chưa thu tiền)
     DRAFT --> DEPOSITED: Thu khoản đầu tiên (paid_amount > 0)
-    DEPOSITED --> IN_PROGRESS: Đến ngày sự kiện đầu tiên / lịch đầu tiên chuyển IN_PROGRESS
+    DEPOSITED --> IN_PROGRESS: Đến ngày sự kiện đầu tiên / lịch đầu tiên chuyển IN_PROGRESS / nhận cọc khi đã có lịch bắt đầu
     IN_PROGRESS --> COMPLETED: remaining_amount = 0 VÀ đã xác nhận bàn giao
+    DEPOSITED --> COMPLETED: remaining_amount = 0 VÀ đã xác nhận bàn giao (hợp đồng không có lịch hẹn, vd. chỉ thuê váy)
     DRAFT --> CANCELLED
     DEPOSITED --> CANCELLED
     IN_PROGRESS --> CANCELLED
@@ -160,6 +164,13 @@ stateDiagram-v2
 * Đặt chỗ ở `CONFIRMED`/`PICKED_UP`/`RETURNED` (khi `lock_end_date >= hôm nay`) đều chiếm lịch khi kiểm tra trùng.
 
 **Đợt thanh toán — `InstallmentStatus`: `PENDING | PARTIAL | PAID | OVERDUE | CANCELLED`** (xem §FN-ADM-FIN-02).
+
+**Yêu cầu báo giá — `QuoteRequestStatus`: `PENDING | QUOTED | ACCEPTED | DECLINED | CANCELLED`** *(v1.1.3, FN-VND-03)*
+* `PENDING → QUOTED` (Vendor báo giá; `QUOTED → QUOTED` khi báo lại giá) `→ ACCEPTED` (Cặp đôi chấp nhận, sinh Vendor Project).
+* `PENDING`/`QUOTED → DECLINED` (Vendor từ chối) hoặc `→ CANCELLED` (Cặp đôi hủy). `ACCEPTED`/`DECLINED`/`CANCELLED` là trạng thái cuối.
+
+**Dự án Vendor — `VendorProjectStatus`: `UPCOMING | IN_PROGRESS | COMPLETED | CANCELLED`** *(v1.1.3, FN-VND-04)*
+* `UPCOMING → IN_PROGRESS → COMPLETED`; cho phép nhảy `UPCOMING → COMPLETED`. `UPCOMING`/`IN_PROGRESS → CANCELLED` do Vendor hủy, hoặc khi Vendor duyệt yêu cầu hủy của Cặp đôi (yêu cầu hủy không phải trạng thái riêng: `cancel_requested_at` khác null). `COMPLETED`/`CANCELLED` không sửa được.
 
 ---
 
@@ -221,7 +232,9 @@ stateDiagram-v2
   * Nhập sai quá 5 lần liên tiếp sẽ vô hiệu hóa mã OTP và bắt gửi lại.
   * Nếu thành công: Cập nhật `is_verified = true` trong cơ sở dữ liệu.
   * *(v1.1.2)* Sai mã → `400 INVALID_OTP`; sau 5 lần sai hoặc quá 5 phút → `400 OTP_EXPIRED`. Mã chỉ dùng một lần và chỉ lưu dạng băm. Mã mới (đăng nhập tài khoản chưa xác thực, đổi email, hoặc gửi lại) thay thế mã cũ.
-  * *(v1.1.2)* Gửi lại mã: `POST /api/v1/auth/send-otp` `{ "email" }` — luôn trả `200` (không tiết lộ email có tồn tại); chỉ gửi khi tài khoản tồn tại, đang hoạt động và chưa xác thực.
+  * *(v1.1.2)* Gửi lại mã: `POST /api/v1/auth/send-otp` `{ "email" }` — luôn trả `200` (không tiết lộ email có tồn tại); chỉ gửi khi tài khoản tồn tại, đang hoạt động và chưa xác thực *(v1.1.3 — hoặc đang đổi sang email này, FN-AUTH-04)*.
+  * *(v1.1.3)* **Giới hạn gửi mã:** tối đa 5 mã mỗi tài khoản mỗi giờ (tính cả mã gửi khi đăng nhập/đổi email). Vượt quá thì không gửi mã mới, mã cũ vẫn dùng được, `send-otp` vẫn trả `200`. Lý do: mỗi mã mới đặt lại số lần sai, nên không giới hạn thì "gửi lại + đoán 5 lần" sẽ dò ra mã 4 số; với giới hạn này là tối đa 25 lần đoán mỗi giờ.
+  * *(v1.1.3)* Mỗi mã chỉ xác thực **đúng địa chỉ email đã nhận mã** (`email` trong body phải là địa chỉ đó).
   * *(v1.1.2)* Tài khoản Studio (`ROLE_ADMIN`/`ROLE_STAFF`) không đăng nhập được app mobile (`401 INVALID_CREDENTIALS`), và ngược lại tài khoản mobile không đăng nhập được Web Admin.
 
 #### `FN-AUTH-03: Lựa chọn vai trò (Role Picker Onboarding)`
@@ -244,8 +257,9 @@ stateDiagram-v2
 #### `FN-AUTH-04: Cập nhật hồ sơ cá nhân`
 * **Endpoint:** `PUT /api/v1/users/me` — người dùng đã đăng nhập.
 * **Input:** `{ "fullName": "Ngọc & Hoàng", "email": "ngoc.hoang@example.com", "phone": "0912345678" }`.
-* **Validation:** `fullName` 1–100 ký tự; `email` RFC 5322, trùng email người khác → `409 EMAIL_EXISTS`; đổi email → `is_verified = false` và gửi OTP xác thực lại (FN-AUTH-02); `phone` rỗng hoặc đúng §1.1.
-* **Output (200):** đối tượng `user` như FN-AUTH-01.
+* **Validation:** `fullName` 1–100 ký tự; `email` RFC 5322, trùng email người khác → `409 EMAIL_EXISTS`; `phone` rỗng hoặc đúng §1.1.
+* *(v1.1.3)* **Đổi email:** email mới **không** thay email cũ ngay — được lưu vào `pending_email` và gửi OTP tới địa chỉ mới (FN-AUTH-02). `email` và `is_verified` giữ nguyên cho tới khi OTP của địa chỉ mới được xác nhận (`POST /auth/verify-otp` với `email` = địa chỉ mới), lúc đó email mới thay email cũ. Nếu trong lúc chờ đã có tài khoản khác dùng địa chỉ đó → xác nhận trả `409 EMAIL_EXISTS` và yêu cầu đổi bị hủy. Gửi lại email hiện tại → hủy yêu cầu đổi đang chờ. Lý do: nếu email chưa xác thực được ghi ngay, một người có thể "chiếm chỗ" email của người khác, và chủ thật khi đăng nhập Google sẽ vào nhầm tài khoản của họ.
+* **Output (200):** đối tượng `user` như FN-AUTH-01, *(v1.1.3)* thêm `pendingEmail` (null khi không có yêu cầu đổi).
 
 ---
 
@@ -439,13 +453,15 @@ stateDiagram-v2
 #### `FN-SVC-01: Khám phá danh mục dịch vụ`
 * **Endpoint:** `GET /api/v1/client/services?category={photo|decor|restaurant|dress}&keyword={text}&page=0&size=10`
 * **Output:** Danh sách các gói dịch vụ có phân trang (§1.2), chỉ gồm gói `is_active = true`. Mỗi phần tử: `{ id, name, providerId, providerName, price, rating, reviewCount, address, category, thumbnailUrl, description }`.
+  * *(v1.1.3)* Thêm `discountPrice` (giá sau giảm, `null` nếu không giảm — app hiển thị giá gốc gạch ngang) và `zaloUrl` = `https://zalo.me/{số}`: gói của Studio lấy `studio_settings.zalo_phone`, gói của Vendor lấy số điện thoại tài khoản Vendor (`users.phone`, sửa ở FN-AUTH-04); `null` khi chưa có số.
   * *(v1.1.2)* `providerId` = id **tài khoản người dùng** của Vendor (dùng làm `recipientId` của FN-MSG-01); `null` với gói của Studio (`vendor_id IS NULL`) — khi đó `providerName`/`address` lấy từ `studio_settings`, `rating = 0`, `reviewCount = 0`. `category` chữ thường; giá trị khác `photo|decor|restaurant|dress` → `400`. `keyword` khớp không phân biệt hoa thường với tên gói hoặc tên nhà cung cấp (`%`, `_` là ký tự thường). `size` 1–100, mặc định 10.
 
 #### `FN-SVC-02: Chi tiết dịch vụ`
 * **Endpoint:** `GET /api/v1/client/services/{id}` — cùng schema phần tử của FN-SVC-01 (mở rộng sau: thư viện ảnh, quyền lợi gói, đánh giá). Gói không tồn tại hoặc đã tắt → `404 NOT_FOUND`.
-* Nút "Liên hệ đặt lịch" trên màn hình chi tiết gọi FN-MSG-01 với `recipientId` = nhà cung cấp của gói.
+* *(v1.1.3)* Nút "Liên hệ đặt lịch" trên màn hình chi tiết mở `zaloUrl` (app Zalo / trình duyệt) cho cả gói Studio lẫn Vendor; `zaloUrl = null` → ẩn nút. Gói của Vendor còn có nút "Yêu cầu báo giá" (FN-VND-01). (Trước đây nút gọi FN-MSG-01 — tạm ngừng, xem FN-MSG-01.)
 
 #### `FN-MSG-01: Nhắn tin giữa Cặp đôi và Studio/Vendor`
+* *(v1.1.3)* **Chưa mở trên app:** chat trong app hiện chỉ có trợ lý AI (FN-PLAN-03); Cặp đôi liên hệ Studio/Vendor qua Zalo (`zaloUrl`, FN-SVC-02). App ẩn tab "Tin nhắn" của Vendor; backend giữ nguyên endpoint dưới đây để mở lại sau.
 * **Endpoint:** `POST /api/v1/messages/send`
 * **Giao thức:** Hỗ trợ REST API và WebSocket STOMP (`/app/chat`, `/topic/messages/{roomId}`).
 * **Input Schema:**
@@ -465,6 +481,78 @@ stateDiagram-v2
 * **Item:** `{ "id", "title", "body", "kind": "ai|message|sync|reminder", "isRead": false, "createdAt" }` — `kind` quyết định icon trên app (gợi ý AI, tin nhắn mới, đồng bộ bạn đời, nhắc việc/đến hạn).
 * Mọi thông báo gửi qua Push (FCM) đều được lưu tại đây để xem lại. Đánh dấu đã đọc: `PATCH /api/v1/client/notifications/{id}/read`.
 * *(v1.1.2)* `data` theo dạng phân trang §1.2 (`size` 1–100, mặc định 20). Mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò) đều có hộp thư; chỉ thấy thông báo của mình (`notifications.recipient_user_id`), thông báo của người khác → `404`. `PATCH .../read` trả về phần tử đã cập nhật. Thông báo không có `kind` hiển thị như `reminder`.
+
+### MODULE 4B: KHÔNG GIAN VENDOR — BÁO GIÁ & DỰ ÁN (VENDOR WORKSPACE) *(v1.1.3)*
+Luồng: Cặp đôi gửi **Yêu cầu báo giá** (Quote Request) cho một gói dịch vụ của Vendor → Vendor báo giá hoặc từ chối → Cặp đôi chấp nhận báo giá → hệ thống tạo **Dự án** (Vendor Project) cho Vendor đó. Trạng thái theo §1.6. Chỉ gói của Vendor (`vendor_id IS NOT NULL`) mới nhận yêu cầu báo giá; với gói của Studio, Studio chăm sóc tiếp trong CRM. Cặp đôi trao đổi với Studio và Vendor qua Zalo (`zaloUrl`, FN-SVC-02), không qua chat trong app.
+* Thanh toán giữa Cặp đôi và Vendor diễn ra **ngoài app**: không có cọc hay công nợ, `agreed_price` chỉ để ghi nhận và tính doanh thu.
+* Dự án chưa tự thêm vào ngân sách kế hoạch cưới (Budget Item) — để bản sau.
+
+```mermaid
+flowchart LR
+    Q1["Couple gửi yêu cầu<br/>PENDING"] -->|"Vendor báo giá"| Q2["QUOTED"]
+    Q1 -->|"Vendor từ chối"| QX["DECLINED"]
+    Q2 -->|"Couple chấp nhận"| Q3["ACCEPTED"] --> P1["Vendor Project<br/>UPCOMING"]
+    P1 --> P2["IN_PROGRESS"] --> P3["COMPLETED"]
+```
+
+**Bảng dữ liệu** (migration mới trong `backend-common`):
+* `quote_requests`: `id`, `couple_user_id` (FK `users`), `vendor_profile_id` (FK `vendor_profiles`), `service_package_id` (FK `service_packages`), `package_name` (chụp tại thời điểm gửi), `event_date` (Date, nullable), `venue` (≤ 255, nullable), `guest_count` (Int, nullable), `message` (≤ 1000, nullable), `status` (`QuoteRequestStatus`), `quoted_price` (`NUMERIC(15,0)`, nullable), `vendor_note` (≤ 1000, nullable), `responded_at` (nullable), `created_at`, `updated_at`.
+* `vendor_projects`: `id`, `quote_request_id` (FK, unique), `vendor_profile_id`, `couple_user_id`, `service_package_id`, `package_name`, `couple_name` (chụp `users.full_name` của cặp đôi), `event_date` (Date, bắt buộc), `venue` (nullable), `agreed_price` (`NUMERIC(15,0)`), `status` (`VendorProjectStatus`), `cancel_requested_at` (nullable), `cancel_reason` (≤ 500, nullable), `created_at`, `updated_at`.
+* `service_packages` thêm `discount_price` (`NUMERIC(15,0)`, nullable — giá sau giảm; `null` = không giảm). `studio_settings` thêm `zalo_phone` (nullable).
+
+**Đối tượng trả về:**
+* `QuoteRequestDto`: `{ id, coupleName, packageId, packageName, vendorName, eventDate, venue, guestCount, message, status, quotedPrice, vendorNote, createdAt, respondedAt }`.
+* `VendorProjectDto`: `{ id, coupleName, packageName, eventDate, venue, agreedPrice, status, quoteRequestId, cancelRequestedAt, cancelReason }`.
+* `VendorServiceDto`: `{ id, name, category, type, price, discountPrice, description, features, thumbnailUrl, isActive, projectCount }`.
+
+#### `FN-VND-01: Gửi yêu cầu báo giá` 🆕
+* **Endpoint:** `POST /api/v1/client/quote-requests` — `ROLE_COUPLE`.
+* **Input:** `{ "servicePackageId": "uuid", "eventDate": "2026-12-20", "venue": "Trung tâm tiệc cưới White Palace", "guestCount": 300, "message": "Bên mình cần trang trí cổng hoa và sân khấu" }`.
+* **Validation:** `servicePackageId` bắt buộc; `eventDate` tùy chọn, không trước hôm nay (`400 BAD_REQUEST`); `venue` ≤ 255; `guestCount` 1–5000; `message` ≤ 1000.
+* **Business Rules:**
+  * Gói không tồn tại hoặc `is_active = false` → `404 NOT_FOUND`. Gói của Studio (`vendor_id IS NULL`) → `400 PACKAGE_NOT_QUOTABLE`.
+  * Cặp đôi đã có yêu cầu `PENDING`/`QUOTED` cho cùng gói → `409 QUOTE_ALREADY_OPEN` (kèm `data.existingId`).
+  * Tạo yêu cầu `PENDING`, chụp `package_name`. Gửi thông báo vào hộp thư của Vendor (`kind = message`, tiêu đề "Yêu cầu báo giá mới", nội dung gồm tên cặp đôi và tên gói) + Push.
+* **Output (201):** `QuoteRequestDto`.
+
+#### `FN-VND-02: Danh sách yêu cầu báo giá` 🆕
+* **Cặp đôi:** `GET /api/v1/client/quote-requests?status=&page=0&size=20` — `ROLE_COUPLE`, chỉ yêu cầu của mình.
+* **Vendor:** `GET /api/v1/client/vendor/quote-requests?status=&page=0&size=20` — `ROLE_VENDOR`, chỉ yêu cầu gửi tới hồ sơ Vendor của mình.
+* Phân trang §1.2, mới nhất trước. `status` (tùy chọn) là một giá trị `QuoteRequestStatus`; giá trị khác → `400`.
+* Chi tiết: `GET /api/v1/client/quote-requests/{id}` (cặp đôi gửi) và `GET /api/v1/client/vendor/quote-requests/{id}` (Vendor nhận). Yêu cầu không thuộc người gọi → `404 NOT_FOUND`.
+
+#### `FN-VND-03: Báo giá, Từ chối, Chấp nhận & Hủy yêu cầu` 🆕
+* **Vendor báo giá:** `POST /api/v1/client/vendor/quote-requests/{id}/quote` — `{ "quotedPrice": 18000000, "vendorNote": "Đã gồm vận chuyển nội thành" }`. `quotedPrice > 0` (bắt buộc), `vendorNote` ≤ 1000. Cho phép khi `PENDING` hoặc `QUOTED` (báo lại giá mới). Ghi `responded_at`. Thông báo cho cặp đôi (`kind = message`, "Đã có báo giá").
+* **Vendor từ chối:** `POST /api/v1/client/vendor/quote-requests/{id}/decline` — `{ "vendorNote": "Ngày này bên mình đã kín lịch" }` (tùy chọn). Từ `PENDING`/`QUOTED` → `DECLINED`. Thông báo cho cặp đôi.
+* **Cặp đôi chấp nhận:** `POST /api/v1/client/quote-requests/{id}/accept` — chỉ khi `QUOTED` và yêu cầu có `eventDate` (nếu thiếu: body `{ "eventDate": "YYYY-MM-DD", "venue": "..." }` bắt buộc `eventDate`, không trước hôm nay). Chuyển `ACCEPTED` và tạo **một** Vendor Project `UPCOMING` với `agreed_price = quoted_price`, `couple_name`, `package_name`, `event_date`, `venue` lấy từ yêu cầu. Thông báo cho Vendor ("Báo giá đã được chấp nhận"). Trả `201` + `VendorProjectDto`.
+* **Cặp đôi hủy:** `POST /api/v1/client/quote-requests/{id}/cancel` — từ `PENDING`/`QUOTED` → `CANCELLED`.
+* Mọi chuyển trạng thái khác → `409 INVALID_STATUS_TRANSITION`. Yêu cầu không thuộc người gọi → `404 NOT_FOUND`. Hai thao tác đồng thời trên cùng yêu cầu: khóa dòng (`SELECT … FOR UPDATE`) hoặc `@Version` → `409 CONCURRENT_MODIFICATION`.
+
+#### `FN-VND-04: Quản lý Dự án của Vendor` 🆕
+* **Danh sách:** `GET /api/v1/client/vendor/projects?status=UPCOMING|IN_PROGRESS|COMPLETED|CANCELLED&page=0&size=20` — `ROLE_VENDOR`, chỉ dự án của mình, sắp xếp `event_date` tăng dần (dự án `COMPLETED`/`CANCELLED` giảm dần). Màn hình "Dự án" có 3 tab *Sắp tới / Đang làm / Hoàn thành* tương ứng `UPCOMING / IN_PROGRESS / COMPLETED`.
+* **Cập nhật trạng thái:** `PATCH /api/v1/client/vendor/projects/{id}/status` — `{ "status": "IN_PROGRESS|COMPLETED|CANCELLED" }`, theo §1.6. Thông báo cho cặp đôi khi dự án chuyển `COMPLETED` hoặc `CANCELLED`. Chuyển `IN_PROGRESS`/`COMPLETED` khi đang có yêu cầu hủy → coi như từ chối yêu cầu đó.
+* **Cặp đôi xem:** `GET /api/v1/client/vendor-projects` — `ROLE_COUPLE`, các dự án của mình (để biết nhà cung cấp nào đã chốt).
+* **Cặp đôi xin hủy dự án** (Vendor phải duyệt):
+  * `POST /api/v1/client/vendor-projects/{id}/cancel-request` — `ROLE_COUPLE`, `{ "reason": "Đổi địa điểm tổ chức" }` (bắt buộc, ≤ 500). Chỉ khi `UPCOMING`/`IN_PROGRESS` và chưa có yêu cầu hủy đang chờ, nếu không `409 INVALID_STATUS_TRANSITION`. Ghi `cancel_requested_at`, `cancel_reason`; trạng thái **giữ nguyên**. Thông báo cho Vendor ("Cặp đôi xin hủy dự án").
+  * `POST /api/v1/client/vendor/projects/{id}/cancel-request/approve` — `ROLE_VENDOR`: dự án → `CANCELLED`. `.../cancel-request/reject` — xóa yêu cầu, dự án tiếp tục. Không có yêu cầu đang chờ → `409 INVALID_STATUS_TRANSITION`. Thông báo kết quả cho cặp đôi.
+
+#### `FN-VND-05: Bảng điều khiển Vendor & Gói dịch vụ của Vendor` 🆕
+* **Dashboard:** `GET /api/v1/client/vendor/dashboard` — `ROLE_VENDOR`.
+  ```json
+  {
+    "monthlyRevenue": 54000000,
+    "newRequestCount": 3,
+    "rating": 4.8,
+    "quoteRequests": [ /* tối đa 5 QuoteRequestDto PENDING, mới nhất trước */ ],
+    "upcoming": [ /* tối đa 5 VendorProjectDto UPCOMING, event_date gần nhất trước */ ]
+  }
+  ```
+  * `monthlyRevenue` = tổng `agreed_price` của các dự án `COMPLETED` có `event_date` trong tháng hiện tại (§1.1 múi giờ). `newRequestCount` = số yêu cầu `PENDING`. `rating` lấy từ `vendor_profiles`.
+* **Gói của Vendor:** `GET /api/v1/client/vendor/services` — các gói của Vendor (kể cả đang tắt), mỗi phần tử `VendorServiceDto`, trong đó `projectCount` = số Vendor Project không `CANCELLED` của gói.
+* **Tạo / sửa gói:** `POST /api/v1/client/vendor/services` (201) và `PUT /api/v1/client/vendor/services/{id}` — `ROLE_VENDOR`, body `{ name, category, type, price, discountPrice, description, features, thumbnailUrl }`. Gói mới `isActive = true`, `vendor_id` = hồ sơ của người gọi. Gói không thuộc Vendor → `404`.
+  * Validation: `name` 1–100; `category` ∈ `photo|decor|restaurant|dress`; `type` ≤ 50 (tùy chọn); `price` > 0; `discountPrice` tùy chọn, `0 < discountPrice < price` (`400` trên `discountPrice`), gửi `null` để bỏ giảm giá; `description` ≤ 2000; `features` ≤ 20 mục, mỗi mục ≤ 200; `thumbnailUrl` ≤ 500 (URL ảnh; tải ảnh lên là chức năng khác).
+  * Sửa giá hay giảm giá không ảnh hưởng yêu cầu báo giá và dự án đã có (đã chụp `package_name`, giá chốt riêng).
+* **Bật/tắt gói:** `PATCH /api/v1/client/vendor/services/{id}/active` — `{ "isActive": false }`. Gói không thuộc Vendor → `404`. Gói tắt không xuất hiện ở FN-SVC-01 và không nhận yêu cầu báo giá mới; yêu cầu và dự án đang mở không bị ảnh hưởng.
 
 ---
 
@@ -665,8 +753,8 @@ stateDiagram-v2
 * `POST /api/v1/admin/bookings/{id}/cancel` (`ROLE_ADMIN`) — `{ "reason": "Khách dời ngày cưới" }` (bắt buộc). Chuyển `CANCELLED`, đồng thời hủy các giữ lịch trang phục `CONFIRMED` gắn với lịch này (FN-ADM-ASSET-01) và báo cho nhân sự được phân công.
 * `GET /api/v1/admin/bookings/{id}` — chi tiết, kèm danh sách trang phục đã giữ cho lịch này.
 
-#### `FN-ADM-CAL-04: Cập nhật trạng thái thực hiện` 🆕
-* `PATCH /api/v1/admin/bookings/{id}/status` — `{ "status": "CONFIRMED|IN_PROGRESS|COMPLETED" }`, theo §1.6.
+#### `FN-ADM-CAL-04: Cập nhật trạng thái thực hiện` ✅
+* `PATCH /api/v1/admin/bookings/{id}/status` — `{ "status": "CONFIRMED|IN_PROGRESS|COMPLETED" }`, theo §1.6. Giá trị khác (`UPCOMING`, `CANCELLED` — hủy dùng FN-ADM-CAL-03) → `400 BAD_REQUEST` kèm lỗi trường `status`; lịch không tồn tại → `404`. Trả `BookingDto` đã cập nhật.
 * `ROLE_STAFF` chỉ cập nhật lịch mình được phân công (nếu không → `403 FORBIDDEN`). Dùng trên điện thoại tại buổi chụp (UI tối giản, nút lớn).
 * Lịch đầu tiên của hợp đồng chuyển `IN_PROGRESS` → hợp đồng `DEPOSITED → IN_PROGRESS`.
 
@@ -706,7 +794,7 @@ flowchart LR
     C3 -->|"Thu đủ + Xác nhận bàn giao"| C4["COMPLETED<br/>Lead → COMPLETED"]
 ```
 * `POST /contracts` nhận `leadId` (ưu tiên); chỉ khi không có `leadId` mới tìm khách theo SĐT (hành vi hiện tại), và nếu không có thì tự tạo khách mới để mọi hợp đồng đều có khách hàng.
-* Tạo hợp đồng → khách ở giai đoạn trước `IN_PROGRESS` chuyển sang `IN_PROGRESS`. Hợp đồng `COMPLETED` → khách `COMPLETED`. Hợp đồng `CANCELLED` và khách không còn hợp đồng hoạt động nào → khách `LOST`.
+* Hợp đồng nhận cọc (`DEPOSITED`) → khách ở giai đoạn trước `IN_PROGRESS` chuyển sang `IN_PROGRESS` *(v1.1.3 — hợp đồng nháp `DRAFT` chưa có hiệu lực nên không đổi giai đoạn khách; tạo hợp đồng kèm `depositAmount > 0` thì chuyển ngay)*. Hợp đồng `COMPLETED` và khách không còn hợp đồng nào đang hiệu lực (`DEPOSITED`/`IN_PROGRESS`; hợp đồng nháp bị bỏ dở không tính) → khách `COMPLETED`. Hợp đồng `CANCELLED` và khách không còn hợp đồng hoạt động nào → khách `LOST`.
 * Lịch hẹn tạo từ hợp đồng tự điền `clientName`, `phone`, `servicePackageId`.
 * Trên UI: thẻ Kanban hiển thị huy hiệu tình trạng thanh toán; hồ sơ khách có các nút hành động theo giai đoạn ("Tạo hợp đồng", "Ghi thu", "Đặt lịch", "Gửi Zalo").
 
@@ -732,7 +820,7 @@ flowchart LR
   * Logic: sinh `HD-xxx`, `contract_date = hôm nay`, chụp `package_name` tại thời điểm ký (đổi tên gói sau này không ảnh hưởng hợp đồng cũ), sinh 3 đợt thanh toán (FN-ADM-FIN-02); nếu `depositAmount > 0` tự ghi phiếu thu cọc qua FN-ADM-FIN-01 (→ `DEPOSITED`); đồng bộ khách (FN-ADM-CRM-03); tạo thông báo.
 * **Sửa** *(v1.1)*: `PUT /api/v1/admin/contracts/{id}` — chỉ khi `DRAFT`, nếu không `409 CONTRACT_LOCKED`. Sinh lại các đợt thanh toán.
 * **Hủy** *(v1.1)*: `POST /api/v1/admin/contracts/{id}/cancel` — `{ "reason": "...", "refundAmount": 0 }`. `refundAmount ≤ paid_amount`; nếu > 0 tự ghi phiếu `EXPENSE` danh mục "Hoàn tiền HĐ". Hủy các lịch hẹn chưa diễn ra của hợp đồng (FN-ADM-CAL-03), các đợt chưa trả, thu hồi link công khai. Không áp dụng cho `COMPLETED`.
-* **Xác nhận bàn giao** *(v1.1)*: `POST /api/v1/admin/contracts/{id}/deliver` — ghi `delivered_at`. Nếu `remaining_amount = 0` → `COMPLETED`; nếu còn nợ: vẫn ghi nhận bàn giao, hợp đồng giữ trạng thái và đợt 3 có hạn = hôm nay (cảnh báo trên UI "Đã giao nhưng còn nợ X đ"). Trả `409 CONTRACT_NOT_PAID` chỉ khi Cài đặt `require_full_payment_before_delivery = true`.
+* **Xác nhận bàn giao** *(v1.1)*: `POST /api/v1/admin/contracts/{id}/deliver` — ghi `delivered_at`. Áp dụng cho hợp đồng `DEPOSITED` hoặc `IN_PROGRESS` chưa bàn giao (hợp đồng chỉ cho thuê, không có lịch hẹn, bàn giao thẳng từ `DEPOSITED`); `DRAFT`/`COMPLETED`/đã bàn giao → `409 INVALID_STATUS_TRANSITION`. Nếu `remaining_amount = 0` → `COMPLETED`; nếu còn nợ: vẫn ghi nhận bàn giao, hợp đồng giữ trạng thái và đợt 3 có hạn = hôm nay (cảnh báo trên UI "Đã giao nhưng còn nợ X đ"). Trả `409 CONTRACT_NOT_PAID` chỉ khi Cài đặt `require_full_payment_before_delivery = true`.
 
 #### `FN-ADM-CONTR-01: Xuất Bản Hợp Đồng A4 (A4 Contract Export & Sharing)` ⚠️
 * **Mục tiêu:** Tạo văn bản hợp đồng pháp lý đầy đủ, hỗ trợ xuất PDF và chia sẻ qua Zalo.
@@ -863,6 +951,7 @@ flowchart LR
 * `GET /api/v1/admin/settings/studio` (mọi vai trò), `PUT /api/v1/admin/settings/studio` (`ROLE_ADMIN`).
 * Trường hiện có: `name ≤200`, `address ≤255`, `taxCode ≤20`, `legalRepresentative ≤100`, `bankInfo ≤500` (bắt buộc cả 5).
 * *(v1.1)* Bổ sung: `bankAccount: { bankBin, accountNumber, accountName }` (có cấu trúc để sinh VietQR), `paymentSchedule: [30, 50, 20]`, `deliveryDays: 30`, `bookingSlotMinutes: null`, `zaloPaymentReminder: false`, `requireFullPaymentBeforeDelivery: false`, `contractTermsTemplate` (đoạn điều khoản chung in cuối hợp đồng, ≤ 10.000 ký tự).
+* *(v1.1.3)* `zaloPhone` (tùy chọn, SĐT §1.1): số Zalo để cặp đôi trên app liên hệ Studio (FN-SVC-02).
 * Bảng `studio_settings` chỉ có 1 dòng (`id = 1`).
 
 ---

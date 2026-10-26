@@ -42,9 +42,12 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await context.read<SessionController>().updateProfile(fullName: _name.text.trim(), email: _email.text.trim(), phone: _phone.text.trim());
+      final session = context.read<SessionController>();
+      await session.updateProfile(fullName: _name.text.trim(), email: _email.text.trim(), phone: _phone.text.trim());
       if (!mounted) return;
-      showAppSnack(context, 'Đã lưu thay đổi');
+      final pending = session.user?.pendingEmail;
+      // The new address only replaces the old one after its OTP is confirmed (FN-AUTH-04)
+      showAppSnack(context, pending == null ? 'Đã lưu thay đổi' : 'Đã lưu. Mã xác thực đã gửi tới $pending, xác nhận để đổi email.');
       context.pop();
     } catch (e) {
       if (mounted) showAppSnack(context, e.toString(), error: true);

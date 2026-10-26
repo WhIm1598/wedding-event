@@ -144,7 +144,9 @@ public class DemoDataSeeder implements ApplicationRunner {
         Lead hoangC = lead("Lê Hoàng C", "0911223344", false, "Gói Tiêu Chuẩn", LeadStage.IN_PROGRESS);
 
         Contract hd102 = contract(lan, diamond, today.minusDays(20), ContractStatus.IN_PROGRESS);
-        Contract hd103 = contract(huy, engagement, today.minusDays(45), ContractStatus.DRAFT);
+        // Delivered before the final payment, so that payment completes it (§1.6: paid in full AND delivered)
+        Contract hd103 = contract(huy, engagement, today.minusDays(45), ContractStatus.IN_PROGRESS);
+        hd103.setDeliveredAt(today.minusDays(41).atStartOfDay(clock.getZone()).toInstant());
         Contract hd104 = contract(hoangC, standard, today.minusDays(3), ContractStatus.DRAFT);
         finance.record(TransactionType.INCOME, money(10_000_000), "Doanh thu HĐ", "Thanh toán cọc hợp đồng " + hd102.getContractNumber(), hd102, today.minusDays(20));
         finance.record(TransactionType.INCOME, money(6_000_000), "Doanh thu HĐ", "Tất toán hợp đồng " + hd103.getContractNumber(), hd103, today.minusDays(40));

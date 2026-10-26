@@ -1,6 +1,7 @@
 package com.weddingevent.common.domain;
 
 import com.weddingevent.common.domain.enums.BookingStatus;
+import com.weddingevent.common.exception.AppException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -57,4 +58,23 @@ public class Booking extends BaseEntity {
             joinColumns = @JoinColumn(name = "booking_id"),
             inverseJoinColumns = @JoinColumn(name = "staff_member_id"))
     private Set<StaffMember> staff = new LinkedHashSet<>();
+
+    /** The customer this appointment is for; null only for legacy rows (FN-ADM-CRM-03) */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lead_id")
+    private Lead lead;
+
+    /** Set for the sessions of a sold service; consultations before signing have none */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contract_id")
+    private Contract contract;
+
+    /** Rejects with 409 INVALID_STATUS_TRANSITION outside the §1.6 state machine. */
+    public void moveTo(BookingStatus next) {
+        if (!status.canMoveTo(next)) {
+            throw AppException.conflict("INVALID_STATUS_TRANSITION",
+                    "Không thể chuyển lịch hẹn từ trạng thái " + status + " sang " + next);
+        }
+        status = next;
+    }
 }

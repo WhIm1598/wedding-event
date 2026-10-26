@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { bookingsApi } from '@/api/bookings.api';
+import { contractsApi } from '@/api/contracts.api';
 import { packagesApi } from '@/api/packages.api';
 import { staffApi } from '@/api/staff.api';
 import { useAsync } from '@/hooks/useAsync';
@@ -22,6 +23,21 @@ export function CreateBookingModal({ isOpen, defaultDate, onClose, onCreated }: 
   const [error, setError] = useState<string>();
   const { data: staff = [] } = useAsync(() => staffApi.list());
   const { data: packages = [] } = useAsync(() => packagesApi.list());
+  const { data: contracts = [] } = useAsync(() => contractsApi.list());
+  const openContracts = contracts.filter((c) => c.status !== 'COMPLETED');
+  // A booking from a contract takes the contract's customer, phone and package (FN-ADM-CRM-03)
+  const [contractId, setContractId] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [phone, setPhone] = useState('');
+
+  const pickContract = (id: string) => {
+    setContractId(id);
+    const c = contracts.find((x) => x.id === id);
+    if (c) {
+      setClientName(c.customerName);
+      setPhone(c.phone);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,14 +46,16 @@ export function CreateBookingModal({ isOpen, defaultDate, onClose, onCreated }: 
     setError(undefined);
     try {
       await bookingsApi.create({
-        clientName: String(fd.get('clientName')),
-        phone: String(fd.get('phone') || ''),
+        clientName,
+        phone,
         type: String(fd.get('type')),
-        servicePackageId: String(fd.get('servicePackageId')),
+        // with a contract, an untouched package select means "the contract's package"
+        servicePackageId: String(fd.get('servicePackageId') || '') || undefined,
         eventDate: String(fd.get('eventDate')),
         eventTime: String(fd.get('eventTime')),
         venueAddress: String(fd.get('venueAddress') || ''),
         staffIds: fd.getAll('staffIds').map(String),
+        contractId: contractId || undefined,
       });
       showToast('Đã thêm lịch trình thành công!');
       onCreated();
@@ -52,12 +70,22 @@ export function CreateBookingModal({ isOpen, defaultDate, onClose, onCreated }: 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Thêm Lịch Trình Mới">
       <form className="space-y-4" onSubmit={handleSubmit}>
+        <Field label="Thuộc hợp đồng">
+          <Select value={contractId} onChange={(e) => pickContract(e.target.value)}>
+            <option value="">— Không (lịch tư vấn) —</option>
+            {openContracts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.contractNumber} · {c.customerName}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Tên khách hàng" required>
-            <Input name="clientName" placeholder="VD: Lan & Hoàng" required />
+            <Input name="clientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="VD: Lan & Hoàng" required />
           </Field>
           <Field label="Số điện thoại">
-            <Input name="phone" type="tel" pattern="0[35789][0-9]{8}" placeholder="09xxxxxxxx" />
+            <Input name="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} pattern="0[35789][0-9]{8}" placeholder="09xxxxxxxx" />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -77,7 +105,8 @@ export function CreateBookingModal({ isOpen, defaultDate, onClose, onCreated }: 
             </Select>
           </Field>
           <Field label="Gói dịch vụ">
-            <Select name="servicePackageId">
+            <Select name="servicePackageId" key={contractId}>
+              {contractId && <option value="">Theo hợp đồng</option>}
               {packages.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}

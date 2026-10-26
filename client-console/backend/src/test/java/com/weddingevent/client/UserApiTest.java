@@ -14,6 +14,7 @@ import com.weddingevent.common.repository.VendorProfileRepository;
 import com.weddingevent.common.repository.WeddingPlanRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 
 /** FN-AUTH-03 (role picker) and FN-AUTH-04 (profile) */
 class UserApiTest extends ClientIntegrationTest {
@@ -101,16 +102,53 @@ class UserApiTest extends ClientIntegrationTest {
                 .andExpect(jsonPath("$.data.phone").doesNotExist());
     }
 
+    private org.springframework.test.web.servlet.ResultActions verifyOtp(String email, String code) throws Exception {
+        return mvc.perform(post("/api/v1/auth/verify-otp").contentType(MediaType.APPLICATION_JSON)
+                .content(json("{'email':'" + email + "','otpCode':'" + code + "'}")));
+    }
+
     @Test
-    void changingEmailRequiresVerifyingItAgain() throws Exception {
+    void aNewEmailOnlyReplacesTheOldOneOnceVerified() throws Exception {
         User u = createUser(Role.ROLE_COUPLE, true);
+        String token = token(u);
         String newEmail = "moi-" + java.util.UUID.randomUUID() + "@example.com";
-        mvc.perform(authed(put("/api/v1/users/me"), token(u))
+        mvc.perform(authed(put("/api/v1/users/me"), token)
                         .content(json("{'fullName':'A','email':'" + newEmail + "'}")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value(u.getEmail()))
+                .andExpect(jsonPath("$.data.pendingEmail").value(newEmail))
+                .andExpect(jsonPath("$.data.isVerified").value(true));
+        String code = otpSender.lastCodeFor(newEmail);
+        assertThat(code).matches("\\d{4}");
+
+        // A code proves only the address it was sent to
+        verifyOtp(u.getEmail(), code).andExpect(status().isBadRequest());
+        verifyOtp(newEmail, code).andExpect(status().isOk());
+        mvc.perform(authed(get("/api/v1/auth/me"), token))
                 .andExpect(jsonPath("$.data.email").value(newEmail))
-                .andExpect(jsonPath("$.data.isVerified").value(false));
-        assertThat(otpSender.lastCodeFor(newEmail)).matches("\\d{4}");
+                .andExpect(jsonPath("$.data.pendingEmail").doesNotExist())
+                .andExpect(jsonPath("$.data.isVerified").value(true));
+    }
+
+    @Test
+    void anUnverifiedEmailChangeCannotClaimSomeoneElsesAddress() throws Exception {
+        User squatter = createUser(Role.ROLE_COUPLE, true);
+        String victim = "victim-" + java.util.UUID.randomUUID() + "@gmail.com";
+        mvc.perform(authed(put("/api/v1/users/me"), token(squatter))
+                        .content(json("{'fullName':'A','email':'" + victim + "'}")))
+                .andExpect(status().isOk());
+
+        // The real owner signs in with Google and gets an account of their own, not the squatter's
+        String owner = body(mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                        .content(json("{'idToken':'google|" + victim + "|Chủ Thật|true'}")))
+                .andExpect(status().isOk()));
+        assertThat(read(owner, "$.data.user.id")).isNotEqualTo(squatter.getId().toString());
+
+        // The squatter's pending change can no longer complete, even with the code from the owner's mailbox
+        verifyOtp(victim, otpSender.lastCodeFor(victim))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EMAIL_EXISTS"));
+        assertThat(users.findById(squatter.getId()).orElseThrow().getEmail()).isEqualTo(squatter.getEmail());
     }
 
     @Test

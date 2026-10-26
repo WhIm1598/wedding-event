@@ -9,7 +9,7 @@ No state library, no form library, no test runner. Import alias `@/` = `src/`. U
 | `src/types/index.ts` | All domain types, mirroring the detailed spec JSON (enums = string unions, money = `number` VND, dates = ISO strings) |
 | `src/api/http.ts` | `http.get/post/put/patch/delete/download`, envelope unwrapping, Bearer token + single-flight refresh, `ApiError`, `errorMessage(err)` |
 | `src/api/<module>.api.ts` | One object per spec module (`bookingsApi`, `crmApi`, `contractsApi`, …; notifications/search/settings in `system.api.ts`) |
-| `src/api/mock/db.ts` | In-memory demo data (`db`), `delay()`, `nextId()`; dates relative to today |
+| `src/api/mock/db.ts` | In-memory demo data (`db`), `delay()`, `nextId()`; dates relative to today. Shared mock rules: `applyMockPayment()` (contract payment, §1.6) and `syncCustomerStage()` (FN-ADM-CRM-03) |
 | `src/features/<module>/` | `XxxPage.tsx` + `components/` (modals, tables, slide-overs) for that screen |
 | `src/components/ui/` | `Badge`, `Button`, `Card`, `Field/Input/Select/Textarea` (Form.tsx), `Modal`/`SlideOver`, `PageHeader`, `Spinner/ErrorState/EmptyState` |
 | `src/components/layout/` | `AppLayout` (+ `useLayout()` outlet context), `Sidebar`, `Header`, `GlobalSearch` (Ctrl+K), `NotificationBell` |

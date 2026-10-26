@@ -446,8 +446,11 @@ paths:
         Checks, in order: `eventDate` not before today (`400 BAD_REQUEST`); every `staffIds` entry exists
         (duplicates ignored, `400 STAFF_NOT_FOUND`); no assigned staff member already has another non-cancelled
         booking at exactly the same `eventDate` + `eventTime` (`409 STAFF_SCHEDULE_CONFLICT`, message lists the
-        names); `servicePackageId`, when given, exists (`404 NOT_FOUND`). Blank `phone`/`venueAddress` are stored as
-        null. Inactive packages are not rejected.
+        names); `contractId` / `leadId` / `servicePackageId`, when given, exist (`404 NOT_FOUND`). With a
+        `contractId` the booking belongs to that contract and its customer: a blank `phone` and a missing
+        `servicePackageId` are taken from the contract, and a `leadId` that isn't the contract's customer is
+        `400 BAD_REQUEST` (field `leadId`). Blank `phone`/`venueAddress` are otherwise stored as null. Inactive
+        packages are not rejected.
       x-spec-function: FN-ADM-CAL-02
       x-roles: [ROLE_ADMIN, ROLE_STAFF]
       requestBody:
@@ -495,8 +498,9 @@ paths:
                   assignedStaff:
                     - { id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d, name: Tuấn Photo, role: Thợ Chụp Chính }
                     - { id: 4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d, name: Trang Makeup, role: Chuyên Viên Trang Điểm }
+                  contractId: null
         '400':
-          description: '`BAD_REQUEST` (field validation, malformed body, `eventDate` in the past) or `STAFF_NOT_FOUND`.'
+          description: '`BAD_REQUEST` (field validation, malformed body, `eventDate` in the past, `leadId` not the contract''s customer) or `STAFF_NOT_FOUND`.'
           content:
             application/json:
               schema:
@@ -533,6 +537,69 @@ paths:
                 success: false
                 code: STAFF_SCHEDULE_CONFLICT
                 message: Nhân sự Tuấn Photo đã có lịch vào khung giờ này
+
+  /api/v1/admin/bookings/{id}/status:
+    patch:
+      tags: [bookings]
+      operationId: updateBookingStatus
+      summary: Update a booking's execution status
+      description: |
+        Moves the booking along the §1.6 state machine: `UPCOMING → CONFIRMED | IN_PROGRESS`,
+        `CONFIRMED → IN_PROGRESS`, `IN_PROGRESS → COMPLETED`; anything else (including from `COMPLETED`/`CANCELLED`)
+        is `409 INVALID_STATUS_TRANSITION`. `UPCOMING` and `CANCELLED` are not accepted here (`400 BAD_REQUEST`,
+        field `status`; cancelling is FN-ADM-CAL-03). Staff may only update bookings they are assigned to
+        (`403 FORBIDDEN`). When a booking of a `DEPOSITED` contract goes `IN_PROGRESS`, the contract becomes
+        `IN_PROGRESS`; a `DRAFT` contract is left as is.
+      x-spec-function: FN-ADM-CAL-04
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [CONFIRMED, IN_PROGRESS, COMPLETED]
+            example:
+              status: IN_PROGRESS
+      responses:
+        '200':
+          description: The updated booking.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`INVALID_STATUS_TRANSITION`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Không thể chuyển lịch hẹn từ trạng thái CONFIRMED sang COMPLETED
 
   # ---------------------------------------------------------------- packages
   /api/v1/admin/packages:
@@ -1389,8 +1456,9 @@ paths:
         (inactive packages are accepted). Generates `HD-xxx`, `contractDate = today`, snapshots the package name,
         links the newest lead with the same phone. `hasZalo` defaults to that lead's `hasZalo` (true when no lead
         matches). When `depositAmount > 0` an `INCOME` transaction "Doanh thu HĐ" is recorded (status becomes
-        `DEPOSITED`, otherwise the contract stays `DRAFT`). A matching lead in `NEW_LEAD`/`IN_CONSULTATION`/
-        `AWAITING_DEPOSIT` moves to `IN_PROGRESS`. Creates a "Hợp đồng mới" notification.
+        `DEPOSITED`, otherwise the contract stays `DRAFT`). Only with a deposit does a matching lead in
+        `NEW_LEAD`/`IN_CONSULTATION`/`AWAITING_DEPOSIT` move to `IN_PROGRESS`; a draft leaves the lead's stage
+        alone. Creates a "Hợp đồng mới" notification.
       x-spec-function: FN-ADM-CONTR-02
       x-roles: [ROLE_ADMIN]
       requestBody:
@@ -1435,6 +1503,7 @@ paths:
                   contractDate: '2026-10-03'
                   status: DEPOSITED
                   notes: Tặng thêm 1 album mini
+                  deliveredAt: null
         '400':
           description: '`BAD_REQUEST` (field validation / malformed body) or `DEPOSIT_EXCEEDS_TOTAL`.'
           content:
@@ -1460,6 +1529,53 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/contracts/{id}/deliver:
+    post:
+      tags: [contracts]
+      operationId: deliverContract
+      summary: Confirm the hand-over ("Xác nhận bàn giao")
+      description: |
+        Records `deliveredAt`. Only an effective contract (`DEPOSITED` or `IN_PROGRESS`, e.g. a rental without bookings) not delivered yet → otherwise
+        `409 INVALID_STATUS_TRANSITION`. Paid in full → `COMPLETED` (and its customer → `COMPLETED` once none of
+        their contracts is still `DEPOSITED`/`IN_PROGRESS`; abandoned drafts don't count). Still owing → keeps its status; the final payment then completes it.
+        Creates a "Đã bàn giao hợp đồng" notification. The `require_full_payment_before_delivery` setting
+        (`409 CONTRACT_NOT_PAID`) is not implemented yet.
+      x-spec-function: FN-ADM-CONTR-02
+      x-roles: [ROLE_ADMIN]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: The updated contract.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ContractDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`INVALID_STATUS_TRANSITION` or `CONCURRENT_MODIFICATION`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: INVALID_STATUS_TRANSITION
+                message: Chỉ xác nhận bàn giao được hợp đồng đã đặt cọc và chưa bàn giao
 
   /api/v1/admin/contracts/{id}/preview-html:
     get:
@@ -1630,8 +1746,11 @@ paths:
         `transactionDate` after today → `400 BAD_REQUEST`; unknown `contractId` → `404 NOT_FOUND`. Generates
         `TRX-xxx`. For an `INCOME` linked to a contract: contract `COMPLETED` → `409 CONTRACT_NOT_PAYABLE`;
         `amount > remainingAmount` → `400 PAYMENT_EXCEEDS_REMAINING`; otherwise adds to `paidAmount`, recomputes
-        `remainingAmount`, moves `DRAFT → DEPOSITED`, and to `COMPLETED` when nothing remains (notification
-        "Hợp đồng đã tất toán", else "Đã thu tiền"). An `EXPENSE` with `contractId` does not change the debt.
+        `remainingAmount` and moves `DRAFT → DEPOSITED` (the contract's customer, if still before `IN_PROGRESS`,
+        moves to `IN_PROGRESS`). A `DEPOSITED` contract that already has a booking `IN_PROGRESS`/`COMPLETED` (shot
+        before the deposit) moves straight on to `IN_PROGRESS`. Paying in full completes the contract only if it was already delivered
+        (`COMPLETED` = paid in full AND delivered, §1.6); otherwise it keeps its status. Notification "Hợp đồng đã
+        thanh toán đủ" when nothing remains, else "Đã thu tiền". An `EXPENSE` with `contractId` does not change the debt.
         Concurrent updates of the same contract → `409 CONCURRENT_MODIFICATION` (optimistic lock).
       x-spec-function: FN-ADM-FIN-01
       x-roles: [ROLE_ADMIN]
@@ -1703,7 +1822,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: '`CONTRACT_NOT_PAYABLE` (contract already `COMPLETED`) or `CONCURRENT_MODIFICATION`.'
+          description: '`CONTRACT_NOT_PAYABLE` (contract already `COMPLETED`, i.e. paid and delivered) or `CONCURRENT_MODIFICATION`.'
           content:
             application/json:
               schema:
@@ -2123,6 +2242,7 @@ components:
       enum: [ROLE_ADMIN, ROLE_STAFF]
     BookingStatus:
       type: string
+      description: '`UPCOMING` = waiting for confirmation ("Chờ xác nhận").'
       enum: [UPCOMING, IN_PROGRESS, CONFIRMED, COMPLETED, CANCELLED]
     AssetCategory:
       type: string
@@ -2138,6 +2258,7 @@ components:
       enum: [NEW_LEAD, IN_CONSULTATION, AWAITING_DEPOSIT, IN_PROGRESS, COMPLETED]
     ContractStatus:
       type: string
+      description: '`COMPLETED` = paid in full AND delivered; paid in full alone is `remainingAmount = 0`.'
       enum: [DRAFT, DEPOSITED, IN_PROGRESS, COMPLETED]
     TransactionType:
       type: string
@@ -2271,7 +2392,7 @@ components:
           description: The staff member's position (job title), not a security role.
     BookingDto:
       type: object
-      required: [id, date, time, clientName, phone, type, packageName, venueAddress, status, assignedStaff]
+      required: [id, date, time, clientName, phone, type, packageName, venueAddress, status, assignedStaff, contractId]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -2300,6 +2421,10 @@ components:
           description: Sorted by staff code.
           items:
             $ref: '#/components/schemas/StaffRefDto'
+        contractId:
+          type: [string, 'null']
+          format: uuid
+          description: The contract this session belongs to; null for consultations before signing.
     CreateBookingRequest:
       type: object
       required: [clientName, type, eventDate, eventTime]
@@ -2335,6 +2460,14 @@ components:
           items:
             type: string
             format: uuid
+        contractId:
+          type: [string, 'null']
+          format: uuid
+          description: Contract the booking belongs to; its phone and package fill the blanks.
+        leadId:
+          type: [string, 'null']
+          format: uuid
+          description: Customer (CRM lead) the booking is for; with a `contractId` it must be the contract's customer.
 
     # ------------------------------------------------------------ packages
     PackageDto:
@@ -2604,7 +2737,7 @@ components:
     # ------------------------------------------------------------ contracts
     ContractDto:
       type: object
-      required: [id, contractNumber, customerName, phone, hasZalo, packageName, totalAmount, paidAmount, remainingAmount, contractDate, status, notes]
+      required: [id, contractNumber, customerName, phone, hasZalo, packageName, totalAmount, paidAmount, remainingAmount, contractDate, status, notes, deliveredAt]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -2632,6 +2765,10 @@ components:
           $ref: '#/components/schemas/ContractStatus'
         notes:
           type: [string, 'null']
+        deliveredAt:
+          type: [string, 'null']
+          format: date-time
+          description: When the hand-over was confirmed; set with `remainingAmount > 0` = delivered but still owing.
     CreateContractRequest:
       type: object
       required: [customerName, phone, servicePackageId, totalAmount, depositAmount]

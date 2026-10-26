@@ -34,6 +34,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("staffIds") Collection<UUID> staffIds,
             @Param("excluded") BookingStatus excluded);
 
+    /** Has work on this contract already started? (a shoot can happen before the deposit arrives) */
+    boolean existsByContractIdAndStatusIn(UUID contractId, Collection<BookingStatus> statuses);
+
     interface StaffBookingCount {
         UUID getStaffId();
 

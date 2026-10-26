@@ -10,7 +10,7 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Pending e-mail verification code of a mobile user (FN-AUTH-02). Only the hash is stored. */
+/** Pending e-mail verification code of a mobile user (FN-AUTH-02). Only the hash is stored; it proves {@code address} only. */
 @Getter
 @Setter
 @Entity
@@ -29,4 +29,15 @@ public class EmailOtp extends BaseEntity {
 
     @Column(name = "failed_attempts", nullable = false)
     private int failedAttempts;
+
+    /** Where the code was sent: the account's e-mail, or the new address it is changing to */
+    @Column(nullable = false)
+    private String address;
+
+    /** Codes sent since {@code sendWindowStart}; capped per hour (FN-AUTH-02) */
+    @Column(name = "send_count", nullable = false)
+    private int sendCount;
+
+    @Column(name = "send_window_start", nullable = false)
+    private Instant sendWindowStart;
 }

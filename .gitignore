@@ -19,3 +19,6 @@ Thumbs.db
 build/
 out/
 *.class
+
+# graphify knowledge graph output
+graphify-out/

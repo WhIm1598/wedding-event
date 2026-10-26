@@ -37,6 +37,11 @@ Module package = `XxxController` + `XxxService` with request/response **records*
   `AppException.invalidField(field, message)` → same 400 shape as Jakarta Validation.
 - Notifications: mobile rows have `recipient_user_id`; always query by recipient. Use `ClientNotificationService.notify`
   so the inbox and push stay in sync; push/WebSocket sends happen **after commit** (`ClientNotificationService.afterCommit`).
+- `users.email` only ever holds a **proven** address: a profile change waits in `pending_email` until its OTP is confirmed,
+  each OTP proves only the `address` it was sent to (max 5 codes/hour per account), and Google login accepts only
+  Google-verified addresses and never links to an unverified account (`OtpService`, `AuthService.loginWithGoogle`).
+  Google users are matched by `users.google_sub` (the ID token's `sub`) first, e-mail only to link an account once;
+  an address already tied to another `sub` is refused (recycled Gmail address).
 - Slow external calls (AI planner) run **outside** the DB transaction; save the result with `TransactionTemplate`.
 - External adapters (`OtpSender`, `PushSender`, `GoogleIdTokenVerifier`, `AiPlannerClient`) are beans: tests replace them in
   `src/test/.../TestDoubles.java`. Never log OTP codes or tokens outside `app.otp.log-code=true` (dev).

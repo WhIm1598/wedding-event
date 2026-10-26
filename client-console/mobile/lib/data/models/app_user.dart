@@ -24,6 +24,7 @@ class AppUser {
     this.role,
     this.hasPlan = false,
     this.isVerified = false,
+    this.pendingEmail,
   });
 
   final String id;
@@ -35,6 +36,9 @@ class AppUser {
   final bool hasPlan;
   final bool isVerified;
 
+  /// New e-mail waiting for its OTP (FN-AUTH-04); [email] stays the confirmed address until then
+  final String? pendingEmail;
+
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
         id: json['id'] as String,
         email: json['email'] as String,
@@ -44,6 +48,7 @@ class AppUser {
         role: UserRole.fromApi(json['role'] as String?),
         hasPlan: json['hasPlan'] as bool? ?? false,
         isVerified: json['isVerified'] as bool? ?? false,
+        pendingEmail: json['pendingEmail'] as String?,
       );
 
   AppUser copyWith({String? fullName, String? email, String? phone, UserRole? role, bool? hasPlan, bool? isVerified}) => AppUser(
@@ -55,5 +60,6 @@ class AppUser {
         role: role ?? this.role,
         hasPlan: hasPlan ?? this.hasPlan,
         isVerified: isVerified ?? this.isVerified,
+        pendingEmail: pendingEmail,
       );
 }

@@ -1,11 +1,12 @@
-import { CalendarDays, Camera, Clock, MapPin, Package, Users } from 'lucide-react';
+import { CalendarDays, Camera, Clock, FileText, MapPin, Package, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState, Spinner } from '@/components/ui/States';
-import { BOOKING_STATUS } from '@/constants/labels';
+import { BOOKING_NEXT_STEPS, BOOKING_STATUS } from '@/constants/labels';
 import { monthRange, weekRange } from '@/lib/date';
 import { formatDate, splitTime12h } from '@/lib/format';
-import type { Booking, CalendarView } from '@/types';
+import type { Booking, BookingProgressStatus, CalendarView } from '@/types';
 
 interface Props {
   view: CalendarView;
@@ -13,6 +14,9 @@ interface Props {
   bookings: Booking[];
   loading: boolean;
   onCreate: () => void;
+  /** FN-ADM-CAL-04; the id of the booking being saved disables its buttons */
+  onStatusChange: (booking: Booking, status: BookingProgressStatus) => void;
+  savingId?: string;
 }
 
 const titleFor = (view: CalendarView, date: string): string => {
@@ -21,7 +25,7 @@ const titleFor = (view: CalendarView, date: string): string => {
   return `Lịch trình ${view === 'week' ? 'tuần' : 'tháng'} ${formatDate(start)} – ${formatDate(end)}`;
 };
 
-export function ScheduleList({ view, selectedDate, bookings, loading, onCreate }: Props) {
+export function ScheduleList({ view, selectedDate, bookings, loading, onCreate, onStatusChange, savingId }: Props) {
   return (
     <Card className="flex-1 overflow-hidden flex flex-col">
       <div className="border-b border-slate-200 p-6 bg-slate-50 flex items-center gap-3">
@@ -48,7 +52,13 @@ export function ScheduleList({ view, selectedDate, bookings, loading, onCreate }
         ) : (
           <div className="space-y-4">
             {bookings.map((booking) => (
-              <BookingCard key={booking.id} booking={booking} showDate={view !== 'day'} />
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                showDate={view !== 'day'}
+                saving={savingId === booking.id}
+                onStatusChange={(status) => onStatusChange(booking, status)}
+              />
             ))}
           </div>
         )}
@@ -57,9 +67,17 @@ export function ScheduleList({ view, selectedDate, bookings, loading, onCreate }
   );
 }
 
-function BookingCard({ booking, showDate }: { booking: Booking; showDate: boolean }) {
+interface CardProps {
+  booking: Booking;
+  showDate: boolean;
+  saving: boolean;
+  onStatusChange: (status: BookingProgressStatus) => void;
+}
+
+function BookingCard({ booking, showDate, saving, onStatusChange }: CardProps) {
   const t = splitTime12h(booking.time);
   const status = BOOKING_STATUS[booking.status];
+  const nextSteps = BOOKING_NEXT_STEPS[booking.status];
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-4 rounded-xl border border-slate-200 hover:shadow-md transition-shadow bg-white relative overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-rose-500" />
@@ -90,7 +108,29 @@ function BookingCard({ booking, showDate }: { booking: Booking; showDate: boolea
               <MapPin size={14} className="mr-1.5" /> {booking.venueAddress}
             </span>
           )}
+          {booking.contractId && (
+            <span className="flex items-center text-rose-600">
+              <FileText size={14} className="mr-1.5" /> Thuộc hợp đồng
+            </span>
+          )}
         </div>
+        {nextSteps.length > 0 && (
+          // Large touch targets: staff update the status on their phone during the shoot (FN-ADM-CAL-04)
+          <div className="mt-3 flex flex-wrap gap-2">
+            {nextSteps.map((step, i) => (
+              <Button
+                key={step.status}
+                variant={i === 0 ? 'primary' : 'outline'}
+                className="px-5 py-3"
+                loading={saving && i === 0}
+                disabled={saving}
+                onClick={() => onStatusChange(step.status)}
+              >
+                {step.label}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
