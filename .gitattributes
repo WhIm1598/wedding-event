@@ -1,0 +1,4 @@
+# Unix scripts run inside Linux containers (Docker build): keep LF on Windows checkouts (#44)
+gradlew text eol=lf
+*.sh text eol=lf
+gradlew.bat text eol=crlf
