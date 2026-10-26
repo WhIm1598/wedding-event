@@ -10,7 +10,7 @@ One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`
 | Package | Contents |
 |---|---|
 | `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService` (refresh tokens are `refresh_tokens` rows keyed by `jti`, rotated in `AuthService.refresh`), `ConsoleAuthenticationConverter` (reloads the account on every request: locked / role or staff link changed → 401), `CurrentUser.from(jwt)` (`id`, `role`, `staffMemberId`, `isAdmin()`), `SecurityErrorHandler` |
-| `config/` | `AppProperties` (`app.*`: zone, jwt, cors, public-base-url, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
+| `config/` | `AppProperties` (`app.*`: zone, jwt, cors, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `support/` | `DateRange` (day / Monday-based week / month, instant bounds) |
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |
 | `crm/CustomerStageSync` | `contractChanged(contract)` — call after any contract status change (payment, delivery) so the customer's stage follows (FN-ADM-CRM-03) |
