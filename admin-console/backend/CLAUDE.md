@@ -9,12 +9,13 @@ One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`
 `notification`, `search`, `settings`. Shared code:
 | Package | Contents |
 |---|---|
-| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService`, `CurrentUser.from(jwt)` (`id`, `role`, `staffMemberId`, `isAdmin()`), `SecurityErrorHandler` |
+| `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService` (refresh tokens are `refresh_tokens` rows keyed by `jti`, rotated in `AuthService.refresh`), `ConsoleAuthenticationConverter` (reloads the account on every request: locked / role or staff link changed → 401), `CurrentUser.from(jwt)` (`id`, `role`, `staffMemberId`, `isAdmin()`), `SecurityErrorHandler` |
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, public-base-url, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `support/` | `DateRange` (day / Monday-based week / month, instant bounds) |
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |
 | `crm/CustomerStageSync` | `contractChanged(contract)` — call after any contract status change (payment, delivery) so the customer's stage follows (FN-ADM-CRM-03) |
-| `demo/` | `DemoDataSeeder` — seeds the empty dev/test database (profile flag `app.demo-data.enabled`) |
+| `demo/` | `DemoDataSeeder` — seeds the empty dev/test database (profile flag `app.demo-data.enabled`). There is no default profile: run with `--spring.profiles.active=dev` |
+| `auth/AdminBootstrap` | Production's first admin from env `ADMIN_EMAIL`/`ADMIN_PASSWORD` while no `ROLE_ADMIN` exists (deploy: `deploy/README.md`) |
 
 Inside a module package: `XxxController` + `XxxService` holding the request/response **records** as nested types
 (e.g. `BookingService.CreateBookingRequest`, `BookingService.BookingDto` with a static `of(entity)`).
