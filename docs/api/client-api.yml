@@ -94,6 +94,7 @@ paths:
         `409 EMAIL_EXISTS` (no account merge). A studio account (admin/staff) → `401 INVALID_CREDENTIALS`.
         A locked account → `403 ACCOUNT_LOCKED`. Not a separate function in the detailed spec (error codes in §1.3;
         product spec §7.1).
+      x-spec-function: FN-AUTH-05
       x-roles: [public]
       security: []
       requestBody:
@@ -186,6 +187,7 @@ paths:
       operationId: getCurrentUser
       summary: Get the signed-in user
       description: Returns the `user` object of the access token's account. Works before a role is chosen.
+      x-spec-function: FN-AUTH-06
       x-roles: [authenticated]
       responses:
         '200':
