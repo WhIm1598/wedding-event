@@ -32,4 +32,11 @@ class Validators {
 
   /// FN-PLAN-01: minimum 10,000,000 VND
   static String? totalBudget(int amount) => amount < 10000000 ? 'Ngân sách tối thiểu 10.000.000 ₫' : null;
+
+  /// Optional guest count of a quote request: 1–5000 (FN-VND-01)
+  static String? optionalGuestCount(String? v) {
+    if (v == null || v.trim().isEmpty) return null;
+    final n = int.tryParse(v.trim());
+    return n == null || n < 1 || n > 5000 ? 'Số khách từ 1 đến 5000' : null;
+  }
 }

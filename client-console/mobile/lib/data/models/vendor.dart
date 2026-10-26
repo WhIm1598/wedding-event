@@ -18,12 +18,73 @@ class VendorProject {
   final String? venue;
 }
 
+/// `QuoteRequestStatus` (spec §1.6); the API uses the upper-case names
+enum QuoteRequestStatus {
+  pending('Chờ báo giá'),
+  quoted('Đã báo giá'),
+  accepted('Đã chốt'),
+  declined('Từ chối'),
+  cancelled('Đã hủy');
+
+  const QuoteRequestStatus(this.label);
+  final String label;
+
+  String get apiName => name.toUpperCase();
+  bool get isOpen => this == pending || this == quoted;
+
+  static QuoteRequestStatus fromApi(String value) => values.firstWhere((s) => s.apiName == value);
+}
+
+/// `QuoteRequestDto` (FN-VND-01..03): a couple asks a vendor to quote one of its packages
 class QuoteRequest {
-  const QuoteRequest({required this.id, required this.customerName, required this.packageName});
+  const QuoteRequest({
+    required this.id,
+    required this.coupleName,
+    required this.packageId,
+    required this.packageName,
+    required this.vendorName,
+    required this.status,
+    required this.createdAt,
+    this.eventDate,
+    this.venue,
+    this.guestCount,
+    this.message,
+    this.quotedPrice,
+    this.vendorNote,
+    this.respondedAt,
+  });
 
   final String id;
-  final String customerName;
+  final String coupleName;
+  final String packageId;
   final String packageName;
+  final String vendorName;
+  final QuoteRequestStatus status;
+  final DateTime createdAt;
+  final DateTime? eventDate;
+  final String? venue;
+  final int? guestCount;
+  final String? message;
+  final int? quotedPrice;
+  final String? vendorNote;
+  final DateTime? respondedAt;
+
+  factory QuoteRequest.fromJson(Map<String, dynamic> json) => QuoteRequest(
+        id: json['id'] as String,
+        coupleName: json['coupleName'] as String,
+        packageId: json['packageId'] as String,
+        packageName: json['packageName'] as String,
+        vendorName: json['vendorName'] as String,
+        status: QuoteRequestStatus.fromApi(json['status'] as String),
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        eventDate: json['eventDate'] == null ? null : DateTime.parse(json['eventDate'] as String),
+        venue: json['venue'] as String?,
+        guestCount: json['guestCount'] as int?,
+        message: json['message'] as String?,
+        quotedPrice: (json['quotedPrice'] as num?)?.toInt(),
+        vendorNote: json['vendorNote'] as String?,
+        respondedAt: json['respondedAt'] == null ? null : DateTime.parse(json['respondedAt'] as String),
+      );
 }
 
 class VendorDashboard {

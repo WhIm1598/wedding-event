@@ -7,6 +7,8 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models/service_item.dart';
 import '../../data/repositories/service_repository.dart';
+import '../../state/session_controller.dart';
+import 'widgets/quote_request_sheet.dart';
 
 class ServiceDetailScreen extends StatefulWidget {
   const ServiceDetailScreen({super.key, required this.serviceId});
@@ -39,8 +41,21 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     }
   }
 
+  Future<void> _requestQuote(ServiceItem s) async {
+    final sent = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => QuoteRequestSheet(service: s),
+    );
+    if (sent == true && mounted) showAppSnack(context, 'Đã gửi yêu cầu báo giá tới ${s.provider}');
+  }
+
   @override
   Widget build(BuildContext context) {
+    // FN-VND-01: only couples, and only vendor packages (the studio's have no providerId), take quote requests
+    final canQuote = !context.watch<SessionController>().isVendor;
     return Scaffold(
       body: AsyncView<ServiceItem>(
         future: _future,
@@ -121,7 +136,23 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                 ],
               ),
             ),
-            BottomActionBar(child: PrimaryButton(label: 'Liên hệ đặt lịch', loading: _contacting, onPressed: () => _contact(s))),
+            BottomActionBar(
+              child: Row(
+                children: [
+                  if (canQuote && s.providerId != null) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+                        onPressed: () => _requestQuote(s),
+                        child: const Text('Yêu cầu báo giá'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(child: PrimaryButton(label: 'Liên hệ đặt lịch', loading: _contacting, onPressed: () => _contact(s))),
+                ],
+              ),
+            ),
           ],
         ),
       ),

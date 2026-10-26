@@ -27,8 +27,9 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse<Void>> handleApp(AppException ex) {
-        return respond(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getErrors());
+    public ResponseEntity<ApiResponse<Object>> handleApp(AppException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(new ApiResponse<>(false, ex.getCode(), ex.getMessage(), ex.getData(), ex.getErrors()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

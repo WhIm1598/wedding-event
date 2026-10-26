@@ -64,6 +64,7 @@ class MockData {
       id: 'svc-2',
       name: 'Trang trí tiệc cưới',
       provider: 'Dreamy Decor',
+      providerId: 'u-dreamy',
       price: 25000000,
       rating: 4.8,
       reviews: 85,
@@ -77,6 +78,7 @@ class MockData {
       id: 'svc-3',
       name: 'Tiệc cưới sảnh Diamond',
       provider: 'Gem Center',
+      providerId: 'u-gem',
       price: 120000000,
       rating: 4.7,
       reviews: 312,
@@ -89,6 +91,7 @@ class MockData {
       id: 'svc-4',
       name: 'Thuê váy cưới thiết kế',
       provider: 'Bella Bridal',
+      providerId: 'u-bella',
       price: 8000000,
       rating: 4.6,
       reviews: 64,
@@ -108,9 +111,25 @@ class MockData {
         monthlyRevenue: 120000000,
         newRequestCount: 3,
         rating: 4.9,
-        quoteRequests: const [QuoteRequest(id: 'q-1', customerName: 'Trần Vy', packageName: 'Gói Chụp Pre-Wedding')],
+        quoteRequests: quoteRequests.where((q) => q.status == QuoteRequestStatus.pending).take(5).toList(),
         upcoming: [vendorProjects.first],
       );
+
+  /// Sent by the demo couple (mock "me") or received by the demo vendor — the mock doesn't split the two sides
+  static final List<QuoteRequest> quoteRequests = [
+    QuoteRequest(
+      id: 'q-1',
+      coupleName: 'Trần Vy',
+      packageId: 'vs-1',
+      packageName: 'Gói Chụp Pre-Wedding Ngoại Cảnh',
+      vendorName: 'Lumiere Studio',
+      status: QuoteRequestStatus.pending,
+      createdAt: DateTime(2026, 10, 24, 9, 30),
+      eventDate: DateTime(2027, 1, 16),
+      guestCount: 200,
+      message: 'Bên mình muốn chụp ở Đà Lạt',
+    ),
+  ];
 
   static final List<VendorProject> vendorProjects = [
     VendorProject(id: 'p-1', name: 'Đám cưới Ngọc & Hoàng', service: 'Chụp Phóng sự', date: DateTime(2026, 10, 20), status: ProjectStatus.upcoming, venue: 'Gem Center, Quận 1'),

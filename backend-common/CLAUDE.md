@@ -5,12 +5,12 @@ same database. Package root `com.weddingevent.common`. Lombok `@Getter/@Setter` 
 
 | Path | Contents |
 |---|---|
-| `domain/` | JPA entities extending `BaseEntity` (UUID id, `createdAt`, `updatedAt`). Studio: `User`, `StaffMember`, `StaffTask`, `ServicePackage`, `Booking`, `Asset`, `AssetReservation`, `Lead`, `Contract`, `PaymentTransaction`, `Notification`, `StudioSettings` (single row, id 1). Mobile: `WeddingPlan` (+ `BudgetItem`, `PlanTask`), `Guest`, `PlanSyncCode`, `EmailOtp`, `VendorProfile`, `ChatRoom`, `ChatMessage` |
+| `domain/` | JPA entities extending `BaseEntity` (UUID id, `createdAt`, `updatedAt`). Studio: `User`, `StaffMember`, `StaffTask`, `ServicePackage`, `Booking`, `Asset`, `AssetReservation`, `Lead`, `Contract`, `PaymentTransaction`, `Notification`, `StudioSettings` (single row, id 1). Mobile: `WeddingPlan` (+ `BudgetItem`, `PlanTask`), `Guest`, `PlanSyncCode`, `EmailOtp`, `VendorProfile`, `QuoteRequest`, `ChatRoom`, `ChatMessage` |
 | `domain/enums/` | One enum per file; values exactly as the spec (§1.6 state machines). Stored as `VARCHAR` (`@Enumerated(EnumType.STRING)`) |
 | `repository/` | Spring Data repositories, **one top-level interface per file** (nested interfaces are not scanned). Projection interfaces may be nested |
 | `api/ApiResponse` | Envelope `{success, code, message, data, errors}`: `ApiResponse.ok(data[, message])`, `FieldError(field, message)` |
 | `api/PageResponse` | Page shape of spec §1.2 `{items, page, size, totalElements, totalPages}`: `PageResponse.of(page, mapper)` |
-| `exception/` | `AppException.badRequest/conflict/unauthorized/forbidden(code, message)`, `AppException.invalidField(field, message)` (400 with one field error, for rules annotations can't express), `ResourceNotFoundException`, `GlobalExceptionHandler` (validation → 400 `BAD_REQUEST` + field errors, optimistic lock → 409 `CONCURRENT_MODIFICATION`) |
+| `exception/` | `AppException.badRequest/conflict/unauthorized/forbidden(code, message)`, `AppException.invalidField(field, message)` (400 with one field error, for rules annotations can't express), `AppException.conflict(code, message, data)` (409 with `data`, e.g. `{existingId}`), `ResourceNotFoundException`, `GlobalExceptionHandler` (validation → 400 `BAD_REQUEST` + field errors, optimistic lock → 409 `CONCURRENT_MODIFICATION`) |
 | `support/CodeGenerator` | Display codes from PostgreSQL sequences: `NV-001`, `HD-102`, `TRX-001` |
 | `util/VndFormatter` | `vnd(BigDecimal)` → `245.000.000đ`, `date(LocalDate)` → `dd/MM/yyyy` |
 | `src/main/resources/db/migration/` | **Flyway migrations — the only way the schema changes.** Rules: `src/main/resources/db/README.md` |

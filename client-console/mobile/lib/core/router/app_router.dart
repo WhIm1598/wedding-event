@@ -12,6 +12,7 @@ import '../../features/plan/create_plan_screen.dart';
 import '../../features/plan/plan_management_screen.dart';
 import '../../features/profile/account_settings_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/quotes/quote_requests_screen.dart';
 import '../../features/services/search_screen.dart';
 import '../../features/services/service_detail_screen.dart';
 import '../../features/shell/main_shell.dart';
@@ -47,6 +48,7 @@ class Routes {
   static const serviceDetail = '/services/:id';
   static const accountSettings = '/profile/settings';
   static const serviceManagement = '/vendor/services';
+  static const quoteRequests = '/quote-requests';
 
   static String serviceDetailFor(String id) => '/services/$id';
 }
@@ -88,6 +90,7 @@ GoRouter createRouter(SessionController session) {
       GoRoute(path: Routes.serviceDetail, builder: (_, state) => ServiceDetailScreen(serviceId: state.pathParameters['id']!)),
       GoRoute(path: Routes.accountSettings, builder: (_, __) => const AccountSettingsScreen()),
       GoRoute(path: Routes.serviceManagement, builder: (_, __) => const ServiceManagementScreen()),
+      GoRoute(path: Routes.quoteRequests, builder: (_, __) => const QuoteRequestsScreen()),
     ],
   );
 }

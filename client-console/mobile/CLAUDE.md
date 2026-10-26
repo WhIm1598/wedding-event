@@ -8,7 +8,7 @@ Keep `PUB_CACHE` on the project's drive: Kotlin incremental compile fails on plu
 (`this and base files have different roots`); otherwise add `kotlin.incremental=false` to `android/gradle.properties`.
 The app runs on mock data by default; `--dart-define=USE_MOCK=false` calls `client-console/backend` (port 8081, see its
 CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sending messages; the vendor workspace
-(`VendorRepository`, spec FN-VND-01..05) has no backend endpoints yet and works in mock mode only. List endpoints return the spec's page shape
+(`VendorRepository`, spec FN-VND-01..05) is real for quote requests (FN-VND-01/02); the other calls work in mock mode only. List endpoints return the spec's page shape
 `{items, page, size, totalElements, totalPages}`.
 
 ## Where things go (`lib/`)
@@ -25,8 +25,8 @@ CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sen
 | `data/repositories/` | One per API module (`auth`, `plan`, `guest`, `service`, `vendor`, `notification`) |
 | `data/mock/mock_data.dart` | `MockData` seed data used by every mock branch |
 | `state/session_controller.dart` | `SessionController` (ChangeNotifier): user, `isLoggedIn`, `needsRole`, `isVendor`, `hasPlan`, login/OTP/role/profile |
-| `features/<feature>/` | Screens (`*_screen.dart`) + `widgets/` for that feature: `auth`, `home`, `plan`, `ai_chat`, `guests`, `sync`, `services`, `notifications`, `profile`, `vendor`, `shell` |
-| `test/` | Unit tests for pure logic (`formatters_test.dart`) |
+| `features/<feature>/` | Screens (`*_screen.dart`) + `widgets/` for that feature: `auth`, `home`, `plan`, `ai_chat`, `guests`, `sync`, `services`, `quotes` (quote requests, both roles), `notifications`, `profile`, `vendor`, `shell` |
+| `test/` | Unit tests for pure logic (`formatters_test.dart`: `Fmt` and `Validators`) |
 
 ## Recipe: new API call or screen
 1. Model in `data/models/` with the spec's JSON field names (see Part A of the detailed spec).

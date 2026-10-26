@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/common.dart';
@@ -72,7 +74,14 @@ class _VendorHomeState extends State<VendorHome> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                const Text('Yêu cầu báo giá mới', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Yêu cầu báo giá mới', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate800)),
+                    ),
+                    TextButton(onPressed: () => context.push(Routes.quoteRequests), child: const Text('Xem tất cả')),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 for (final q in d.quoteRequests)
                   Padding(
@@ -87,7 +96,7 @@ class _VendorHomeState extends State<VendorHome> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(q.customerName, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.slate800)),
+                                Text(q.coupleName, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.slate800)),
                                 Text(q.packageName, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
                               ],
                             ),

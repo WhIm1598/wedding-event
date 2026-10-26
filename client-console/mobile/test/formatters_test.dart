@@ -50,5 +50,14 @@ void main() {
       expect(Validators.totalBudget(9999999), isNotNull);
       expect(Validators.totalBudget(10000000), isNull);
     });
+
+    test('quote request guest count is optional, 1–5000 (FN-VND-01)', () {
+      expect(Validators.optionalGuestCount(''), isNull);
+      expect(Validators.optionalGuestCount('1'), isNull);
+      expect(Validators.optionalGuestCount('5000'), isNull);
+      expect(Validators.optionalGuestCount('0'), isNotNull);
+      expect(Validators.optionalGuestCount('5001'), isNotNull);
+      expect(Validators.optionalGuestCount('nhiều'), isNotNull);
+    });
   });
 }

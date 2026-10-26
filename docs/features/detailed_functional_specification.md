@@ -505,7 +505,7 @@ flowchart LR
 * `VendorProjectDto`: `{ id, coupleName, packageName, eventDate, venue, agreedPrice, status, quoteRequestId, cancelRequestedAt, cancelReason }`.
 * `VendorServiceDto`: `{ id, name, category, type, price, discountPrice, description, features, thumbnailUrl, isActive, projectCount }`.
 
-#### `FN-VND-01: Gửi yêu cầu báo giá` 🆕
+#### `FN-VND-01: Gửi yêu cầu báo giá` ✅
 * **Endpoint:** `POST /api/v1/client/quote-requests` — `ROLE_COUPLE`.
 * **Input:** `{ "servicePackageId": "uuid", "eventDate": "2026-12-20", "venue": "Trung tâm tiệc cưới White Palace", "guestCount": 300, "message": "Bên mình cần trang trí cổng hoa và sân khấu" }`.
 * **Validation:** `servicePackageId` bắt buộc; `eventDate` tùy chọn, không trước hôm nay (`400 BAD_REQUEST`); `venue` ≤ 255; `guestCount` 1–5000; `message` ≤ 1000.
@@ -515,7 +515,7 @@ flowchart LR
   * Tạo yêu cầu `PENDING`, chụp `package_name`. Gửi thông báo vào hộp thư của Vendor (`kind = message`, tiêu đề "Yêu cầu báo giá mới", nội dung gồm tên cặp đôi và tên gói) + Push.
 * **Output (201):** `QuoteRequestDto`.
 
-#### `FN-VND-02: Danh sách yêu cầu báo giá` 🆕
+#### `FN-VND-02: Danh sách yêu cầu báo giá` ✅
 * **Cặp đôi:** `GET /api/v1/client/quote-requests?status=&page=0&size=20` — `ROLE_COUPLE`, chỉ yêu cầu của mình.
 * **Vendor:** `GET /api/v1/client/vendor/quote-requests?status=&page=0&size=20` — `ROLE_VENDOR`, chỉ yêu cầu gửi tới hồ sơ Vendor của mình.
 * Phân trang §1.2, mới nhất trước. `status` (tùy chọn) là một giá trị `QuoteRequestStatus`; giá trị khác → `400`.

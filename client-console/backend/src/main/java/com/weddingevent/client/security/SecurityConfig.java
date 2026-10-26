@@ -42,6 +42,7 @@ public class SecurityConfig {
 
     public static final String COUPLE = "hasRole('COUPLE')";
     public static final String COUPLE_OR_VENDOR = "hasAnyRole('COUPLE', 'VENDOR')";
+    public static final String VENDOR = "hasRole('VENDOR')";
 
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, JwtDecoder accessTokenDecoder, UserAuthenticationConverter converter,
@@ -55,7 +56,9 @@ public class SecurityConfig {
                         // WebSocket handshake; the STOMP CONNECT frame carries the token (StompAuthInterceptor)
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
-                        .requestMatchers("/api/v1/client/plans/**", "/api/v1/client/guests/**").hasRole("COUPLE")
+                        .requestMatchers("/api/v1/client/plans/**", "/api/v1/client/guests/**", "/api/v1/client/quote-requests/**")
+                                .hasRole("COUPLE")
+                        .requestMatchers("/api/v1/client/vendor/**").hasRole("VENDOR")
                         .requestMatchers("/api/v1/client/services/**", "/api/v1/messages/**").hasAnyRole("COUPLE", "VENDOR")
                         // Signed in, any role (or none yet): profile, role picker, inbox
                         .requestMatchers("/api/v1/auth/me", "/api/v1/users/**", "/api/v1/client/notifications/**").authenticated()
