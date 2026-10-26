@@ -1,6 +1,6 @@
 # TÀI LIỆU ĐẶC TẢ CHI TIẾT CHỨC NĂNG (DETAILED FUNCTIONAL SPECIFICATION)
 **Dự án:** Wedding Event & Studio Management Monorepo Platform  
-**Phiên bản:** 1.1.3  
+**Phiên bản:** 1.1.4  
 **Mục tiêu:** Cung cấp thông số kỹ thuật, quy tắc nghiệp vụ (Business Rules), Schema Request/Response và quy trình xử lý chi tiết từng function cho AI Agent / Kỹ sư phần mềm triển khai mã nguồn chính xác 100%.
 
 **Ký hiệu trạng thái triển khai** (gắn ở đầu mỗi function phía Admin):
@@ -16,6 +16,7 @@
 | 1.1.1 | Đối chiếu với mã nguồn: các mục chưa có trong code được gắn *(v1.1)* (JWT claim `typ`, kết quả tìm kiếm `contract`/`lead`, `completedThisMonth` tính đến hôm nay, địa chỉ Bên A); bổ sung endpoint mobile đang dùng nhưng chưa đặc tả (FN-AUTH-04, FN-PLAN-05, FN-SVC-02, FN-NOTI-01) và `budgetItems`/`tasks` trong FN-PLAN-02. |
 | 1.1.2 | Triển khai `client-console/backend` (Phần A): bảng mã lỗi phía mobile (§1.3); `users.role` để trống tới khi chọn vai trò, vai trò chỉ chọn một lần (FN-AUTH-03); kế hoạch `DRAFT` không tính là có kế hoạch; quy tắc OTP/gửi lại mã (FN-AUTH-02); `providerId` trong FN-SVC-01; mặc định ngày cưới và lỗi dịch vụ AI (FN-PLAN-03); quy tắc mã kết nối (FN-PLAN-04); người nhận hợp lệ và thông báo khi offline (FN-MSG-01); làm tròn `progressPercentage`. |
 | 1.1.3 | Không gian Vendor (Module 4B): yêu cầu báo giá → dự án Vendor, dashboard và gói của Vendor (FN-VND-01..05), trạng thái `QuoteRequestStatus`/`VendorProjectStatus` (§1.6), mã lỗi `PACKAGE_NOT_QUOTABLE`, `QUOTE_ALREADY_OPEN` (§1.3). Bảo mật tài khoản mobile: email mới chờ xác nhận (`pendingEmail`, FN-AUTH-04), mã OTP gắn với địa chỉ nhận và tối đa 5 mã/giờ (FN-AUTH-02), Google chỉ nhận email đã xác thực và không gộp vào tài khoản chưa xác thực. FN-ADM-CRM-03: khách chuyển `IN_PROGRESS` khi hợp đồng nhận cọc, không phải khi tạo hợp đồng nháp (khớp sơ đồ). Hợp đồng `DEPOSITED` không có lịch hẹn (chỉ thuê váy) bàn giao được trực tiếp. Duyệt Module 4B: Vendor tạo/sửa gói và giảm giá (`discountPrice`), doanh thu Vendor chỉ tính dự án `COMPLETED`, Cặp đôi xin hủy dự án và Vendor duyệt, gói Studio và Vendor liên hệ qua Zalo (`zaloUrl`; số Studio `zaloPhone` FN-ADM-SET-01, số Vendor = SĐT tài khoản), chat Cặp đôi–Studio/Vendor (FN-MSG-01) tạm ẩn trên app, thanh toán Cặp đôi–Vendor ngoài app. Thuật ngữ thống nhất trong `GLOSSARY.md`. |
+| 1.1.4 | Đối chiếu Phần A với `docs/api/client-api.yml` (sinh từ code). Thêm FN-AUTH-05 (đăng nhập Google) và FN-AUTH-06 (`/auth/me`) đúng như đang chạy; đặc tả mới FN-AUTH-07 làm mới phiên và đăng xuất trên mobile (refresh token xoay vòng, bảng `refresh_tokens`). Đối tượng `user` có đủ `phone`, `avatarUrl`, `pendingEmail`. Envelope: `data` vắng mặt khi không có giá trị (FN-PLAN-02 chưa có kế hoạch). Ghi các quy tắc code đang áp dụng: FN-PLAN-01 (tối đa 30 danh mục), FN-GUEST-01/02 (`tableNumber`, `notes`, giới hạn độ dài, lọc), FN-VND-04 (phân trang phía Cặp đôi, giá trị trạng thái, thông báo khi từ chối yêu cầu hủy). FN-VND-03: khi chốt, địa điểm gửi kèm cập nhật địa điểm; ngày gửi kèm chỉ dùng khi yêu cầu chưa có ngày. `sort=` (§1.2) và `TOO_MANY_REQUESTS` (§1.3) ghi rõ là chưa làm. |
 
 ---
 
@@ -46,13 +47,14 @@
 }
 ```
 * `POST` tạo mới trả `201 Created`; các thao tác khác trả `200 OK`.
+* *(v1.1.4)* Trường không có giá trị **bị lược khỏi envelope** (`data`, `errors`, `message` khi rỗng): ví dụ "`data: null`" trong spec nghĩa là response **không có** trường `data`; client coi trường vắng mặt như `null`. Trường bên trong `data` vẫn có mặt với giá trị `null`.
 * **Phân trang** *(v1.1)* — áp dụng cho các endpoint danh sách có thể tăng không giới hạn (giao dịch, hợp đồng, khách hàng dạng danh sách, thông báo, tài khoản, nhật ký):
-  * Query: `?page=0&size=20&sort=createdAt,desc` (`page` bắt đầu từ 0, `size` tối đa 100, mặc định 20).
+  * Query: `?page=0&size=20` (`page` bắt đầu từ 0, `size` 1–100, mặc định 20; ngoài khoảng → `400`). Thứ tự do từng endpoint quy định. *(v1.2 — chưa làm)* tham số `sort=createdAt,desc`; hiện chưa endpoint nào nhận `sort`.
   * `data`: `{ "items": [...], "page": 0, "size": 20, "totalElements": 135, "totalPages": 7 }`.
   * Không phân trang: Kanban CRM (giới hạn 200 thẻ/cột, thẻ cũ nhất bị ẩn kèm nút "Xem tất cả" chuyển sang dạng danh sách), lịch (`calendar` giới hạn bởi khoảng ngày), danh mục nhỏ (gói dịch vụ, nhân sự, kho).
 
 ### 1.3. Danh mục mã lỗi
-**Mã chung:** `BAD_REQUEST` (400, kèm `errors[]` khi lỗi validation), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `METHOD_NOT_ALLOWED` (405), `CONFLICT` (409), `CONCURRENT_MODIFICATION` (409 — bản ghi đã bị người khác sửa, tải lại rồi thử lại), `TOO_MANY_REQUESTS` (429), `INTERNAL_SERVER_ERROR` (500).
+**Mã chung:** `BAD_REQUEST` (400, kèm `errors[]` khi lỗi validation), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `METHOD_NOT_ALLOWED` (405), `CONFLICT` (409), `CONCURRENT_MODIFICATION` (409 — bản ghi đã bị người khác sửa, tải lại rồi thử lại), `TOO_MANY_REQUESTS` (429 — *(v1.2, chưa làm)* giới hạn tần suất ở gateway/§3; hiện chưa backend nào trả mã này, giới hạn gửi OTP của FN-AUTH-02 không trả lỗi), `INTERNAL_SERVER_ERROR` (500).
 
 **Mã nghiệp vụ phía Admin:**
 | Mã | HTTP | Ngữ cảnh |
@@ -81,7 +83,7 @@
 | `ZALO_NOT_AVAILABLE` | 400 | SĐT khách chưa đăng ký Zalo. |
 | `SHARE_LINK_EXPIRED` | 410 | Link hợp đồng công khai hết hạn hoặc đã bị thu hồi. |
 
-**Mã nghiệp vụ phía Mobile (Phần A)** *(v1.1.2)* — dùng chung `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `EMAIL_EXISTS` ở trên:
+**Mã nghiệp vụ phía Mobile (Phần A)** *(v1.1.2)* — dùng chung `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `EMAIL_EXISTS`, `INVALID_STATUS_TRANSITION` và *(v1.1.4)* `INVALID_REFRESH_TOKEN` (FN-AUTH-07) ở trên:
 | Mã | HTTP | Ngữ cảnh |
 | :--- | :--- | :--- |
 | `INVALID_GOOGLE_TOKEN` | 401 | Google ID token sai/hết hạn, đăng nhập Google chưa được cấu hình, hoặc *(v1.1.3)* email Google chưa được Google xác thực. Đăng nhập Google vào một tài khoản có sẵn nhưng chưa xác thực email → `409 EMAIL_EXISTS` (không gộp tài khoản). Tài khoản được nhận diện theo mã người dùng Google (`sub`, cột `users.google_sub`) nên vẫn đúng khi email Google đổi; lần đầu đăng nhập Google, tài khoản cùng email được gắn với `sub` đó; email đã gắn với một `sub` khác (địa chỉ Gmail bị tái sử dụng) → `409 EMAIL_EXISTS`. |
@@ -196,7 +198,7 @@ stateDiagram-v2
   1. Tìm `email` trong bảng `users` (không phân biệt hoa thường). Nếu không có **hoặc** BCrypt kiểm tra mật khẩu không khớp -> trả về `401 INVALID_CREDENTIALS` với cùng một thông điệp *(v1.1 — bỏ `404 USER_NOT_FOUND` để không lộ email đã đăng ký)*.
   2. Kiểm tra trường `is_active`. Nếu `false` -> trả về `403 ACCOUNT_LOCKED`.
   3. Nếu tài khoản chưa xác thực OTP (`is_verified == false`), hệ thống sinh mã OTP mới và yêu cầu xác thực.
-  4. Sinh cặp JWT Token (`accessToken` hạn 2 giờ, `refreshToken` hạn 30 ngày).
+  4. Sinh cặp JWT Token (`accessToken` hạn 2 giờ, `refreshToken` hạn 30 ngày). *(v1.1.4)* Làm mới và thu hồi: FN-AUTH-07.
 * **Output Schema (200 OK):**
   ```json
   {
@@ -208,13 +210,17 @@ stateDiagram-v2
         "id": "c1f2e3d4-...",
         "email": "ngoc.hoang@example.com",
         "fullName": "Ngọc & Hoàng",
+        "phone": "0912345678",
+        "avatarUrl": null,
         "role": "ROLE_COUPLE",
         "hasPlan": true,
-        "isVerified": true
+        "isVerified": true,
+        "pendingEmail": null
       }
     }
   }
   ```
+  * *(v1.1.4)* Đối tượng `user` (dùng chung cho FN-AUTH-01..06): `phone`, `avatarUrl` có thể `null`; `role` `null` khi chưa chọn vai trò (FN-AUTH-03); `pendingEmail` là email đang chờ xác nhận (FN-AUTH-04), `null` khi không có.
 
 #### `FN-AUTH-02: Xác thực mã OTP`
 * **Mục tiêu:** Xác minh email đăng ký thông qua mã số 4 chữ số.
@@ -251,7 +257,7 @@ stateDiagram-v2
   * Nếu chọn `ROLE_COUPLE`: Tạo bản ghi mặc định trong `wedding_plans` ở trạng thái nháp (`hasPlan = false`).
   * Nếu chọn `ROLE_VENDOR`: Tạo hồ sơ Vendor mặc định trong `vendor_profiles`.
   * *(v1.1.2)* Tài khoản mới (vd. tạo qua Google) có `role = null` cho tới khi chọn; trong thời gian đó chỉ gọi được `/auth/me`, `/users/**` và hộp thư thông báo (`403` với các API khác). Vai trò chỉ chọn **một lần**: gọi lại → `409 ROLE_ALREADY_SET`. Giá trị khác `ROLE_COUPLE`/`ROLE_VENDOR` → `400`.
-  * *(v1.1.2)* Kế hoạch `DRAFT` tạo ở bước này **không** tính là "có kế hoạch" (`hasPlan = false`, FN-PLAN-02 trả `data: null`); FN-PLAN-01/03 sẽ dùng lại bản ghi này.
+  * *(v1.1.2)* Kế hoạch `DRAFT` tạo ở bước này **không** tính là "có kế hoạch" (`hasPlan = false`, FN-PLAN-02 không trả `data`); FN-PLAN-01/03 sẽ dùng lại bản ghi này.
 * **Output (200):** đối tượng `user` như FN-AUTH-01.
 
 #### `FN-AUTH-04: Cập nhật hồ sơ cá nhân`
@@ -260,6 +266,45 @@ stateDiagram-v2
 * **Validation:** `fullName` 1–100 ký tự; `email` RFC 5322, trùng email người khác → `409 EMAIL_EXISTS`; `phone` rỗng hoặc đúng §1.1.
 * *(v1.1.3)* **Đổi email:** email mới **không** thay email cũ ngay — được lưu vào `pending_email` và gửi OTP tới địa chỉ mới (FN-AUTH-02). `email` và `is_verified` giữ nguyên cho tới khi OTP của địa chỉ mới được xác nhận (`POST /auth/verify-otp` với `email` = địa chỉ mới), lúc đó email mới thay email cũ. Nếu trong lúc chờ đã có tài khoản khác dùng địa chỉ đó → xác nhận trả `409 EMAIL_EXISTS` và yêu cầu đổi bị hủy. Gửi lại email hiện tại → hủy yêu cầu đổi đang chờ. Lý do: nếu email chưa xác thực được ghi ngay, một người có thể "chiếm chỗ" email của người khác, và chủ thật khi đăng nhập Google sẽ vào nhầm tài khoản của họ.
 * **Output (200):** đối tượng `user` như FN-AUTH-01, *(v1.1.3)* thêm `pendingEmail` (null khi không có yêu cầu đổi).
+
+#### `FN-AUTH-05: Đăng nhập bằng Google` ✅ *(v1.1.4 — đặc tả hóa)*
+* **Endpoint:** `POST /api/v1/auth/google` — Public.
+* **Input:** `{ "idToken": "eyJhbGciOi..." }` — ID token do Google Sign-In cấp cho app (bắt buộc). Audience phải là một client ID trong cấu hình `app.google.client-ids` (Web client của dự án).
+* **Business Logic:**
+  1. Xác minh chữ ký, hạn, issuer, audience của ID token. Sai/hết hạn, hoặc server chưa cấu hình Google → `401 INVALID_GOOGLE_TOKEN`.
+  2. Email Google chưa được Google xác thực (`email_verified = false`) → `401 INVALID_GOOGLE_TOKEN`.
+  3. Tìm tài khoản theo mã người dùng Google (`sub` → `users.google_sub`). Không có thì tìm theo email (không phân biệt hoa thường) để **gắn** tài khoản một lần:
+     * Tài khoản mobile có email đó nhưng **chưa xác thực**, hoặc đã gắn với một `sub` khác (địa chỉ Gmail bị tái sử dụng) → `409 EMAIL_EXISTS` (không gộp tài khoản).
+     * Tài khoản Studio (`ROLE_ADMIN`/`ROLE_STAFF`) → `401 INVALID_CREDENTIALS`.
+  4. Không có tài khoản nào → tạo mới: `email` (chữ thường), `fullName` = tên Google (thiếu thì lấy phần trước `@`), mật khẩu ngẫu nhiên không dùng được để đăng nhập email, `role = null` (chọn ở FN-AUTH-03).
+  5. Lưu `google_sub`, `is_verified = true`; `avatar_url` lấy ảnh Google nếu đang trống.
+  6. `is_active = false` → `403 ACCOUNT_LOCKED`. Thành công cấp token như FN-AUTH-01 bước 4.
+* **Output (200):** như FN-AUTH-01 `{ accessToken, refreshToken, user }`.
+
+#### `FN-AUTH-06: Người dùng hiện tại` ✅ *(v1.1.4 — đặc tả hóa)*
+* **Endpoint:** `GET /api/v1/auth/me` — mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò).
+* **Output (200):** đối tượng `user` như FN-AUTH-01. App gọi khi khởi động để khôi phục phiên. Token sai/hết hạn, hoặc tài khoản đã bị khóa/xóa (người dùng được đọc lại từ DB mỗi request) → `401 UNAUTHORIZED`.
+
+#### `FN-AUTH-07: Làm mới phiên & Đăng xuất trên mobile` 🆕 *(v1.1.4)*
+* **Mục tiêu:** Người dùng app giữ phiên đăng nhập tới 30 ngày mà không phải đăng nhập lại mỗi 2 giờ; token bị lộ có thể bị thu hồi.
+* **Lưu trữ:** bảng `refresh_tokens` (migration mới): `id` (UUID = claim `jti` của refresh token), `user_id` (FK `users`, `ON DELETE CASCADE`), `expires_at`, `used_at` (nullable), `revoked_at` (nullable), `created_at`. Không lưu chuỗi token. Mỗi lần cấp token (FN-AUTH-01, FN-AUTH-05, làm mới) tạo một dòng; refresh token mang thêm claim `jti`.
+* **Làm mới:** `POST /api/v1/auth/refresh` — Public. Input: `{ "refreshToken": "..." }` (bắt buộc).
+  1. Kiểm tra chữ ký, hạn, issuer của dịch vụ mobile và `typ = refresh`; access token hoặc token của Web Admin bị từ chối.
+  2. Khóa dòng `refresh_tokens` theo `jti` (`SELECT … FOR UPDATE`). Không có dòng, đã thu hồi hoặc hết hạn → `401 INVALID_REFRESH_TOKEN`.
+  3. **Phát hiện dùng lại:** `used_at` đã có giá trị (token đã được đổi trước đó — dấu hiệu bị đánh cắp) → thu hồi **mọi** refresh token còn hiệu lực của user, trả `401 INVALID_REFRESH_TOKEN`.
+  4. User không còn hoạt động (`is_active = false`) → `403 ACCOUNT_LOCKED`; tài khoản Studio → `401 INVALID_REFRESH_TOKEN`.
+  5. Thành công (xoay vòng): đánh dấu `used_at = now()` cho dòng cũ, cấp **cặp token mới** (refresh token mới hạn 30 ngày tính từ lúc làm mới).
+* **Output (200):** `{ "accessToken": "...", "refreshToken": "...", "user": { … } }` như FN-AUTH-01.
+* **Đăng xuất:** `POST /api/v1/auth/logout` — Public. Input `{ "refreshToken": "..." }`. Thu hồi đúng token đó (`revoked_at`); token sai/đã thu hồi vẫn trả `200` (idempotent, không tiết lộ gì).
+* **Đăng xuất mọi thiết bị:** `POST /api/v1/auth/logout-all` — người dùng đã đăng nhập; thu hồi mọi refresh token của mình. Trả `200`.
+* **Quy tắc khác:**
+  * Khóa tài khoản có hiệu lực ngay với access token (vai trò và `is_active` được đọc từ DB mỗi request, §client backend) và với làm mới (bước 4).
+  * Xác nhận đổi email (FN-AUTH-04) **không** thu hồi phiên. Khi có chức năng đổi mật khẩu trên mobile, đổi mật khẩu thu hồi các refresh token khác.
+  * Dọn dẹp: job hằng ngày xóa các dòng `expires_at < now() - 7 ngày`.
+* **App mobile:**
+  * Lưu cặp token trong `flutter_secure_storage` (Keychain/Keystore); khởi động app → nếu có token thì gọi FN-AUTH-06 để khôi phục phiên.
+  * Gặp `401` từ API (trừ chính `/auth/refresh`) → làm mới **một lần** rồi gửi lại request. Chỉ một request làm mới tại một thời điểm (single-flight); các request khác chờ kết quả. Bắt buộc single-flight vì gửi cùng một refresh token hai lần sẽ bị coi là dùng lại (bước 3) và thu hồi mọi phiên.
+  * Làm mới thất bại → xóa token, đăng xuất Google (nếu có), về màn hình đăng nhập. Nút Đăng xuất gọi `/auth/logout` rồi xóa token.
 
 ---
 
@@ -285,6 +330,7 @@ stateDiagram-v2
   * `totalBudget`: Số nguyên dương, tối thiểu 10.000.000 VND.
   * `weddingDate`: Định dạng ngày chuẩn, phải sau ngày hiện tại ít nhất 7 ngày.
   * `categories`: Mảng có ít nhất 1 phần tử. Tổng `allocatedAmount` của các danh mục không được vượt quá `totalBudget` * 1.5 (cho phép dự trù phụ trội tối đa 50%).
+  * *(v1.1.4)* `categories` tối đa 30 phần tử; `name` bắt buộc, 1–100 ký tự; `allocatedAmount` bắt buộc, ≥ 0. `engagementDate` tùy chọn. Vượt tổng 150% → `400` trên trường `categories`.
 * **Business Logic:**
   1. Kiểm tra xem cặp đôi đã có kế hoạch nào đang hoạt động (`status = PLANNING`) chưa. Nếu có -> trả về `409 PLAN_ALREADY_EXISTS`.
   2. Tạo bản ghi `WeddingPlan`.
@@ -329,7 +375,7 @@ stateDiagram-v2
     }
   }
   ```
-  * Chưa có kế hoạch → `200` với `data: null` (app chuyển sang màn hình tạo kế hoạch).
+  * Chưa có kế hoạch → `200` **không có trường `data`** (*(v1.1.4)* xem §1.2 — tương đương `data: null`); app chuyển sang màn hình tạo kế hoạch.
   * `budgetItems`, `tasks` được app dùng trực tiếp cho tab *Ngân sách* và *Công việc* (không gọi API riêng).
 * **Công thức tính toán:**
   * `daysRemaining = max(0, weddingDate - CurrentDate)`.
@@ -407,6 +453,8 @@ stateDiagram-v2
   * Không truyền `status` hoặc `status=all`: Trả về toàn bộ.
   * Lọc theo trạng thái: `attending` (Xác nhận tham gia), `pending` (Chờ phản hồi), `declined` (Từ chối).
   * Tìm kiếm không phân biệt chữ hoa thường (Case-insensitive) theo tên khách mời: `LOWER(name) LIKE LOWER('%keyword%')` (escape ký tự `%`, `_` người dùng nhập).
+  * *(v1.1.4)* `status` không phân biệt hoa thường; giá trị khác `all|attending|pending|declined` → `400` trên trường `status`. `group` lọc theo **đúng tên nhóm**. Tham số rỗng = không lọc. `stats` luôn tính trên toàn bộ danh sách, bộ lọc chỉ áp dụng cho `guests`; mới thêm trước.
+  * *(v1.1.4)* Chưa có kế hoạch → `200` với `stats` bằng 0 và `guests` rỗng. Mỗi phần tử có thêm `notes` (null khi không có); `phone`, `group`, `tableNumber` có thể null.
 * **Output Schema (200 OK):**
   ```json
   {
@@ -445,6 +493,8 @@ stateDiagram-v2
   }
   ```
 * **Validation Rules:** `name` không được để trống (1-100 ký tự); `phone` nếu có phải đúng định dạng số điện thoại Việt Nam (§1.1).
+  * *(v1.1.4)* Input có thêm `tableNumber` (tùy chọn, số nguyên dương). `group` ≤ 100 ký tự, `notes` ≤ 500; `status` ∈ `attending|pending|declined` (không phân biệt hoa thường), mặc định `pending`. Chuỗi rỗng lưu là `null`.
+  * *(v1.1.4)* Chưa có kế hoạch → thêm khách trả `404 NOT_FOUND` ("Bạn chưa có kế hoạch cưới"); sửa khách không thuộc kế hoạch của người gọi → `404`. Thêm trả `201`, sửa trả `200`, đều với đối tượng khách như phần tử `guests[]` của FN-GUEST-01.
 
 ---
 
@@ -524,14 +574,15 @@ flowchart LR
 #### `FN-VND-03: Báo giá, Từ chối, Chấp nhận & Hủy yêu cầu` ✅
 * **Vendor báo giá:** `POST /api/v1/client/vendor/quote-requests/{id}/quote` — `{ "quotedPrice": 18000000, "vendorNote": "Đã gồm vận chuyển nội thành" }`. `quotedPrice > 0` (bắt buộc), `vendorNote` ≤ 1000. Cho phép khi `PENDING` hoặc `QUOTED` (báo lại giá mới). Ghi `responded_at`. Thông báo cho cặp đôi (`kind = message`, "Đã có báo giá").
 * **Vendor từ chối:** `POST /api/v1/client/vendor/quote-requests/{id}/decline` — `{ "vendorNote": "Ngày này bên mình đã kín lịch" }` (tùy chọn). Từ `PENDING`/`QUOTED` → `DECLINED`. Thông báo cho cặp đôi.
-* **Cặp đôi chấp nhận:** `POST /api/v1/client/quote-requests/{id}/accept` — chỉ khi `QUOTED` và yêu cầu có `eventDate` (nếu thiếu: body `{ "eventDate": "YYYY-MM-DD", "venue": "..." }` bắt buộc `eventDate`, không trước hôm nay). Chuyển `ACCEPTED` và tạo **một** Vendor Project `UPCOMING` với `agreed_price = quoted_price`, `couple_name`, `package_name`, `event_date`, `venue` lấy từ yêu cầu. Thông báo cho Vendor ("Báo giá đã được chấp nhận"). Trả `201` + `VendorProjectDto`.
+* **Cặp đôi chấp nhận:** `POST /api/v1/client/quote-requests/{id}/accept` — chỉ khi `QUOTED` và yêu cầu có `eventDate` (nếu thiếu: body `{ "eventDate": "YYYY-MM-DD", "venue": "..." }` bắt buộc `eventDate`, không trước hôm nay). Chuyển `ACCEPTED` và tạo **một** Vendor Project `UPCOMING` với `agreed_price = quoted_price`, `couple_name`, `package_name`, `event_date`, `venue` lấy từ yêu cầu. *(v1.1.4)* `venue` gửi kèm (không rỗng) **cập nhật** địa điểm của yêu cầu và dự án, kể cả khi yêu cầu đã có ngày (cặp đôi thường chốt địa điểm muộn); `eventDate` gửi kèm chỉ dùng khi yêu cầu **chưa có** ngày, ngược lại bị bỏ qua. Thông báo cho Vendor ("Báo giá đã được chấp nhận"). Trả `201` + `VendorProjectDto`.
 * **Cặp đôi hủy:** `POST /api/v1/client/quote-requests/{id}/cancel` — từ `PENDING`/`QUOTED` → `CANCELLED`.
 * Mọi chuyển trạng thái khác → `409 INVALID_STATUS_TRANSITION`. Yêu cầu không thuộc người gọi → `404 NOT_FOUND`. Hai thao tác đồng thời trên cùng yêu cầu: khóa dòng (`SELECT … FOR UPDATE`) hoặc `@Version` → `409 CONCURRENT_MODIFICATION`.
 
 #### `FN-VND-04: Quản lý Dự án của Vendor` ✅
 * **Danh sách:** `GET /api/v1/client/vendor/projects?status=UPCOMING|IN_PROGRESS|COMPLETED|CANCELLED&page=0&size=20` — `ROLE_VENDOR`, chỉ dự án của mình, sắp xếp `event_date` tăng dần (dự án `COMPLETED`/`CANCELLED` giảm dần). Màn hình "Dự án" có 3 tab *Sắp tới / Đang làm / Hoàn thành* tương ứng `UPCOMING / IN_PROGRESS / COMPLETED`.
-* **Cập nhật trạng thái:** `PATCH /api/v1/client/vendor/projects/{id}/status` — `{ "status": "IN_PROGRESS|COMPLETED|CANCELLED" }`, theo §1.6. Thông báo cho cặp đôi khi dự án chuyển `COMPLETED` hoặc `CANCELLED`. Chuyển `IN_PROGRESS`/`COMPLETED` khi đang có yêu cầu hủy → coi như từ chối yêu cầu đó.
-* **Cặp đôi xem:** `GET /api/v1/client/vendor-projects` — `ROLE_COUPLE`, các dự án của mình (để biết nhà cung cấp nào đã chốt).
+* **Cập nhật trạng thái:** `PATCH /api/v1/client/vendor/projects/{id}/status` — `{ "status": "IN_PROGRESS|COMPLETED|CANCELLED" }`, theo §1.6. Thông báo cho cặp đôi khi dự án chuyển `COMPLETED` hoặc `CANCELLED`. Chuyển `IN_PROGRESS`/`COMPLETED` khi đang có yêu cầu hủy → coi như từ chối yêu cầu đó *(v1.1.4)* và báo cho cặp đôi "Yêu cầu hủy dự án bị từ chối".
+  * *(v1.1.4)* Thiếu `status` → `400` trên trường `status`; `UPCOMING` là giá trị hợp lệ nhưng luôn bị từ chối (`409 INVALID_STATUS_TRANSITION`); giá trị không thuộc `VendorProjectStatus` → `400 BAD_REQUEST` (body không đọc được, không có `errors[]`).
+* **Cặp đôi xem:** `GET /api/v1/client/vendor-projects?page=0&size=20` — `ROLE_COUPLE`, các dự án của mình (để biết nhà cung cấp nào đã chốt), phân trang §1.2, theo `event_date` tăng dần.
 * **Cặp đôi xin hủy dự án** (Vendor phải duyệt):
   * `POST /api/v1/client/vendor-projects/{id}/cancel-request` — `ROLE_COUPLE`, `{ "reason": "Đổi địa điểm tổ chức" }` (bắt buộc, ≤ 500). Chỉ khi `UPCOMING`/`IN_PROGRESS` và chưa có yêu cầu hủy đang chờ, nếu không `409 INVALID_STATUS_TRANSITION`. Ghi `cancel_requested_at`, `cancel_reason`; trạng thái **giữ nguyên**. Thông báo cho Vendor ("Cặp đôi xin hủy dự án").
   * `POST /api/v1/client/vendor/projects/{id}/cancel-request/approve` — `ROLE_VENDOR`: dự án → `CANCELLED`. `.../cancel-request/reject` — xóa yêu cầu, dự án tiếp tục. Không có yêu cầu đang chờ → `409 INVALID_STATUS_TRANSITION`. Thông báo kết quả cho cặp đôi.

@@ -107,6 +107,20 @@ class QuoteFlowApiTest extends ClientIntegrationTest {
                 .andExpect(jsonPath("$.data.venue").value("White Palace"));
     }
 
+    /** FN-VND-03 (v1.1.4, option A of #17): the venue may be settled late; the request's own date wins */
+    @Test
+    void acceptingUpdatesTheVenueButKeepsTheRequestsDate() throws Exception {
+        String id = request(",'eventDate':'" + today().plusMonths(4) + "','venue':'Chưa chốt'");
+        quote(id, 9_000_000);
+        mvc.perform(authed(post("/api/v1/client/quote-requests/" + id + "/accept"), coupleToken)
+                        .content(json("{'eventDate':'" + today().plusMonths(5) + "','venue':'Gem Center'}")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.venue").value("Gem Center"))
+                .andExpect(jsonPath("$.data.eventDate").value(today().plusMonths(4).toString()));
+        mvc.perform(authed(get("/api/v1/client/quote-requests/" + id), coupleToken))
+                .andExpect(jsonPath("$.data.venue").value("Gem Center"));
+    }
+
     @Test
     void theVendorDeclinesAndTheRequestIsClosed() throws Exception {
         String id = request("");
