@@ -68,9 +68,12 @@ class FcmPushSenderTest extends ClientIntegrationTest {
             @SuppressWarnings("unchecked")
             String token = (String) ((Map<String, Object>) request.get("message")).get("token");
             boolean dead = token.startsWith("dead");
-            byte[] body = (dead ? "{\"error\":{\"status\":\"NOT_FOUND\",\"details\":[{\"errorCode\":\"UNREGISTERED\"}]}}" : "{\"name\":\"ok\"}")
-                    .getBytes(StandardCharsets.UTF_8);
-            ex.sendResponseHeaders(dead ? 404 : 200, body.length);
+            // A wrong project id: FCM says 404 without naming the token
+            boolean misconfigured = token.startsWith("misconfigured");
+            byte[] body = (dead ? "{\"error\":{\"status\":\"NOT_FOUND\",\"details\":[{\"errorCode\":\"UNREGISTERED\"}]}}"
+                    : misconfigured ? "{\"error\":{\"code\":404,\"message\":\"Requested entity was not found.\",\"status\":\"NOT_FOUND\"}}"
+                    : "{\"name\":\"ok\"}").getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(dead || misconfigured ? 404 : 200, body.length);
             ex.getResponseBody().write(body);
             ex.close();
         });
@@ -132,6 +135,17 @@ class FcmPushSenderTest extends ClientIntegrationTest {
         assertThat(silent).doesNotContainKey("notification").containsKey("apns").containsEntry("token", live);
         assertThat((Map<String, Object>) silent.get("data")).containsEntry("type", "plan_updated");
         assertThat(sent).hasSize(3);
+    }
+
+    /** Only a token FCM names as dead is dropped: a 404 for another reason (wrong project id) must not wipe devices */
+    @Test
+    void aFailureThatIsNotAboutTheTokenKeepsTheDevice() {
+        User user = createUser(Role.ROLE_COUPLE, true);
+        String token = "misconfigured-" + UUID.randomUUID();
+        device(user, token);
+        fcm.send(user.getId(), PushMessage.dataOnly(Map.of("type", "plan_updated")));
+        assertThat(sent).hasSize(1);
+        assertThat(devices.findByToken(token)).isPresent();
     }
 
     @Test

@@ -28,8 +28,8 @@ class AuthRepository {
       // An expired access token is refreshed by ApiClient on the way
       return await _api.get('/auth/me', parse: (d) => AppUser.fromJson(_map(d)));
     } on ApiException catch (e) {
-      // Offline: keep the tokens for the next start; refused: the session is gone
-      if (e.statusCode != null) await _api.clearTokens();
+      // Refused: the session is gone; offline or a server error: keep the tokens for the next start
+      if (e.statusCode == 401 || e.statusCode == 403) await _api.clearTokens();
       return null;
     }
   }

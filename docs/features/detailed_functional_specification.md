@@ -305,7 +305,7 @@ stateDiagram-v2
 * **App mobile:**
   * Lưu cặp token trong `flutter_secure_storage` (Keychain/Keystore); khởi động app → nếu có token thì gọi FN-AUTH-06 để khôi phục phiên.
   * Gặp `401` từ API (trừ chính `/auth/refresh`) → làm mới **một lần** rồi gửi lại request. Chỉ một request làm mới tại một thời điểm (single-flight); các request khác chờ kết quả. Bắt buộc single-flight vì gửi cùng một refresh token hai lần sẽ bị coi là dùng lại (bước 3) và thu hồi mọi phiên.
-  * Làm mới thất bại → xóa token, đăng xuất Google (nếu có), về màn hình đăng nhập. Nút Đăng xuất gọi `/auth/logout` rồi xóa token.
+  * Làm mới bị **từ chối** (`401`/`403`) → xóa token, đăng xuất Google (nếu có), về màn hình đăng nhập. Không có phản hồi (mất mạng) hoặc lỗi server (`5xx`, ví dụ `502` khi đang deploy) → **giữ** phiên, request ban đầu báo lỗi; lần sau thử lại. Khôi phục phiên lúc mở app theo cùng quy tắc. Nút Đăng xuất gọi `/auth/logout` rồi xóa token.
 
 ---
 
@@ -544,7 +544,7 @@ stateDiagram-v2
 * **Gửi (backend):** FCM HTTP v1 `POST https://fcm.googleapis.com/v1/projects/{projectId}/messages:send`, xác thực bằng service account (OAuth2, scope `https://www.googleapis.com/auth/firebase.messaging`).
   * Thông báo (FN-NOTI-01): `notification = { title, body }`, `data = { "type": "notification", "kind": "<kind>", "notificationId": "<uuid>" }`, Android `priority = HIGH`.
   * Sự kiện đồng bộ: chỉ `data` (FN-PLAN-05).
-  * Gửi **sau khi transaction commit**, bất đồng bộ; lỗi gửi chỉ ghi log, không làm hỏng request. FCM trả `UNREGISTERED` (404) hoặc `INVALID_ARGUMENT` cho một token → xóa token đó.
+  * Gửi **sau khi transaction commit**, bất đồng bộ; lỗi gửi chỉ ghi log, không làm hỏng request. Chỉ xóa token khi FCM chỉ rõ lỗi do token (`UNREGISTERED`, hoặc `400` báo registration token không hợp lệ); `404`/`400` vì lý do khác (sai `project-id`, nội dung tin sai) → giữ token, chỉ ghi log.
   * Cấu hình `app.fcm.project-id` + `app.fcm.credentials-file`; để trống → chỉ ghi log (môi trường dev/test).
 * **App:** chỉ bật khi build với `--dart-define=FCM_ENABLED=true` (cần `google-services.json` / `GoogleService-Info.plist`). Xin quyền thông báo (Android 13+, iOS) ngay sau khi đăng nhập lần đầu; từ chối → không đăng ký token, app vẫn chạy bình thường. App đang mở: thông báo hiển thị dạng snack/banner trong app và làm mới chuông thông báo; bấm thông báo khi app đóng → mở màn hình Thông báo.
 * *(v1.1.2)* `data` theo dạng phân trang §1.2 (`size` 1–100, mặc định 20). Mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò) đều có hộp thư; chỉ thấy thông báo của mình (`notifications.recipient_user_id`), thông báo của người khác → `404`. `PATCH .../read` trả về phần tử đã cập nhật. Thông báo không có `kind` hiển thị như `reminder`.

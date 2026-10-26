@@ -64,6 +64,13 @@ void main() {
     expect(expired, 1);
   });
 
+  test('a server error while refreshing (502 during a deploy) keeps the session', () async {
+    server.refreshStatus = 502;
+    await expectLater(me(), throwsA(isA<ApiException>()));
+    expect(api.refreshToken, 'r1');
+    expect(expired, 0);
+  });
+
   test('no answer while refreshing keeps the session for later', () async {
     server.offline = true;
     await expectLater(me(), throwsA(isA<ApiException>()));

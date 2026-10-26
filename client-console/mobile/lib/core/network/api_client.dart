@@ -91,8 +91,9 @@ class ApiClient {
       await setTokens(data['accessToken'] as String, data['refreshToken'] as String);
       return true;
     } on DioException catch (e) {
-      // No answer (offline, timeout): keep the session and let the original call fail
-      if (e.response == null) return false;
+      // Only a refusal ends the session; no answer (offline) or a server error (502 during a deploy) keeps it
+      final status = e.response?.statusCode;
+      if (status != 401 && status != 403) return false;
       await clearTokens();
       onSessionExpired?.call();
       return false;
