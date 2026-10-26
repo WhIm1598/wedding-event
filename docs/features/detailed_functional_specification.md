@@ -1,6 +1,6 @@
 # TÀI LIỆU ĐẶC TẢ CHI TIẾT CHỨC NĂNG (DETAILED FUNCTIONAL SPECIFICATION)
 **Dự án:** Wedding Event & Studio Management Monorepo Platform  
-**Phiên bản:** 1.1.4  
+**Phiên bản:** 1.1.5  
 **Mục tiêu:** Cung cấp thông số kỹ thuật, quy tắc nghiệp vụ (Business Rules), Schema Request/Response và quy trình xử lý chi tiết từng function cho AI Agent / Kỹ sư phần mềm triển khai mã nguồn chính xác 100%.
 
 **Ký hiệu trạng thái triển khai** (gắn ở đầu mỗi function phía Admin):
@@ -17,6 +17,7 @@
 | 1.1.2 | Triển khai `client-console/backend` (Phần A): bảng mã lỗi phía mobile (§1.3); `users.role` để trống tới khi chọn vai trò, vai trò chỉ chọn một lần (FN-AUTH-03); kế hoạch `DRAFT` không tính là có kế hoạch; quy tắc OTP/gửi lại mã (FN-AUTH-02); `providerId` trong FN-SVC-01; mặc định ngày cưới và lỗi dịch vụ AI (FN-PLAN-03); quy tắc mã kết nối (FN-PLAN-04); người nhận hợp lệ và thông báo khi offline (FN-MSG-01); làm tròn `progressPercentage`. |
 | 1.1.3 | Không gian Vendor (Module 4B): yêu cầu báo giá → dự án Vendor, dashboard và gói của Vendor (FN-VND-01..05), trạng thái `QuoteRequestStatus`/`VendorProjectStatus` (§1.6), mã lỗi `PACKAGE_NOT_QUOTABLE`, `QUOTE_ALREADY_OPEN` (§1.3). Bảo mật tài khoản mobile: email mới chờ xác nhận (`pendingEmail`, FN-AUTH-04), mã OTP gắn với địa chỉ nhận và tối đa 5 mã/giờ (FN-AUTH-02), Google chỉ nhận email đã xác thực và không gộp vào tài khoản chưa xác thực. FN-ADM-CRM-03: khách chuyển `IN_PROGRESS` khi hợp đồng nhận cọc, không phải khi tạo hợp đồng nháp (khớp sơ đồ). Hợp đồng `DEPOSITED` không có lịch hẹn (chỉ thuê váy) bàn giao được trực tiếp. Duyệt Module 4B: Vendor tạo/sửa gói và giảm giá (`discountPrice`), doanh thu Vendor chỉ tính dự án `COMPLETED`, Cặp đôi xin hủy dự án và Vendor duyệt, gói Studio và Vendor liên hệ qua Zalo (`zaloUrl`; số Studio `zaloPhone` FN-ADM-SET-01, số Vendor = SĐT tài khoản), chat Cặp đôi–Studio/Vendor (FN-MSG-01) tạm ẩn trên app, thanh toán Cặp đôi–Vendor ngoài app. Thuật ngữ thống nhất trong `GLOSSARY.md`. |
 | 1.1.4 | Đối chiếu Phần A với `docs/api/client-api.yml` (sinh từ code). Thêm FN-AUTH-05 (đăng nhập Google) và FN-AUTH-06 (`/auth/me`) đúng như đang chạy; đặc tả mới FN-AUTH-07 làm mới phiên và đăng xuất trên mobile (refresh token xoay vòng, bảng `refresh_tokens`). Đối tượng `user` có đủ `phone`, `avatarUrl`, `pendingEmail`. Envelope: `data` vắng mặt khi không có giá trị (FN-PLAN-02 chưa có kế hoạch). Ghi các quy tắc code đang áp dụng: FN-PLAN-01 (tối đa 30 danh mục), FN-GUEST-01/02 (`tableNumber`, `notes`, giới hạn độ dài, lọc), FN-VND-04 (phân trang phía Cặp đôi, giá trị trạng thái, thông báo khi từ chối yêu cầu hủy). FN-VND-03: khi chốt, địa điểm gửi kèm cập nhật địa điểm; ngày gửi kèm chỉ dùng khi yêu cầu chưa có ngày. `sort=` (§1.2) và `TOO_MANY_REQUESTS` (§1.3) ghi rõ là chưa làm. |
+| 1.1.5 | Thông báo đẩy qua Firebase Cloud Messaging: đăng ký thiết bị (FN-NOTI-02, bảng `device_tokens`), mọi thông báo FN-NOTI-01 đồng thời được push, FN-PLAN-05 gửi sự kiện `plan_updated` cho bạn đời. Hướng dẫn tạo project Google Cloud/Firebase: `docs/setup/google-cloud-firebase.md`. |
 
 ---
 
@@ -441,6 +442,7 @@ stateDiagram-v2
 * **Endpoint:** `PATCH /api/v1/client/plans/tasks/{taskId}` — `ROLE_COUPLE` (chủ kế hoạch hoặc bạn đời đã đồng bộ).
 * **Input:** `{ "isCompleted": true }`.
 * **Logic:** Task không thuộc kế hoạch của người gọi → `404 NOT_FOUND`. Cập nhật `plan_tasks.is_completed` và `wedding_plans.completed_percentage`; đẩy sự kiện đồng bộ tới thiết bị của bạn đời (FN-PLAN-04).
+* *(v1.1.5)* **Đồng bộ:** sau khi lưu (after commit), gửi **data message** FCM (FN-NOTI-02) tới mọi thiết bị của **người còn lại** trong cặp đôi (không gửi cho người vừa tick): `data = { "type": "plan_updated", "planId": "<uuid>" }`, không có tiêu đề/nội dung hiển thị và **không** lưu vào hộp thư. App đang mở màn hình kế hoạch → tải lại FN-PLAN-02. Ngoài ra app luôn tải lại kế hoạch khi quay lại foreground (phòng trường hợp lỡ tin: data message không đảm bảo tới khi app bị hệ điều hành dừng).
 * **Output (200):** task đã cập nhật (schema như phần tử `tasks[]` của FN-PLAN-02).
 
 ---
@@ -530,6 +532,21 @@ stateDiagram-v2
 * **Endpoint:** `GET /api/v1/client/notifications?page=0&size=20` — người dùng đã đăng nhập, mới nhất trước.
 * **Item:** `{ "id", "title", "body", "kind": "ai|message|sync|reminder", "isRead": false, "createdAt" }` — `kind` quyết định icon trên app (gợi ý AI, tin nhắn mới, đồng bộ bạn đời, nhắc việc/đến hạn).
 * Mọi thông báo gửi qua Push (FCM) đều được lưu tại đây để xem lại. Đánh dấu đã đọc: `PATCH /api/v1/client/notifications/{id}/read`.
+
+#### `FN-NOTI-02: Thiết bị nhận thông báo đẩy (FCM)` 🆕 *(v1.1.5)*
+* **Mục tiêu:** Thông báo trong hộp thư (FN-NOTI-01) đồng thời được đẩy tới điện thoại qua Firebase Cloud Messaging, kể cả khi app đang đóng; các sự kiện đồng bộ (FN-PLAN-05) tới máy bạn đời. Thiết lập project: `docs/setup/google-cloud-firebase.md`.
+* **Bảng `device_tokens`:** `id`, `user_id` (FK `users`, `ON DELETE CASCADE`), `token` (FCM registration token, ≤ 4096, **unique**), `platform` (`ANDROID|IOS`), `created_at`, `updated_at` (lần đăng ký gần nhất).
+* **Đăng ký:** `PUT /api/v1/users/me/devices` — người dùng đã đăng nhập (kể cả chưa chọn vai trò). Input `{ "token": "fcm-token…", "platform": "ANDROID" }`.
+  * `token` bắt buộc, ≤ 4096; `platform` ∈ `ANDROID|IOS` (sai → `400`).
+  * Upsert theo `token`: token đã thuộc người khác (máy đổi tài khoản) → chuyển sang người gọi. Mỗi người dùng tối đa 10 thiết bị; vượt thì xóa thiết bị có `updated_at` cũ nhất.
+  * Trả `200` (không có `data`). App gọi sau khi đăng nhập / khôi phục phiên và mỗi khi FCM cấp token mới (`onTokenRefresh`).
+* **Hủy đăng ký:** `DELETE /api/v1/users/me/devices?token=…` — xóa token **của chính mình** (token không có hoặc của người khác → vẫn `200`, không tiết lộ gì). App gọi khi đăng xuất, **trước** khi xóa access token.
+* **Gửi (backend):** FCM HTTP v1 `POST https://fcm.googleapis.com/v1/projects/{projectId}/messages:send`, xác thực bằng service account (OAuth2, scope `https://www.googleapis.com/auth/firebase.messaging`).
+  * Thông báo (FN-NOTI-01): `notification = { title, body }`, `data = { "type": "notification", "kind": "<kind>", "notificationId": "<uuid>" }`, Android `priority = HIGH`.
+  * Sự kiện đồng bộ: chỉ `data` (FN-PLAN-05).
+  * Gửi **sau khi transaction commit**, bất đồng bộ; lỗi gửi chỉ ghi log, không làm hỏng request. FCM trả `UNREGISTERED` (404) hoặc `INVALID_ARGUMENT` cho một token → xóa token đó.
+  * Cấu hình `app.fcm.project-id` + `app.fcm.credentials-file`; để trống → chỉ ghi log (môi trường dev/test).
+* **App:** chỉ bật khi build với `--dart-define=FCM_ENABLED=true` (cần `google-services.json` / `GoogleService-Info.plist`). Xin quyền thông báo (Android 13+, iOS) ngay sau khi đăng nhập lần đầu; từ chối → không đăng ký token, app vẫn chạy bình thường. App đang mở: thông báo hiển thị dạng snack/banner trong app và làm mới chuông thông báo; bấm thông báo khi app đóng → mở màn hình Thông báo.
 * *(v1.1.2)* `data` theo dạng phân trang §1.2 (`size` 1–100, mặc định 20). Mọi người dùng đã đăng nhập (kể cả chưa chọn vai trò) đều có hộp thư; chỉ thấy thông báo của mình (`notifications.recipient_user_id`), thông báo của người khác → `404`. `PATCH .../read` trả về phần tử đã cập nhật. Thông báo không có `kind` hiển thị như `reminder`.
 
 ### MODULE 4B: KHÔNG GIAN VENDOR — BÁO GIÁ & DỰ ÁN (VENDOR WORKSPACE) *(v1.1.3)*
