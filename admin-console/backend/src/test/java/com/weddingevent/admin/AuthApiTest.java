@@ -25,6 +25,17 @@ class AuthApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.data.user.email").value(ADMIN_EMAIL));
     }
 
+    /** Behind the HTTPS gateway the browser's Origin is https://domain while the backend is reached over http (#37) */
+    @Test
+    void sameOriginLoginThroughTheGatewayIsNotTreatedAsCors() throws Exception {
+        mvc.perform(post("/api/v1/admin/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.HOST, "admin.example.vn")
+                        .header("X-Forwarded-Proto", "https")
+                        .header(HttpHeaders.ORIGIN, "https://admin.example.vn")
+                        .content(json("{'email':'" + ADMIN_EMAIL + "','password':'" + ADMIN_PASSWORD + "'}")))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void wrongPasswordAndUnknownEmailLookIdentical() throws Exception {
         for (String email : new String[] {ADMIN_EMAIL, "nobody@lumiere.vn"}) {

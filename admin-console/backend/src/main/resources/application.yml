@@ -1,6 +1,8 @@
 server:
   port: ${SERVER_PORT:8082}
   shutdown: graceful
+  # Trust X-Forwarded-Proto/Host from the nginx gateway: without it the browser's https Origin looks cross-origin → 403 (#37)
+  forward-headers-strategy: framework
 
 spring:
   application:
