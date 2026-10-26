@@ -49,6 +49,7 @@ class MockData {
   static const List<ServiceItem> services = [
     ServiceItem(
       id: 'svc-1',
+      zaloUrl: 'https://zalo.me/0901234567',
       name: 'Chụp ảnh Pre-Wedding',
       provider: 'Lumiere Studio',
       price: 15000000,
@@ -62,6 +63,7 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-2',
+      zaloUrl: 'https://zalo.me/0912345678',
       name: 'Trang trí tiệc cưới',
       provider: 'Dreamy Decor',
       providerId: 'u-dreamy',
@@ -76,6 +78,7 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-3',
+      zaloUrl: 'https://zalo.me/0987654321',
       name: 'Tiệc cưới sảnh Diamond',
       provider: 'Gem Center',
       providerId: 'u-gem',
@@ -89,6 +92,7 @@ class MockData {
     ),
     ServiceItem(
       id: 'svc-4',
+      zaloUrl: 'https://zalo.me/0934567890',
       name: 'Thuê váy cưới thiết kế',
       provider: 'Bella Bridal',
       providerId: 'u-bella',
@@ -140,10 +144,6 @@ class MockData {
     VendorProject(id: 'p-3', coupleName: 'Minh & Vy', vendorName: 'Lumiere Studio', packageName: 'Chụp Phóng sự', eventDate: DateTime(2026, 8, 1), agreedPrice: 12000000, status: ProjectStatus.completed),
   ];
 
-  static const List<ChatThread> chatThreads = [
-    ChatThread(id: 'c-1', name: 'Trần Vy', lastMessage: 'Anh ơi, em muốn đổi concept chụp sang phong cách Vintage được không ạ?', timeLabel: '10:30', unread: 2),
-    ChatThread(id: 'c-2', name: 'Lan & Tuấn', lastMessage: 'Cảm ơn anh vì bộ ảnh cưới quá đẹp!', timeLabel: 'Hôm qua'),
-  ];
 
   static final List<VendorService> vendorServices = [
     const VendorService(id: 'vs-1', name: 'Gói Chụp Pre-Wedding Ngoại Cảnh', category: ServiceCategory.photo, price: 15000000, discountPrice: 13500000, isActive: true, projectCount: 24, thumbnailUrl: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=200'),

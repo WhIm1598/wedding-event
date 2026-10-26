@@ -24,7 +24,6 @@ const _coupleNav = [
 const _vendorNav = [
   _NavItem(Routes.home, Icons.home_outlined, 'Tổng quan'),
   _NavItem(Routes.vendorProjects, Icons.work_outline, 'Dự án'),
-  _NavItem(Routes.vendorMessages, Icons.chat_bubble_outline, 'Tin nhắn'),
   _NavItem(Routes.profile, Icons.person_outline, 'Cá nhân'),
 ];
 

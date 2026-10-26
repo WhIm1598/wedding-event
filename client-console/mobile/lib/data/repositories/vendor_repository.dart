@@ -192,12 +192,6 @@ class VendorRepository {
     return mockDelay(MockData.vendorProjects[i], 300);
   }
 
-  /// GET /client/vendor/conversations
-  Future<List<ChatThread>> getThreads() {
-    if (Env.useMock) return mockDelay(MockData.chatThreads, 250);
-    throw UnimplementedError('GET /client/vendor/conversations');
-  }
-
   /// GET /client/vendor/services (FN-VND-05) — hidden packages included
   Future<List<VendorService>> getServices() {
     if (Env.useMock) return mockDelay(List.of(MockData.vendorServices), 250);

@@ -72,6 +72,7 @@ function StudioForm() {
         taxCode: String(fd.get('taxCode')),
         legalRepresentative: String(fd.get('legalRepresentative')),
         bankInfo: String(fd.get('bankInfo')),
+        zaloPhone: String(fd.get('zaloPhone') || '').trim() || null,
       });
       showToast('Đã lưu cấu hình');
     } catch (err) {
@@ -100,6 +101,9 @@ function StudioForm() {
       </div>
       <Field label="Thông tin Ngân Hàng (Nhận cọc)">
         <Textarea name="bankInfo" rows={3} defaultValue={data.bankInfo} />
+      </Field>
+      <Field label="Số Zalo (cặp đôi liên hệ từ app WedPlanner)">
+        <Input name="zaloPhone" type="tel" placeholder="09xxxxxxxx" defaultValue={data.zaloPhone ?? ''} />
       </Field>
       <div className="pt-4 flex justify-end">
         <Button type="submit" variant="dark" className="px-6" loading={saving}>

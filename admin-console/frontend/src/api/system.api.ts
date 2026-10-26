@@ -1,5 +1,5 @@
 import { env } from '@/config/env';
-import { http } from './http';
+import { ApiError, http } from './http';
 import { db, delay } from './mock/db';
 import type { AppNotification, SearchResult, StudioSettings } from '@/types';
 
@@ -47,7 +47,10 @@ export const settingsApi = {
   /** PUT /admin/settings/studio */
   update(settings: StudioSettings): Promise<StudioSettings> {
     if (!env.useMock) return http.put('/admin/settings/studio', settings);
-    db.settings = settings;
+    if (settings.zaloPhone && !/^0(3|5|7|8|9)[0-9]{8}$/.test(settings.zaloPhone)) {
+      throw new ApiError(400, 'BAD_REQUEST', 'Số Zalo không hợp lệ');
+    }
+    db.settings = { ...settings, zaloPhone: settings.zaloPhone || null };
     return delay(settings);
   },
 };

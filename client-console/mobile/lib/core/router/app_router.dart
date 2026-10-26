@@ -18,7 +18,6 @@ import '../../features/services/service_detail_screen.dart';
 import '../../features/shell/main_shell.dart';
 import '../../features/sync/share_plan_screen.dart';
 import '../../features/vendor/service_management_screen.dart';
-import '../../features/vendor/vendor_messages_screen.dart';
 import '../../features/vendor/vendor_projects_screen.dart';
 import '../../state/session_controller.dart';
 
@@ -37,7 +36,6 @@ class Routes {
   static const plan = '/plan';
   static const profile = '/profile';
   static const vendorProjects = '/vendor/projects';
-  static const vendorMessages = '/vendor/messages';
 
   // Full-screen pages
   static const createPlan = '/plan/create';
@@ -80,7 +78,6 @@ GoRouter createRouter(SessionController session) {
           GoRoute(path: Routes.plan, builder: (_, __) => const PlanManagementScreen()),
           GoRoute(path: Routes.profile, builder: (_, __) => const ProfileScreen()),
           GoRoute(path: Routes.vendorProjects, builder: (_, __) => const VendorProjectsScreen()),
-          GoRoute(path: Routes.vendorMessages, builder: (_, __) => const VendorMessagesScreen()),
         ],
       ),
       GoRoute(path: Routes.createPlan, builder: (_, __) => const CreatePlanScreen()),

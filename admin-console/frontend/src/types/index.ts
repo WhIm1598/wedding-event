@@ -220,6 +220,8 @@ export interface StudioSettings {
   taxCode: string;
   legalRepresentative: string;
   bankInfo: string;
+  /** v1.1.3: Zalo number couples open from the WedPlanner app (FN-SVC-02); empty = no Zalo link */
+  zaloPhone?: string | null;
 }
 
 export interface SearchResult {

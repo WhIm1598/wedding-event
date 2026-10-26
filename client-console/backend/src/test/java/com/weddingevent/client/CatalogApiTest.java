@@ -5,11 +5,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.weddingevent.common.domain.ServicePackage;
+import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.domain.VendorProfile;
 import com.weddingevent.common.domain.enums.Role;
 import com.weddingevent.common.domain.enums.ServiceCategory;
 import com.weddingevent.common.repository.ServicePackageRepository;
+import com.weddingevent.common.repository.StudioSettingsRepository;
 import com.weddingevent.common.repository.VendorProfileRepository;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -24,6 +26,9 @@ class CatalogApiTest extends ClientIntegrationTest {
 
     @Autowired
     VendorProfileRepository vendors;
+
+    @Autowired
+    StudioSettingsRepository studioSettings;
 
     private VendorProfile vendor(String businessName) {
         User u = createUser(Role.ROLE_VENDOR, true);
@@ -92,6 +97,37 @@ class CatalogApiTest extends ClientIntegrationTest {
                 .andExpect(jsonPath("$.data.category").value("photo"))
                 .andExpect(jsonPath("$.data.rating").value(0.0))
                 .andExpect(jsonPath("$.data.reviewCount").value(0));
+    }
+
+    /** FN-SVC-01/02 (v1.1.3): "Liên hệ đặt lịch" opens the provider's Zalo; no number → no link */
+    @Test
+    void contactLinksOpenTheProvidersZalo() throws Exception {
+        String couple = coupleToken();
+        VendorProfile withPhone = vendor("Zalo " + UUID.randomUUID().toString().substring(0, 6));
+        User vendorUser = users.findById(withPhone.getUser().getId()).orElseThrow();
+        vendorUser.setPhone("0912345678");
+        users.save(vendorUser);
+        ServicePackage vendorPkg = pkg(withPhone, "Có Zalo", ServiceCategory.DECOR, 1_000_000, true);
+        ServicePackage noPhonePkg = pkg(vendor("Không SĐT"), "Không Zalo", ServiceCategory.DECOR, 1_000_000, true);
+        ServicePackage studioPkg = pkg(null, "Studio Zalo", ServiceCategory.PHOTO, 1_000_000, true);
+
+        mvc.perform(authed(get("/api/v1/client/services/" + vendorPkg.getId()), couple))
+                .andExpect(jsonPath("$.data.zaloUrl").value("https://zalo.me/0912345678"));
+        mvc.perform(authed(get("/api/v1/client/services/" + noPhonePkg.getId()), couple))
+                .andExpect(jsonPath("$.data.zaloUrl").doesNotExist());
+
+        StudioSettings studio = studioSettings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        studio.setZaloPhone("0987654321");
+        studioSettings.save(studio);
+        try {
+            mvc.perform(authed(get("/api/v1/client/services/" + studioPkg.getId()), couple))
+                    .andExpect(jsonPath("$.data.zaloUrl").value("https://zalo.me/0987654321"));
+        } finally {
+            studio.setZaloPhone(null);
+            studioSettings.save(studio);
+        }
+        mvc.perform(authed(get("/api/v1/client/services/" + studioPkg.getId()), couple))
+                .andExpect(jsonPath("$.data.zaloUrl").doesNotExist());
     }
 
     @Test

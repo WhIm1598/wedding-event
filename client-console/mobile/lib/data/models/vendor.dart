@@ -195,16 +195,6 @@ class VendorDashboard {
       );
 }
 
-class ChatThread {
-  const ChatThread({required this.id, required this.name, required this.lastMessage, required this.timeLabel, this.unread = 0});
-
-  final String id;
-  final String name;
-  final String lastMessage;
-  final String timeLabel;
-  final int unread;
-}
-
 /// `VendorServiceDto` (FN-VND-05): one of the vendor's own packages
 class VendorService {
   const VendorService({

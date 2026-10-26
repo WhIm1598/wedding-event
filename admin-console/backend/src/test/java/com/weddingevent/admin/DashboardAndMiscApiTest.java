@@ -91,6 +91,24 @@ class DashboardAndMiscApiTest extends IntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    /** FN-ADM-SET-01 (v1.1.3): the studio's Zalo number, opened by couples from the app (FN-SVC-02) */
+    @Test
+    void theStudioZaloNumberIsOptionalAndMustBeAVietnamesePhone() throws Exception {
+        String admin = adminToken();
+        String current = "'name':'LUMIÈRE STUDIOS','address':'Q1','taxCode':'0312345678','legalRepresentative':'Nguyễn A','bankInfo':'VCB'";
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), admin).content(json("{" + current + ",'zaloPhone':'12345'}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("zaloPhone"));
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), admin).content(json("{" + current + ",'zaloPhone':'0901234567'}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.zaloPhone").value("0901234567"));
+        mvc.perform(authed(get("/api/v1/admin/settings/studio"), staffToken()))
+                .andExpect(jsonPath("$.data.zaloPhone").value("0901234567"));
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), admin).content(json("{" + current + ",'zaloPhone':''}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.zaloPhone").doesNotExist());
+    }
+
     @Test
     void notificationsCanBeMarkedRead() throws Exception {
         String admin = adminToken();

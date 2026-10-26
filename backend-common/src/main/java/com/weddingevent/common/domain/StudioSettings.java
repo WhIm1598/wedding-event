@@ -33,4 +33,8 @@ public class StudioSettings {
 
     @Column(name = "bank_info", nullable = false)
     private String bankInfo;
+
+    /** Zalo number couples open from the app's catalog (FN-SVC-02); null = no Zalo link */
+    @Column(name = "zalo_phone")
+    private String zaloPhone;
 }

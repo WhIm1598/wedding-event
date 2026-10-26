@@ -1,6 +1,5 @@
 import '../../core/config/env.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
 import '../mock/mock_data.dart';
 import '../models/service_item.dart';
 
@@ -40,16 +39,5 @@ class ServiceRepository {
   Future<ServiceItem> getById(String id) {
     if (Env.useMock) return mockDelay(MockData.services.firstWhere((s) => s.id == id), 150);
     return _api.get('/client/services/$id', parse: (d) => ServiceItem.fromJson(d! as Map<String, dynamic>));
-  }
-
-  /// POST /messages/send (FN-MSG-01) — "Liên hệ đặt lịch" messages the package's vendor (`providerId`).
-  /// The studio's own packages have no chat account yet.
-  Future<void> contactVendor(ServiceItem service, String message) async {
-    if (Env.useMock) return mockDelay(null, 600);
-    final recipientId = service.providerId;
-    if (recipientId == null) {
-      throw const ApiException(code: 'INVALID_RECIPIENT', message: 'Studio chưa hỗ trợ nhắn tin trong ứng dụng, vui lòng liên hệ hotline');
-    }
-    await _api.post('/messages/send', body: {'recipientId': recipientId, 'content': message}, parse: (_) {});
   }
 }

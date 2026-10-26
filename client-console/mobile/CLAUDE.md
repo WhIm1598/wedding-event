@@ -1,14 +1,15 @@
 # client-console/mobile — WedPlanner app
 
-Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
+Flutter (Dart 3.5+) · go_router · provider · dio · google_sign_in · url_launcher · flutter_lints. Package name `wedplanner`. UI text is Vietnamese.
 Platform folders (`android/`, `ios/`) are generated locally with `flutter create . --platforms=android,ios --org vn.wedplanner` and not committed.
 After generating: revert `analysis_options.yaml`, delete the sample `test/widget_test.dart`, add
 `<application android:usesCleartextTraffic="true"/>` to `android/app/src/debug/AndroidManifest.xml` (local backend is plain http)
 Keep `PUB_CACHE` on the project's drive: Kotlin incremental compile fails on plugin sources from another drive
 (`this and base files have different roots`); otherwise add `kotlin.incremental=false` to `android/gradle.properties`.
 The app runs on mock data by default; `--dart-define=USE_MOCK=false` calls `client-console/backend` (port 8081, see its
-CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and sending messages; the vendor workspace
-(`VendorRepository`, spec FN-VND-01..05) runs on the real API (FN-VND-01..05); only the vendor chat threads (no spec) are mock-only. List endpoints return the spec's page shape
+CLAUDE.md). Real mode covers auth, plans, guests, catalog, notifications and the vendor workspace (`VendorRepository`, spec
+FN-VND-01..05). In-app chat is the AI assistant only: couples reach the studio or a vendor on Zalo (`ServiceItem.zaloUrl`,
+FN-SVC-02, opened with `launchUrl`); FN-MSG-01 stays in the backend but the app doesn't use it. List endpoints return the spec's page shape
 `{items, page, size, totalElements, totalPages}`.
 
 ## Where things go (`lib/`)

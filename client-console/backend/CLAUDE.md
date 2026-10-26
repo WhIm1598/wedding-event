@@ -17,9 +17,9 @@ call them, so paths and JSON names must stay identical. Entities, repositories a
 | `quote/` | `QuoteRequestService` (FN-VND-01..03), `QuoteRequestController` (couple, `/client/quote-requests`), `VendorQuoteRequestController` (vendor, `/client/vendor/quote-requests`) |
 | `project/` | `VendorProjectService` (FN-VND-04: status, couple's cancellation request), `VendorProjectController` (vendor, `/client/vendor/projects`), `CoupleProjectController` (couple, `/client/vendor-projects`) — a project is created by `QuoteRequestService.accept` |
 | `vendor/` | `VendorWorkspaceService` + `VendorWorkspaceController` (`/client/vendor/dashboard`, `/client/vendor/services`: FN-VND-05 dashboard, create/edit packages with `discountPrice`, show/hide) |
-| `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio) |
+| `catalog/` | `CatalogController`/`CatalogService` (FN-SVC-01/02: active packages of vendors and of the studio; `zaloUrl` from `studio_settings.zalo_phone` or the vendor account's phone) |
 | `notification/` | `ClientNotificationController`/`ClientNotificationService` (FN-NOTI-01 inbox; `notify(userId, kind, title, body)` stores + pushes after commit), `PushSender`/`LoggingPushSender` |
-| `message/` | `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
+| `message/` | FN-MSG-01, not used by the app for now (v1.1.3: couples contact providers on Zalo). `MessageController` (REST), `ChatStompController` (`SEND /app/chat`), `MessageService` (FN-MSG-01), `WebSocketConfig`, `StompAuthInterceptor` (CONNECT/SUBSCRIBE/SEND rules), `PresenceTracker` |
 | `security/` | `SecurityConfig` (URL rules, JWT encoder/decoder), `TokenService`, `UserAuthenticationConverter` (role **from the DB** per request), `CurrentUser.id(jwt)`, `SecurityErrorHandler` |
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, otp, google, ai-planner, demo-data), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `demo/` | `ClientDemoDataSeeder` — demo couple/vendors/catalog when `app.demo-data.enabled` (dev, test) |
