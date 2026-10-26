@@ -1,6 +1,7 @@
 package com.weddingevent.admin.auth;
 
 import com.weddingevent.admin.auth.AuthDtos.AuthUserDto;
+import com.weddingevent.admin.auth.AuthDtos.ChangePasswordRequest;
 import com.weddingevent.admin.auth.AuthDtos.LoginRequest;
 import com.weddingevent.admin.auth.AuthDtos.LoginResponse;
 import com.weddingevent.admin.auth.AuthDtos.RefreshRequest;
@@ -34,6 +35,26 @@ public class AuthController {
     @PostMapping("/refresh")
     public ApiResponse<LoginResponse> refresh(@Valid @RequestBody RefreshRequest req) {
         return ApiResponse.ok(auth.refresh(req.refreshToken()));
+    }
+
+    /** FN-ADM-AUTH-04: always 200, also for an unknown or expired token */
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@Valid @RequestBody RefreshRequest req) {
+        auth.logout(req.refreshToken());
+        return ApiResponse.ok(null, "Đã đăng xuất");
+    }
+
+    @PostMapping("/logout-all")
+    public ApiResponse<Void> logoutAll(@AuthenticationPrincipal Jwt jwt) {
+        auth.logoutAll(CurrentUser.from(jwt).id());
+        return ApiResponse.ok(null, "Đã đăng xuất khỏi mọi thiết bị");
+    }
+
+    /** FN-ADM-AUTH-04: returns a new token pair, since every other session ends */
+    @PostMapping("/change-password")
+    public ApiResponse<LoginResponse> changePassword(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePasswordRequest req) {
+        return ApiResponse.ok(auth.changePassword(CurrentUser.from(jwt).id(), req.currentPassword(), req.newPassword()),
+                "Đã đổi mật khẩu");
     }
 
     @GetMapping("/me")

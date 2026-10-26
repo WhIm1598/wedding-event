@@ -9,6 +9,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -49,6 +50,14 @@ public class User extends BaseEntity {
     /** Google's user id ({@code sub}) once the account has signed in with Google; null otherwise */
     @Column(name = "google_sub", unique = true)
     private String googleSub;
+
+    /** Wrong admin-console passwords in a row (FN-ADM-AUTH-01 step 3) */
+    @Column(name = "failed_login_count", nullable = false)
+    private int failedLoginCount;
+
+    /** Admin-console login refused until then */
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
 
     /** Links a ROLE_STAFF account to its staff profile so they only see their own schedule. */
     @ManyToOne(fetch = FetchType.LAZY)

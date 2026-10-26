@@ -53,3 +53,7 @@ app:
   public-base-url: ${PUBLIC_BASE_URL:http://localhost}
   demo-data:
     enabled: false
+  # First admin of an empty production database (#36); ignored once any ROLE_ADMIN exists
+  bootstrap-admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}

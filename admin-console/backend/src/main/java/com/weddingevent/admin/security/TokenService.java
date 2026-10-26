@@ -1,8 +1,10 @@
 package com.weddingevent.admin.security;
 
 import com.weddingevent.admin.config.AppProperties;
+import com.weddingevent.common.domain.RefreshToken;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.exception.AppException;
+import com.weddingevent.common.repository.RefreshTokenRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -11,7 +13,6 @@ import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -19,7 +20,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Service;
 
-/** Issues access (2h) and refresh (30d) tokens — spec FN-AUTH-01 step 5. */
+/**
+ * Issues access (2h) and refresh (30d) tokens — spec FN-ADM-AUTH-01 step 4. Every refresh token has a
+ * {@code refresh_tokens} row whose id is its {@code jti} (FN-ADM-AUTH-02; same table as the mobile FN-AUTH-07).
+ */
 @Service
 public class TokenService {
 
@@ -35,33 +39,48 @@ public class TokenService {
 
     private final JwtEncoder encoder;
     private final JwtDecoder refreshDecoder;
+    private final RefreshTokenRepository refreshTokens;
     private final AppProperties props;
     private final Clock clock;
 
-    public TokenService(JwtEncoder encoder, SecretKey jwtSigningKey, AppProperties props, Clock clock) {
+    public TokenService(JwtEncoder encoder, SecretKey jwtSigningKey, RefreshTokenRepository refreshTokens, AppProperties props,
+            Clock clock) {
         this.encoder = encoder;
+        this.refreshTokens = refreshTokens;
         this.refreshDecoder = SecurityConfig.decoder(jwtSigningKey, props, TYPE_REFRESH);
         this.props = props;
         this.clock = clock;
     }
 
+    /** Call inside a transaction: the refresh token's row is saved with the pair */
     public TokenPair issue(User user) {
+        RefreshToken row = new RefreshToken();
+        row.setUser(user);
+        row.setExpiresAt(clock.instant().plus(props.jwt().refreshTokenTtl()));
+        refreshTokens.save(row);
         return new TokenPair(
-                encode(user, TYPE_ACCESS, props.jwt().accessTokenTtl()),
-                encode(user, TYPE_REFRESH, props.jwt().refreshTokenTtl()));
+                encode(user, TYPE_ACCESS, props.jwt().accessTokenTtl(), null),
+                encode(user, TYPE_REFRESH, props.jwt().refreshTokenTtl(), row.getId().toString()));
     }
 
-    /** Validates a refresh token and returns the user id it was issued for. */
-    public UUID verifyRefreshToken(String token) {
+    /** The {@code jti} of a valid admin refresh token; anything else (tokens from before rotation have none) → 401 */
+    public UUID refreshTokenId(String token) {
         try {
-            Jwt jwt = refreshDecoder.decode(token);
-            return UUID.fromString(jwt.getSubject());
+            String jti = refreshDecoder.decode(token).getId();
+            if (jti == null) {
+                throw invalidRefreshToken();
+            }
+            return UUID.fromString(jti);
         } catch (JwtException | IllegalArgumentException e) {
-            throw AppException.unauthorized("INVALID_REFRESH_TOKEN", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại");
+            throw invalidRefreshToken();
         }
     }
 
-    private String encode(User user, String type, Duration ttl) {
+    public static AppException invalidRefreshToken() {
+        return AppException.unauthorized("INVALID_REFRESH_TOKEN", "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại");
+    }
+
+    private String encode(User user, String type, Duration ttl, String jti) {
         Instant now = clock.instant();
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(props.jwt().issuer())
@@ -72,6 +91,9 @@ public class TokenService {
                 .claim(CLAIM_EMAIL, user.getEmail())
                 .claim(CLAIM_NAME, user.getFullName())
                 .claim(CLAIM_ROLES, List.of(user.getRole().name()));
+        if (jti != null) {
+            claims.id(jti);
+        }
         if (user.getStaffMember() != null) {
             claims.claim(CLAIM_STAFF_ID, user.getStaffMember().getId().toString());
         }

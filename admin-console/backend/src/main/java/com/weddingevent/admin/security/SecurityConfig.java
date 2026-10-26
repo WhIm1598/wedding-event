@@ -26,8 +26,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -44,12 +42,13 @@ public class SecurityConfig {
     public static final String ADMIN = "hasRole('ADMIN')";
 
     @Bean
-    SecurityFilterChain apiSecurity(HttpSecurity http, JwtDecoder accessTokenDecoder, SecurityErrorHandler errors) throws Exception {
+    SecurityFilterChain apiSecurity(HttpSecurity http, JwtDecoder accessTokenDecoder, ConsoleAuthenticationConverter accounts,
+            SecurityErrorHandler errors) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/admin/auth/login", "/api/v1/admin/auth/refresh").permitAll()
+                        .requestMatchers("/api/v1/admin/auth/login", "/api/v1/admin/auth/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
                         // Admin-only operations are enforced here, before request parsing/validation, so
                         // staff get 403 rather than validation details. @PreAuthorize repeats them as defense in depth.
@@ -62,21 +61,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "STAFF")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(oauth -> oauth
-                        .jwt(jwt -> jwt.decoder(accessTokenDecoder).jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .jwt(jwt -> jwt.decoder(accessTokenDecoder).jwtAuthenticationConverter(accounts))
                         .authenticationEntryPoint(errors)
                         .accessDeniedHandler(errors))
                 .exceptionHandling(e -> e.authenticationEntryPoint(errors).accessDeniedHandler(errors));
         return http.build();
-    }
-
-    /** The "roles" claim already holds ROLE_* authorities */
-    private static JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
-        authorities.setAuthoritiesClaimName(TokenService.CLAIM_ROLES);
-        authorities.setAuthorityPrefix("");
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authorities);
-        return converter;
     }
 
     @Bean

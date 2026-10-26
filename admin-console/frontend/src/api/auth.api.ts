@@ -1,5 +1,5 @@
 import { env } from '@/config/env';
-import { http, tokenStorage } from './http';
+import { ApiError, http, tokenStorage } from './http';
 import { delay } from './mock/db';
 import type { AuthUser, LoginResponse, Role } from '@/types';
 
@@ -38,7 +38,23 @@ export const authApi = {
     }
   },
 
+  /** POST /admin/auth/logout (FN-ADM-AUTH-04) — revokes the refresh token; the local session ends either way */
   logout() {
+    const refreshToken = tokenStorage.getRefresh();
     tokenStorage.clear();
+    if (!env.useMock && refreshToken) http.post('/admin/auth/logout', { refreshToken }).catch(() => {});
+  },
+
+  /** POST /admin/auth/change-password (FN-ADM-AUTH-04) — other sessions end, this one gets a new token pair */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    if (!env.useMock) {
+      const res = await http.post<LoginResponse>('/admin/auth/change-password', { currentPassword, newPassword });
+      tokenStorage.set(res.accessToken, res.refreshToken);
+      return;
+    }
+    if (newPassword.length < 8 || newPassword.length > 100) throw new ApiError(400, 'BAD_REQUEST', 'Mật khẩu mới phải từ 8 đến 100 ký tự');
+    if (!/\p{L}/u.test(newPassword) || !/\d/.test(newPassword)) throw new ApiError(400, 'BAD_REQUEST', 'Mật khẩu mới phải có cả chữ và số');
+    if (newPassword === currentPassword) throw new ApiError(400, 'BAD_REQUEST', 'Mật khẩu mới phải khác mật khẩu hiện tại');
+    return delay(undefined, 300);
   },
 };
