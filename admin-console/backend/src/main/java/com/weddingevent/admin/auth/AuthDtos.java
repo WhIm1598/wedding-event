@@ -3,6 +3,7 @@ package com.weddingevent.admin.auth;
 import com.weddingevent.common.domain.User;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public final class AuthDtos {
@@ -15,6 +16,14 @@ public final class AuthDtos {
             @NotBlank @Size(min = 6, max = 100) String password) {}
 
     public record RefreshRequest(@NotBlank String refreshToken) {}
+
+    /** FN-ADM-AUTH-04 password policy: 8–100 characters with letters and digits */
+    public record ChangePasswordRequest(
+            @NotBlank String currentPassword,
+            @NotBlank @Size(min = 8, max = 100, message = "Mật khẩu mới phải từ 8 đến 100 ký tự")
+            @Pattern(regexp = PASSWORD_POLICY, message = "Mật khẩu mới phải có cả chữ và số") String newPassword) {}
+
+    public static final String PASSWORD_POLICY = "^(?=.*\\p{L})(?=.*\\d).*$";
 
     public record AuthUserDto(String id, String name, String email, String role) {
         public static AuthUserDto of(User u) {

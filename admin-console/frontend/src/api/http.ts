@@ -3,7 +3,7 @@ import type { ApiResponse } from '@/types';
 
 const TOKEN_KEY = 'lumiere.accessToken';
 const REFRESH_KEY = 'lumiere.refreshToken';
-const AUTH_PATHS = ['/admin/auth/login', '/admin/auth/refresh'];
+const AUTH_PATHS = ['/admin/auth/login', '/admin/auth/refresh', '/admin/auth/logout'];
 
 export const tokenStorage = {
   get: (): string | null => localStorage.getItem(TOKEN_KEY),
@@ -62,7 +62,8 @@ async function refreshSession(): Promise<boolean> {
   })
     .then(async (res) => {
       const payload = (await res.json().catch(() => null)) as ApiResponse<{ accessToken: string; refreshToken: string }> | null;
-      if (!res.ok || !payload?.success) return false;
+      // Refused because another tab rotated this token at the same moment: use the pair it stored (FN-ADM-AUTH-02)
+      if (!res.ok || !payload?.success) return tokenStorage.getRefresh() !== refreshToken && tokenStorage.get() !== null;
       tokenStorage.set(payload.data.accessToken, payload.data.refreshToken);
       return true;
     })

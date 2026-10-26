@@ -7,7 +7,7 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("app")
-public record AppProperties(ZoneId zone, Jwt jwt, Cors cors, String publicBaseUrl, DemoData demoData) {
+public record AppProperties(ZoneId zone, Jwt jwt, Cors cors, DemoData demoData) {
 
     public record Jwt(String secret, String issuer, Duration accessTokenTtl, Duration refreshTokenTtl) {
         public Jwt {

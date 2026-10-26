@@ -1,0 +1,10 @@
+# Build context of the backend images is the repo root (#46): send only what Gradle needs
+**/build
+**/node_modules
+**/.gradle
+.git
+graphify-out
+docs
+admin-console/frontend
+client-console/mobile
+deploy

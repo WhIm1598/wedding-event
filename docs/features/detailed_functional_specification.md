@@ -636,25 +636,26 @@ flowchart LR
 * **Business Logic:**
   1. Tìm user theo email (không phân biệt hoa thường). Không có, sai mật khẩu, **hoặc** vai trò không phải `ROLE_ADMIN`/`ROLE_STAFF` → `401 INVALID_CREDENTIALS` (cùng thông điệp).
   2. `is_active = false` → `403 ACCOUNT_LOCKED`.
-  3. *(v1.1)* Chống dò mật khẩu: sai 5 lần liên tiếp → khóa đăng nhập 15 phút (`locked_until`), trả `429 TOO_MANY_ATTEMPTS`; đăng nhập đúng reset `failed_login_count`. Giới hạn thêm 20 request/phút/IP ở gateway.
+  3. Chống dò mật khẩu: sai 5 lần liên tiếp → khóa đăng nhập 15 phút (`locked_until`), trả `429 TOO_MANY_ATTEMPTS`; đăng nhập đúng reset `failed_login_count`. Giới hạn thêm 20 request/phút/IP ở gateway.
   4. Sinh `accessToken` (JWT HS256, 2 giờ, issuer `app.jwt.issuer`, claim `sub`=userId, `email`, `name`, `roles` (mảng `ROLE_*`), `staffId` (khi tài khoản gắn nhân sự), `typ=access`) và `refreshToken` (30 ngày, cùng claim, `typ=refresh`; *(v1.1)* thêm claim `jti`). Resource server chỉ chấp nhận token `typ=access`.
-  5. *(v1.1)* Lưu `jti` của refresh token vào Redis `admin:refresh:{userId}:{jti}` (TTL 30 ngày); cập nhật `last_login_at`.
+  5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). *(v1.1)* cập nhật `last_login_at`.
   6. *(v1.1)* Nếu `must_change_password = true`: vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài đổi mật khẩu/`me`/`logout` trả `403 PASSWORD_CHANGE_REQUIRED`.
 * **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role" } }`. *(v1.1)* `user` thêm `staffId`, `mustChangePassword`.
 
-#### `FN-ADM-AUTH-02: Làm mới token (Refresh, có xoay vòng)` ⚠️
+#### `FN-ADM-AUTH-02: Làm mới token (Refresh, có xoay vòng)` ✅
 * **Endpoint:** `POST /api/v1/admin/auth/refresh` — Public. Input: `{ "refreshToken": "..." }`.
-* **Logic:** Token phải hợp lệ, `type=refresh`, user còn active và *(v1.1)* `jti` còn trong Redis. Thành công: xóa `jti` cũ, cấp cặp token mới (rotation). Nếu một `jti` đã bị dùng được gửi lại (dấu hiệu token bị đánh cắp) → thu hồi **toàn bộ** refresh token của user. Lỗi → `401 INVALID_REFRESH_TOKEN`.
-* Frontend: chỉ một request refresh tại một thời điểm (single-flight); refresh thất bại → xóa token và về trang đăng nhập.
+* **Logic:** Token phải hợp lệ, `type=refresh`, user còn active và dòng `jti` trong `refresh_tokens` chưa dùng, chưa thu hồi. Thành công: đánh dấu `used_at`, cấp cặp token mới (rotation). Nếu một `jti` đã dùng được gửi lại **sau 60 giây** (dấu hiệu token bị đánh cắp) → thu hồi **toàn bộ** refresh token của user; gửi lại trong 60 giây (hai tab cùng làm mới) chỉ bị từ chối. Lỗi → `401 INVALID_REFRESH_TOKEN`.
+* Frontend: chỉ một request refresh tại một thời điểm (single-flight); refresh thất bại → nếu tab khác vừa lưu cặp token mới thì dùng cặp đó, ngược lại xóa token và về trang đăng nhập.
 
 #### `FN-ADM-AUTH-03: Thông tin người dùng hiện tại` ✅
 * **Endpoint:** `GET /api/v1/admin/auth/me` → `user` như FN-ADM-AUTH-01.
 
-#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` 🆕
-* `POST /api/v1/admin/auth/logout` — body `{ "refreshToken": "..." }`, xóa `jti` khỏi Redis. Luôn trả 200 (idempotent).
+#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` ⚠️
+* `POST /api/v1/admin/auth/logout` — Public, body `{ "refreshToken": "..." }`, đánh dấu thu hồi `jti`. Luôn trả 200 (idempotent).
 * `POST /api/v1/admin/auth/logout-all` — thu hồi mọi refresh token của chính mình.
-* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: `must_change_password = false`, thu hồi các refresh token khác.
-* Access token còn hiệu lực tối đa 2 giờ sau khi thu hồi (chấp nhận được); khóa tài khoản có hiệu lực ngay vì mọi request kiểm tra `is_active` qua cache Redis `admin:user-active:{userId}` (TTL 60 giây).
+* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi. *(v1.1, cùng FN-ADM-USER-01)* `must_change_password = false`.
+* Access token còn hiệu lực tối đa 2 giờ sau khi thu hồi (chấp nhận được); khóa tài khoản có hiệu lực ngay vì mọi request đọc lại tài khoản trong DB: `is_active = false`, hoặc vai trò / nhân sự gắn khác với token → `401` (frontend làm mới token để nhận vai trò mới).
+* **Tài khoản admin đầu tiên** (DB mới): backend tạo một `ROLE_ADMIN` từ biến môi trường `ADMIN_EMAIL` / `ADMIN_PASSWORD` khi chưa có admin nào; sau đó bỏ qua hai biến này.
 
 #### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` 🆕
 * **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Tài khoản*.
@@ -894,7 +895,7 @@ flowchart LR
 * **Mục tiêu:** Tạo văn bản hợp đồng pháp lý đầy đủ, hỗ trợ xuất PDF và chia sẻ qua Zalo.
 * **Endpoint 1:** `GET /api/v1/admin/contracts/{id}/preview-html` (`text/html`, dùng để render xem trước trong modal; mọi dữ liệu người dùng nhập phải được escape HTML).
 * **Endpoint 2:** `GET /api/v1/admin/contracts/{id}/export-pdf` (Trả về file nhị phân `application/pdf` chuẩn kích thước A4: 210mm x 297mm, tên file `HD-xxx.pdf`, font nhúng hỗ trợ tiếng Việt). *(v1.1)* PDF của hợp đồng không còn `DRAFT` được lưu MinIO (bucket `contracts`, key `{contractNumber}-v{version}.pdf`) và tái sử dụng; render lại khi hợp đồng thay đổi.
-* **Endpoint 3:** `POST /api/v1/admin/contracts/{id}/share-zalo`
+* **Endpoint 3:** 🆕 `POST /api/v1/admin/contracts/{id}/share-zalo` — *chưa làm (cần tài khoản Zalo OA/ZNS và FN-PUB-CONTR-01). Bản giả chỉ ghi log đã bị gỡ (#39); hiện nút "Nhắn Zalo" mở `https://zalo.me/{sđt}` để nhân viên tự gửi file PDF.*
   * Body (tùy chọn): `{ "phoneNumber": "0901112222" }` — mặc định SĐT trên hợp đồng.
   * Không truyền `phoneNumber` và hợp đồng `hasZalo = false` → `400 ZALO_NOT_AVAILABLE`.
   * Logic: Gửi tin nhắn Zalo ZNS tới khách kèm **link công khai có token** (FN-PUB-CONTR-01) và thông tin chuyển khoản *(v1.1 — không còn gửi link chứa UUID hợp đồng)*. Ghi activity "Đã gửi Zalo" vào hồ sơ khách.

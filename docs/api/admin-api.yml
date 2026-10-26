@@ -68,9 +68,12 @@ paths:
       description: |
         Looks the user up by email (case-insensitive). Unknown email, wrong password or a role other than
         `ROLE_ADMIN`/`ROLE_STAFF` all return `401 INVALID_CREDENTIALS` with the same message (no account
-        enumeration). An inactive account returns `403 ACCOUNT_LOCKED`. On success returns an access token (2 h)
-        and a refresh token (30 days) with claims `sub`, `email`, `name`, `roles`, `staffId` (when the account is
-        linked to a staff member) and `typ`.
+        enumeration). An inactive account returns `403 ACCOUNT_LOCKED`. The 5th wrong password in a row locks the
+        login for 15 minutes (`429 TOO_MANY_ATTEMPTS`, also for the right password while locked); a successful login
+        resets the count. The production gateway also allows at most 20 requests/minute/IP (then a plain nginx 429).
+        On success returns an access token (2 h) and a refresh token (30 days, with a `jti` claim stored in
+        `refresh_tokens`) with claims `sub`, `email`, `name`, `roles`, `staffId` (when the account is linked to a
+        staff member) and `typ`.
       x-spec-function: FN-ADM-AUTH-01
       x-roles: [public]
       security: []
@@ -128,6 +131,16 @@ paths:
                 success: false
                 code: ACCOUNT_LOCKED
                 message: Tài khoản đã bị khóa, vui lòng liên hệ quản lý
+        '429':
+          description: '`TOO_MANY_ATTEMPTS` — 5 wrong passwords in a row; locked for 15 minutes.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: TOO_MANY_ATTEMPTS
+                message: Đăng nhập sai quá 5 lần, vui lòng thử lại sau 15 phút
 
   /api/v1/admin/auth/refresh:
     post:
@@ -135,9 +148,10 @@ paths:
       operationId: refreshToken
       summary: Exchange a refresh token for a new token pair
       description: |
-        The refresh token must be a valid, unexpired JWT with `typ=refresh` (otherwise `401 INVALID_REFRESH_TOKEN`).
-        The user must still exist, be active and have a console role (otherwise `401 UNAUTHORIZED`).
-        Returns a new access + refresh token pair (no rotation/revocation of the old refresh token yet).
+        Rotation: the refresh token must be a valid, unexpired, not revoked and not yet used JWT with `typ=refresh`
+        and a `jti`, of an active console user; it is marked used and a new pair is returned. Anything else is
+        `401 INVALID_REFRESH_TOKEN`. A used token sent again more than 60 s after its rotation is treated as stolen:
+        every refresh token of the user is revoked. Within 60 s (two browser tabs refreshing together) it is only refused.
       x-spec-function: FN-ADM-AUTH-02
       x-roles: [public]
       security: []
@@ -175,31 +189,117 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: |
-            `INVALID_REFRESH_TOKEN` — token invalid, expired or not a refresh token;
-            `UNAUTHORIZED` — the user no longer exists, is inactive or lost the console role.
+          description: '`INVALID_REFRESH_TOKEN` — invalid, expired, revoked or already used token, or the user is inactive / no longer a console user.'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-              examples:
-                invalidRefreshToken:
-                  value:
-                    success: false
-                    code: INVALID_REFRESH_TOKEN
-                    message: Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại
-                userInactive:
-                  value:
-                    success: false
-                    code: UNAUTHORIZED
-                    message: Phiên đăng nhập không hợp lệ
+              example:
+                success: false
+                code: INVALID_REFRESH_TOKEN
+                message: Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại
+
+  /api/v1/admin/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke a refresh token
+      description: Marks the refresh token revoked. Always `200`, also for an unknown, expired or malformed token.
+      x-spec-function: FN-ADM-AUTH-04
+      x-roles: [public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Logged out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã đăng xuất
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/admin/auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutAll
+      summary: Revoke every refresh token of the caller
+      description: Every session must sign in again once its access token (max 2 h) runs out.
+      x-spec-function: FN-ADM-AUTH-04
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      responses:
+        '200':
+          description: All sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+              example:
+                success: true
+                code: SUCCESS
+                message: Đã đăng xuất khỏi mọi thiết bị
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/auth/change-password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change the caller's own password
+      description: |
+        `currentPassword` wrong → `400 WRONG_PASSWORD`. `newPassword`: 8–100 characters with letters and digits,
+        different from the current one (`400 BAD_REQUEST` with a `newPassword` field error). On success every refresh
+        token of the user is revoked and a new pair is returned for the calling session.
+      x-spec-function: FN-ADM-AUTH-04
+      x-roles: [ROLE_ADMIN, ROLE_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              currentPassword: MatKhau@2026
+              newPassword: MatKhauMoi2027
+      responses:
+        '200':
+          description: Password changed; new token pair.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: '`WRONG_PASSWORD`, or `BAD_REQUEST` with field errors for `newPassword`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                success: false
+                code: WRONG_PASSWORD
+                message: Mật khẩu hiện tại không đúng
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/admin/auth/me:
     get:
       tags: [auth]
       operationId: getCurrentUser
       summary: Get the logged-in user
-      description: Returns the user of the access token. `401 UNAUTHORIZED` when the user is no longer active or lost the console role.
+      description: Returns the user of the access token. `401 UNAUTHORIZED` when the user is no longer active or lost the console role (checked on every request; a token whose role or staff link differs from the database is refused).
       x-spec-function: FN-ADM-AUTH-03
       x-roles: [ROLE_ADMIN, ROLE_STAFF]
       responses:
@@ -1635,62 +1735,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/v1/admin/contracts/{id}/share-zalo:
-    post:
-      tags: [contracts]
-      operationId: shareContractZalo
-      summary: Send the contract link via Zalo
-      description: |
-        Sends the contract link (`{PUBLIC_BASE_URL}/contracts/{id}`) to `phoneNumber`, or to the contract phone when
-        the body/`phoneNumber` is missing or blank. Without `phoneNumber` and with `hasZalo = false` →
-        `400 ZALO_NOT_AVAILABLE`. The Zalo client is currently a logging stub (no message is actually sent).
-      x-spec-function: FN-ADM-CONTR-01
-      x-roles: [ROLE_ADMIN, ROLE_STAFF]
-      parameters:
-        - $ref: '#/components/parameters/ContractId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ShareZaloRequest'
-            example:
-              phoneNumber: '0900000024'
-      responses:
-        '200':
-          description: Sent. No `data`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccess'
-              example:
-                success: true
-                code: SUCCESS
-                message: Đã gửi hợp đồng qua Zalo
-        '400':
-          description: '`BAD_REQUEST` (invalid `phoneNumber`, malformed body or id) or `ZALO_NOT_AVAILABLE`.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                validation:
-                  value:
-                    success: false
-                    code: BAD_REQUEST
-                    message: Dữ liệu không hợp lệ
-                    errors:
-                      - { field: phoneNumber, message: Số điện thoại không hợp lệ }
-                zaloNotAvailable:
-                  value:
-                    success: false
-                    code: ZALO_NOT_AVAILABLE
-                    message: Số điện thoại của khách chưa đăng ký Zalo
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
   # ---------------------------------------------------------------- financials
   /api/v1/admin/financials/transactions:
     get:
@@ -2284,6 +2328,18 @@ components:
         refreshToken:
           type: string
           minLength: 1
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 100
+          pattern: '^(?=.*\p{L})(?=.*\d).*$'
     AuthUserDto:
       type: object
       required: [id, name, email, role]
@@ -2798,14 +2854,6 @@ components:
         notes:
           type: [string, 'null']
           maxLength: 1000
-    ShareZaloRequest:
-      type: object
-      properties:
-        phoneNumber:
-          type: [string, 'null']
-          pattern: '^$|^0(3|5|7|8|9)[0-9]{8}$'
-          description: Recipient; empty/missing → the contract phone.
-
     # ------------------------------------------------------------ financials
     TransactionDto:
       type: object

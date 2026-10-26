@@ -17,6 +17,7 @@ Two products share one PostgreSQL database and one Java domain library:
 | `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
+| `deploy/` | Production compose for the web admin (postgres, admin backend/frontend, HTTPS gateway, certbot, daily backup); secrets in an uncommitted `deploy/.env` | [deploy/README.md](deploy/README.md) |
 | `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml` for the admin API, `client-api.yml` for the mobile API); maintained with the `api-documenter` agent | |
 | `docs/templates/` | UI reference mock-ups only (look & feel, not code to copy) | |
 | `.github/` | CI (`ci.yml`), spec-to-code agent (`claude-agent.yml`, `scripts/claude_coder.py`) | |
@@ -43,7 +44,7 @@ on mobile). JSON field names are identical at every layer; the spec's names win.
 |---|---|
 | Backend build + tests | `./gradlew build` (Testcontainers needs Docker; or set `TEST_DATABASE_URL` to an empty PostgreSQL). Fails below **85% line coverage** (JaCoCo); report at `<module>/build/reports/jacoco/test/html/index.html` |
 | One module / one test | `./gradlew :admin-console:backend:test` · `./gradlew :client-console:backend:test --tests '*PlanApiTest'` (modules: `:backend-common`, `:admin-console:backend`, `:client-console:backend`) |
-| Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun` |
+| Run admin API | `docker compose -f docker-compose.dev.yml up -d` then `./gradlew :admin-console:backend:bootRun --args='--spring.profiles.active=dev'` (no default profile) |
 | Run mobile API | same database, then `./gradlew :client-console:backend:bootRun` (port 8081) |
 | Web type-check + build | `cd admin-console/frontend && npm run build` (type-check only: `npm run typecheck`; the web app has no test runner or linter) |
 | Web dev (mock / real API) | `npm run dev` / `npm run dev:api` |

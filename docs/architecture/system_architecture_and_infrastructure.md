@@ -283,6 +283,8 @@ Toàn bộ hệ thống được container hóa (containerized) bằng Docker v�
 
 ### 4.2. File `docker-compose.yml` Chuẩn Mẫu
 
+> **Bản deploy thật của web admin nằm ở [`deploy/`](../../deploy/README.md)** (compose production, gateway HTTPS, `.env`, backup). Mẫu dưới đây là hình mục tiêu khi đủ mọi dịch vụ, không dùng trực tiếp: thiếu `JWT_SECRET`, ghi mật khẩu trong file và mở cổng PostgreSQL.
+
 Dưới đây là cấu hình Docker Compose hoàn chỉnh sẵn sàng triển khai:
 
 ```yaml
@@ -459,6 +461,8 @@ services:
 ---
 
 ### 4.3. Cấu hình Nginx Gateway Routing (`nginx.conf`)
+
+> Bản dùng thật: [`deploy/gateway/default.conf.template`](../../deploy/gateway/default.conf.template).
 
 Nginx đóng vai trò là cửa ngõ duy nhất (Single Point of Entry) định tuyến lưu lượng truy cập:
 

@@ -16,7 +16,8 @@ No state library, no form library, no test runner. Import alias `@/` = `src/`. U
 | `src/app/router.tsx` | Routes; admin-only pages wrapped with `adminOnly(...)` |
 | `src/app/navigation.ts` | Sidebar menu + allowed roles per entry (`NAVIGATION`) |
 | `src/constants/labels.ts` | Enum → Vietnamese label + Badge variant maps, dropdown option lists |
-| `src/contexts/` | `useAuth()` (user, role, login/logout), `useToast()` |
+| `src/contexts/` | `useAuth()` (user, role, login/logout — logout revokes the refresh token), `useToast()` |
+| `src/features/auth/` | `LoginPage`, `ChangePasswordModal` (opened from the sidebar) |
 | `src/hooks/useAsync.ts` | `useAsync(fn, deps)` → `{ data, error, loading, reload, setData }` |
 | `src/lib/` | `format.ts` (`formatVND`, `formatDate`, `parseMoney`, …), `date.ts` (`todayISO`, `weekRange`, …), `cn.ts` |
 | `src/config/env.ts` | `env.useMock` (`VITE_USE_MOCK`), API base; `.env.api` switches to the real backend |

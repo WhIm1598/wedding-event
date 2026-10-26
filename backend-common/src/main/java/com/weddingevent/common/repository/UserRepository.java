@@ -1,6 +1,7 @@
 package com.weddingevent.common.repository;
 
 import com.weddingevent.common.domain.User;
+import com.weddingevent.common.domain.enums.Role;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +18,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmailIgnoreCase(String email);
 
     boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByRole(Role role);
+
+    /** Row lock for the admin login, so concurrent wrong attempts all count (FN-ADM-AUTH-01 step 3) */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where lower(u.email) = lower(:email)")
+    Optional<User> findByEmailForUpdate(@Param("email") String email);
 
     Optional<User> findByGoogleSub(String googleSub);
 

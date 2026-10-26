@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, Printer, Share2 } from 'lucide-react';
+import { Download, FileText, MessageCircle, Printer } from 'lucide-react';
 import { contractsApi } from '@/api/contracts.api';
 import { settingsApi } from '@/api/system.api';
 import { useAsync } from '@/hooks/useAsync';
@@ -11,26 +11,21 @@ import { ContractDocument } from './ContractDocument';
 
 export function ContractExportModal({ contract, onClose }: { contract: Contract | null; onClose: () => void }) {
   const showToast = useToast();
-  const [busy, setBusy] = useState<'pdf' | 'zalo' | null>(null);
+  const [busy, setBusy] = useState(false);
   const { data: studio } = useAsync(() => settingsApi.get());
 
   if (!contract) return null;
 
-  const run = async (kind: 'pdf' | 'zalo') => {
-    setBusy(kind);
+  const downloadPdf = async () => {
+    setBusy(true);
     try {
-      if (kind === 'pdf') {
-        await contractsApi.exportPdf(contract);
-        showToast(`Đã lưu PDF hợp đồng của ${contract.customerName} vào máy.`);
-      } else {
-        await contractsApi.shareZalo(contract);
-        showToast(`Đã gửi hợp đồng qua Zalo cho ${contract.customerName}.`, 'info');
-      }
+      await contractsApi.exportPdf(contract);
+      showToast(`Đã lưu PDF hợp đồng của ${contract.customerName} vào máy.`);
       onClose();
     } catch (err) {
       showToast((err as Error).message, 'error');
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
@@ -49,12 +44,19 @@ export function ContractExportModal({ contract, onClose }: { contract: Contract 
           <Button variant="ghost" onClick={() => window.print()}>
             <Printer size={18} className="mr-2" /> In
           </Button>
+          {/* No Zalo API yet (FN-ADM-CONTR-01 endpoint 3): staff open the chat and send the downloaded PDF themselves (#39) */}
           {contract.hasZalo && (
-            <Button variant="outline" className="bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100" loading={busy === 'zalo'} onClick={() => run('zalo')}>
-              <Share2 size={18} className="mr-2" /> Chia sẻ Zalo
-            </Button>
+            <a
+              href={`https://zalo.me/${contract.phone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Mở Zalo của khách, rồi gửi file PDF vừa tải"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium border bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100 transition-colors"
+            >
+              <MessageCircle size={18} className="mr-2" /> Nhắn Zalo
+            </a>
           )}
-          <Button loading={busy === 'pdf'} onClick={() => run('pdf')}>
+          <Button loading={busy} onClick={downloadPdf}>
             <Download size={18} className="mr-2" /> Tải xuống PDF
           </Button>
         </>

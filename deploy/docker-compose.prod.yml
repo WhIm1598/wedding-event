@@ -1,0 +1,90 @@
+# Production: Lumière Studios web admin on one Linux server (#37, #40). Steps: deploy/README.md
+#   cp .env.example .env   (fill it in, never commit it)
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Only the gateway publishes ports; PostgreSQL stays on the internal network.
+name: wedding
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wedding_db
+      POSTGRES_USER: wedding_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wedding_admin -d wedding_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  admin-backend:
+    build:
+      context: ..
+      dockerfile: admin-console/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/wedding_db
+      SPRING_DATASOURCE_USERNAME: wedding_admin
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -base64 48)}
+      # Only read while the database has no admin yet (#36)
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  admin-frontend:
+    build:
+      context: ../admin-console/frontend
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      # The image renders /etc/nginx/templates/*.template with the environment into conf.d
+      - ./gateway/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    # Reload every 6 h so renewed certificates are picked up
+    command: ["/bin/sh", "-c", "while :; do sleep 6h; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    depends_on:
+      - admin-backend
+      - admin-frontend
+
+  certbot:
+    image: certbot/certbot:v2.11.0
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+
+  # Daily pg_dump into ./backups, 14 days kept (#40). Copy ./backups off the server too (README).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: wedding_admin
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: wedding_db
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c", "while :; do pg_dump -Fc -f /backups/wedding_db-$$(date +%F).dump.tmp && mv /backups/wedding_db-$$(date +%F).dump.tmp /backups/wedding_db-$$(date +%F).dump && find /backups -name 'wedding_db-*.dump' -mtime +13 -delete; sleep 24h; done"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

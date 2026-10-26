@@ -54,6 +54,36 @@ class BookingApiTest extends IntegrationTest {
     }
 
     @Test
+    void concurrentBookingsOfTheSameStaffSlotLetOnlyOneThrough() throws Exception {
+        String admin = adminToken();
+        String staffJson = mvc.perform(authed(get("/api/v1/admin/staff"), admin))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String staffId = read(staffJson, "$.data[1].id");
+        String body = json("""
+                {'clientName':'Đua & Lịch','type':'Chụp Pre-wedding','eventDate':'%s','eventTime':'14:00','staffIds':['%s']}
+                """.formatted(uniqueFutureDate(), staffId));
+
+        int requests = 6;
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(requests)) {
+            java.util.List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < requests; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mvc.perform(authed(post("/api/v1/admin/bookings"), admin).content(body)).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            java.util.List<Integer> statuses = new java.util.ArrayList<>();
+            for (var r : results) {
+                statuses.add(r.get());
+            }
+            assertThat(statuses).containsOnlyOnce(201);
+            assertThat(statuses.stream().filter(s -> s == 409)).hasSize(requests - 1);
+        }
+    }
+
+    @Test
     void invalidBookingReturnsFieldErrors() throws Exception {
         mvc.perform(authed(post("/api/v1/admin/bookings"), adminToken())
                         .content(json("{'clientName':'','type':'X','eventDate':'2030-01-01','eventTime':'25:00'}")))

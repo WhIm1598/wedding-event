@@ -126,7 +126,7 @@ public class BookingService {
         }
         LocalTime time = LocalTime.parse(req.eventTime(), HH_MM);
         List<UUID> staffIds = req.staffIds() == null ? List.of() : List.copyOf(new HashSet<>(req.staffIds()));
-        List<StaffMember> assigned = staff.findAllById(staffIds);
+        List<StaffMember> assigned = staff.findAllByIdForUpdate(staffIds);
         if (assigned.size() != staffIds.size()) {
             throw AppException.badRequest("STAFF_NOT_FOUND", "Có nhân sự không tồn tại trong danh sách phân công");
         }

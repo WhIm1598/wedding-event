@@ -1,16 +1,21 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Camera, LogOut, X } from 'lucide-react';
+import { Camera, KeyRound, LogOut, X } from 'lucide-react';
 import { NAVIGATION } from '@/app/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal';
 import { cn } from '@/lib/cn';
 
 export function Sidebar({ isMobileOpen, onClose }: { isMobileOpen: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
+  const [changingPassword, setChangingPassword] = useState(false);
   if (!user) return null;
 
   const items = NAVIGATION.filter((nav) => nav.roles.includes(user.role));
 
+  // The modal sits outside <aside>: its transform would trap position:fixed
   return (
+    <>
     <aside
       className={cn(
         'fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out md:static md:translate-x-0',
@@ -64,11 +69,16 @@ export function Sidebar({ isMobileOpen, onClose }: { isMobileOpen: boolean; onCl
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Online
             </p>
           </div>
+          <button onClick={() => setChangingPassword(true)} className="text-slate-400 hover:text-rose-600 transition-colors p-2" title="Đổi mật khẩu" aria-label="Đổi mật khẩu">
+            <KeyRound size={18} />
+          </button>
           <button onClick={logout} className="text-slate-400 hover:text-red-600 transition-colors p-2" title="Đăng xuất">
             <LogOut size={18} />
           </button>
         </div>
       </div>
     </aside>
+    <ChangePasswordModal isOpen={changingPassword} onClose={() => setChangingPassword(false)} />
+    </>
   );
 }

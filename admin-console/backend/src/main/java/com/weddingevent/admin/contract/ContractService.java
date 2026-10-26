@@ -1,6 +1,5 @@
 package com.weddingevent.admin.contract;
 
-import com.weddingevent.admin.config.AppProperties;
 import com.weddingevent.admin.crm.CustomerStageSync;
 import com.weddingevent.admin.finance.FinanceService;
 import com.weddingevent.admin.notification.NotificationService;
@@ -59,8 +58,6 @@ public class ContractService {
             Boolean hasZalo,
             @Size(max = 1000) String notes) {}
 
-    public record ShareZaloRequest(@Pattern(regexp = "^$|" + StaffService.VN_PHONE, message = "Số điện thoại không hợp lệ") String phoneNumber) {}
-
     public record Document(String fileName, byte[] content) {}
 
     private final ContractRepository contracts;
@@ -70,15 +67,13 @@ public class ContractService {
     private final FinanceService finance;
     private final NotificationService notifications;
     private final ContractDocumentRenderer renderer;
-    private final ZaloClient zalo;
     private final CodeGenerator codes;
-    private final AppProperties props;
     private final CustomerStageSync stages;
     private final Clock clock;
 
     public ContractService(ContractRepository contracts, ServicePackageRepository packages, LeadRepository leads,
             StudioSettingsRepository settings, FinanceService finance, NotificationService notifications,
-            ContractDocumentRenderer renderer, ZaloClient zalo, CodeGenerator codes, AppProperties props,
+            ContractDocumentRenderer renderer, CodeGenerator codes,
             CustomerStageSync stages, Clock clock) {
         this.contracts = contracts;
         this.packages = packages;
@@ -88,9 +83,7 @@ public class ContractService {
         this.notifications = notifications;
         this.stages = stages;
         this.renderer = renderer;
-        this.zalo = zalo;
         this.codes = codes;
-        this.props = props;
         this.clock = clock;
     }
 
@@ -158,16 +151,6 @@ public class ContractService {
     public Document exportPdf(UUID id) {
         Contract c = require(id);
         return new Document(c.getContractNumber() + ".pdf", renderer.pdf(c, studio()));
-    }
-
-    @Transactional(readOnly = true)
-    public void shareZalo(UUID id, String phoneNumber) {
-        Contract c = require(id);
-        String phone = phoneNumber == null || phoneNumber.isBlank() ? c.getPhone() : phoneNumber;
-        if (!c.isHasZalo() && (phoneNumber == null || phoneNumber.isBlank())) {
-            throw AppException.badRequest("ZALO_NOT_AVAILABLE", "Số điện thoại của khách chưa đăng ký Zalo");
-        }
-        zalo.sendContractLink(phone, c.getCustomerName(), c.getContractNumber(), props.publicBaseUrl() + "/contracts/" + c.getId());
     }
 
     private Contract require(UUID id) {
