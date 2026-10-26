@@ -23,7 +23,7 @@ cp .env.example .env && chmod 600 .env
 | `DOMAIN` | Tên miền admin, ví dụ `admin.lumiere.vn` (bản ghi A đã trỏ về server) |
 | `DB_PASSWORD` | `openssl rand -base64 32` |
 | `JWT_SECRET` | `openssl rand -base64 48`. Đổi giá trị này sẽ đăng xuất mọi người |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Tài khoản admin đầu tiên, chỉ dùng khi DB chưa có admin. Mật khẩu ≥ 8 ký tự, có chữ và số |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Tài khoản **quản trị nền tảng** đầu tiên (`ROLE_PLATFORM_ADMIN`, ADR-0001), chỉ dùng khi DB chưa có. Mật khẩu ≥ 8 ký tự, có chữ và số |
 
 `.env` chứa bí mật: không commit, không gửi qua chat. Nên lưu thêm một bản trong trình quản lý mật khẩu của studio.
 
@@ -46,10 +46,12 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml ps        # admin-backend phải "healthy" (Flyway chạy migration lúc khởi động)
 ```
 
-1. Mở `https://<DOMAIN>`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-2. Đổi mật khẩu ngay (nút chìa khoá cạnh nút Đăng xuất).
-3. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
-4. Vào *Cài đặt* nhập thông tin studio.
+1. Mở `https://<DOMAIN>`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD`: đây là tài khoản **quản trị nền tảng**, chỉ thấy màn *Quản trị nền tảng*.
+2. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
+3. Ở màn *Quản trị nền tảng*:
+   - DB mới đã có sẵn một studio (tạo từ cài đặt mặc định). Bấm nút thêm quản lý (biểu tượng người) để tạo quản lý cho studio đó, ví dụ Lumière;
+   - mỗi khách mới: **Thêm studio** (tên, hạn thuê bao, email quản lý). Mật khẩu tạm chỉ hiện một lần, gửi cho quản lý của studio.
+4. Quản lý studio đăng nhập, đổi mật khẩu tạm, vào *Cài đặt* nhập thông tin studio.
 5. *Cài đặt → Tài khoản*: tạo tài khoản cho từng nhân viên (gắn hồ sơ nhân sự). Mật khẩu tạm chỉ hiện một lần; nhân viên phải đổi khi đăng nhập lần đầu.
 6. *(Tuỳ chọn)* *Cài đặt → Zalo OA*: kết nối Zalo OA của studio để nút **Gửi Zalo** gửi hợp đồng qua ZNS — làm theo [docs/setup/zalo-oa-zns.md](../docs/setup/zalo-oa-zns.md). Link trong tin dùng `https://<DOMAIN>/c/...` (compose tự đặt `PUBLIC_BASE_URL`).
 

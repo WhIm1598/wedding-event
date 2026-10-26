@@ -154,6 +154,7 @@ wedding-event/
 * 🆕 **Phiếu không sửa/xóa, chỉ hủy**: Nhập nhầm thì hủy phiếu (bắt buộc lý do, công nợ hợp đồng tự hoàn lại) rồi lập phiếu mới — đảm bảo sổ quỹ minh bạch. Lọc theo khoảng ngày/loại/hợp đồng, phân trang, xuất CSV cho kế toán. *(FN-ADM-FIN-03)*
 
 ### 5.8. 🆕 Tài khoản, Thông báo, Tìm kiếm & Cài đặt
+* ✅ **Nhiều studio** *(v1.2.0, ADR-0001)*: sản phẩm bán theo thuê bao cho nhiều studio trên cùng một hệ thống. *Quản trị nền tảng* (chủ sản phẩm) tạo studio cùng quản lý đầu tiên (mật khẩu tạm), gia hạn hoặc tạm ngưng khi hết hạn; mỗi studio chỉ thấy dữ liệu, cài đặt, mã chứng từ (`HD-001`…) và Zalo OA của mình; app WedPlanner hiện gói của mọi studio đang hoạt động. *(FN-PLT-01..03)*
 * **Quản lý tài khoản đăng nhập** (Quản lý): tạo tài khoản cho nhân viên (gắn với hồ sơ nhân sự), mật khẩu tạm bắt buộc đổi lần đầu, đổi quyền, khóa tài khoản, đặt lại mật khẩu; luôn còn ít nhất 1 Quản lý. Mọi người dùng có *Đổi mật khẩu* và *Đăng xuất* (thu hồi phiên ngay). Sai mật khẩu 5 lần khóa đăng nhập 15 phút. *(FN-ADM-AUTH-04, FN-ADM-USER-01)*
 * **Thông báo thông minh**: chuông thông báo theo từng người (nhân viên chỉ nhận việc của mình), bấm vào mở đúng màn hình liên quan. *(FN-ADM-NOTI-01)*
 * **Tìm kiếm toàn cục (Ctrl+K)**: tìm khách, hợp đồng, lịch hẹn, trang phục, nhân sự; chọn kết quả sẽ chuyển tới trang và mở chi tiết. *(FN-ADM-SEARCH-01)*

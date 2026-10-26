@@ -2,6 +2,17 @@
 
 Ngôn ngữ chung của hai sản phẩm dùng chung một cơ sở dữ liệu: **Lumière Studios admin** (nhân viên studio ảnh cưới) và **WedPlanner** (cặp đôi và nhà cung cấp dịch vụ cưới). Thuật ngữ chuẩn bằng tiếng Anh; định nghĩa bằng tiếng Việt, kèm cách gọi trên giao diện. Khi tên trong code khác thuật ngữ chuẩn, tên trong code được ghi riêng.
 
+## Nền tảng
+
+**Studio** ("Studio"):
+Một khách hàng mua thuê bao web admin. Mọi dữ liệu vận hành (khách hàng, hợp đồng, lịch, kho, nhân sự, sổ quỹ, gói dịch vụ, cài đặt) thuộc đúng một Studio và không Studio nào thấy dữ liệu của Studio khác (ADR-0001). Studio *tạm ngưng* hoặc *hết hạn thuê bao* thì người của Studio không đăng nhập được và gói của Studio ẩn khỏi WedPlanner.
+_Tên trong code_: `Studio` (bảng `studios`), hồ sơ ở `StudioSettings`; cột `studio_id`
+_Avoid_: tenant (trong giao diện và tài liệu nghiệp vụ)
+
+**Platform Admin** ("Quản trị nền tảng"):
+Chủ sản phẩm: tạo Studio cùng quản lý đầu tiên, gia hạn hoặc tạm ngưng Studio. Không thuộc Studio nào và không xem được dữ liệu của Studio.
+_Tên trong code_: `ROLE_PLATFORM_ADMIN`
+
 ## Bán hàng của studio
 
 **Customer** ("Khách hàng"):

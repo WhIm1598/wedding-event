@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Lumière Studios Admin API
+  title: Studio Admin API (multi-studio)
   version: 0.1.0
   summary: REST API of admin-console/backend (web admin for studio staff).
   description: |
@@ -59,6 +59,8 @@ tags:
     description: Studio profile printed as party B on contracts (Module 9).
   - name: users
     description: Admin-console login accounts (Module 5A, FN-ADM-USER-01). Admin only.
+  - name: platform
+    description: Studios of the platform (Module 5B, FN-PLT-01..03, ADR-0001). ROLE_PLATFORM_ADMIN only.
   - name: public
     description: The customer's contract page behind the Zalo link (FN-PUB-CONTR-01). No login; the token is the credential; the gateway allows 30 requests/minute/IP.
 
@@ -72,7 +74,8 @@ paths:
       description: |
         Looks the user up by email (case-insensitive). Unknown email, wrong password or a role other than
         `ROLE_ADMIN`/`ROLE_STAFF` all return `401 INVALID_CREDENTIALS` with the same message (no account
-        enumeration). An inactive account returns `403 ACCOUNT_LOCKED`. The 5th wrong password in a row locks the
+        enumeration). An inactive account returns `403 ACCOUNT_LOCKED`; an account whose studio is suspended or past
+        its subscription returns `403 STUDIO_SUSPENDED` (ADR-0001). The access token carries `studioId` for studio accounts. The 5th wrong password in a row locks the
         login for 15 minutes (`429 TOO_MANY_ATTEMPTS`, also for the right password while locked); a successful login
         resets the count. The production gateway also allows at most 20 requests/minute/IP (then a plain nginx 429).
         On success returns an access token (2 h) and a refresh token (30 days, with a `jti` claim stored in
@@ -126,7 +129,7 @@ paths:
                 code: INVALID_CREDENTIALS
                 message: Email hoặc mật khẩu không chính xác
         '403':
-          description: '`ACCOUNT_LOCKED` — the account is deactivated.'
+          description: '`ACCOUNT_LOCKED` — the account is deactivated; `STUDIO_SUSPENDED` — its studio is suspended or expired.'
           content:
             application/json:
               schema:
@@ -1084,6 +1087,170 @@ paths:
                 message: Trang phục VAY-001 đang vướng lịch bảo dưỡng giặt hấp đến ngày 17/10/2026, vui lòng chọn ngày khác hoặc trang phục khác.
 
   # ---------------------------------------------------------------- staff
+  # ---------------------------------------------------------------- platform
+  /api/v1/platform/studios:
+    get:
+      tags: [platform]
+      operationId: listStudios
+      summary: List studios
+      description: Oldest first; `name` comes from the studio's settings.
+      x-spec-function: FN-PLT-01
+      x-roles: [ROLE_PLATFORM_ADMIN]
+      responses:
+        '200':
+          description: Studios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StudioDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [platform]
+      operationId: createStudio
+      summary: Create a studio with its first admin
+      description: |
+        One transaction: the studio (`ACTIVE`), its settings row (fields other than the name are "Chưa cập nhật") and a
+        `ROLE_ADMIN` with a one-time temporary password (FN-ADM-USER-01). A taken e-mail creates nothing.
+      x-spec-function: FN-PLT-01
+      x-roles: [ROLE_PLATFORM_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudioRequest'
+            example:
+              name: Studio Hoa Biển
+              subscriptionExpiresAt: '2027-10-31'
+              adminEmail: owner@hoabien.vn
+              adminName: Nguyễn Hoa
+      responses:
+        '201':
+          description: Studio created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedStudioDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: '`EMAIL_EXISTS`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/platform/studios/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Studio id.
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    patch:
+      tags: [platform]
+      operationId: updateStudio
+      summary: Suspend, reactivate or extend a studio
+      description: Both fields are sent; `subscriptionExpiresAt = null` means no end date. A studio that is not `usable` is locked out (`403 STUDIO_SUSPENDED`) and its packages leave the mobile catalog.
+      x-spec-function: FN-PLT-02
+      x-roles: [ROLE_PLATFORM_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudioRequest'
+            example:
+              status: SUSPENDED
+              subscriptionExpiresAt: '2026-10-31'
+      responses:
+        '200':
+          description: Updated studio.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/StudioDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/platform/studios/{id}/admins:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Studio id.
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    post:
+      tags: [platform]
+      operationId: createStudioAdmin
+      summary: Add an admin to a studio
+      description: A `ROLE_ADMIN` of that studio with a one-time temporary password.
+      x-spec-function: FN-PLT-03
+      x-roles: [ROLE_PLATFORM_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudioAdminRequest'
+            example:
+              email: second@hoabien.vn
+              name: Trần Biển
+      responses:
+        '201':
+          description: Admin created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedAccountDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: '`EMAIL_EXISTS`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   # ---------------------------------------------------------------- public
   /api/v1/public/contracts/{token}:
     parameters:
@@ -2636,7 +2803,7 @@ components:
             code: UNAUTHORIZED
             message: Phiên đăng nhập không hợp lệ hoặc đã hết hạn
     Forbidden:
-      description: '`FORBIDDEN` — the caller''s role may not perform this operation (admin-only route called by `ROLE_STAFF`), or `PASSWORD_CHANGE_REQUIRED` while the account still has a temporary password.'
+      description: '`FORBIDDEN` — the caller''s role may not perform this operation (admin-only route called by `ROLE_STAFF`), `PASSWORD_CHANGE_REQUIRED` while the account still has a temporary password, or `STUDIO_SUSPENDED` when the caller''s studio is suspended or past its subscription.'
       content:
         application/json:
           schema:
@@ -2726,8 +2893,10 @@ components:
     # ------------------------------------------------------------ enums
     Role:
       type: string
-      description: Console roles (a login is only possible with these two).
-      enum: [ROLE_ADMIN, ROLE_STAFF]
+      description: |
+        Console roles. `ROLE_ADMIN` / `ROLE_STAFF` work inside one studio (ADR-0001); `ROLE_PLATFORM_ADMIN` manages
+        studios (`/api/v1/platform/**`) and belongs to none. Accounts of FN-ADM-USER-01 are always one of the first two.
+      enum: [ROLE_ADMIN, ROLE_STAFF, ROLE_PLATFORM_ADMIN]
     BookingStatus:
       type: string
       description: '`UPCOMING` = waiting for confirmation ("Chờ xác nhận").'
@@ -2815,6 +2984,81 @@ components:
           description: JWT, 30 days, `typ=refresh`.
         user:
           $ref: '#/components/schemas/AuthUserDto'
+
+    # ------------------------------------------------------------ platform
+    StudioStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED]
+    StudioDto:
+      type: object
+      required: [id, status, usable, adminCount, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/StudioStatus'
+        subscriptionExpiresAt:
+          type: [string, 'null']
+          format: date
+        usable:
+          type: boolean
+          description: ACTIVE and not past the subscription — its people can sign in today.
+        adminCount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    CreateStudioRequest:
+      type: object
+      required: [name, adminEmail, adminName]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        subscriptionExpiresAt:
+          type: [string, 'null']
+          format: date
+        adminEmail:
+          type: string
+          format: email
+          maxLength: 255
+        adminName:
+          type: string
+          minLength: 1
+          maxLength: 100
+    CreatedStudioDto:
+      type: object
+      required: [studio, admin]
+      properties:
+        studio:
+          $ref: '#/components/schemas/StudioDto'
+        admin:
+          $ref: '#/components/schemas/CreatedAccountDto'
+    UpdateStudioRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/StudioStatus'
+        subscriptionExpiresAt:
+          type: [string, 'null']
+          format: date
+    CreateStudioAdminRequest:
+      type: object
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
 
     # ------------------------------------------------------------ zalo sharing / public contract
     ShareZaloRequest:
