@@ -307,6 +307,64 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/users/me/devices:
+    put:
+      tags: [notification]
+      operationId: registerDevice
+      summary: Register this device for push (FCM)
+      description: |
+        Upsert by FCM token: a token registered by another account moves to the caller (the device switched
+        accounts). A user keeps at most 10 devices; the stalest is dropped. Allowed before a role is chosen.
+        The app calls it after sign-in / session restore and on every FCM token refresh.
+      x-spec-function: FN-NOTI-02
+      x-roles: [authenticated]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+            example:
+              token: dGhpcyBpcyBhbiBGQ00gdG9rZW4...
+              platform: ANDROID
+      responses:
+        '200':
+          description: Registered (no `data`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+        '400':
+          description: '`BAD_REQUEST` — blank or too long `token`, missing `platform` (field errors), or a `platform` other than `ANDROID`/`IOS` (unreadable body, no `errors[]`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [notification]
+      operationId: unregisterDevice
+      summary: Stop pushes to this device
+      description: Deletes the token only if it is the caller's; any other token is ignored. Always `200`. The app calls it on logout, before dropping its access token.
+      x-spec-function: FN-NOTI-02
+      x-roles: [authenticated]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Done (no `data`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/auth/send-otp:
     post:
       tags: [auth]
@@ -2249,6 +2307,18 @@ components:
         password:
           type: string
           minLength: 6
+    RegisterDeviceRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: FCM registration token
+        platform:
+          type: string
+          enum: [ANDROID, IOS]
     RefreshRequest:
       type: object
       required: [refreshToken]

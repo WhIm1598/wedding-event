@@ -2,6 +2,7 @@ package com.weddingevent.client.plan;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.weddingevent.client.notification.ClientNotificationService;
+import com.weddingevent.client.notification.PushSender;
 import com.weddingevent.client.plan.PlanDtos.PlanDto;
 import com.weddingevent.client.plan.PlanDtos.SyncCodeDto;
 import com.weddingevent.client.plan.PlanDtos.TaskDto;
@@ -38,6 +39,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -89,18 +91,20 @@ public class PlanService {
     private final UserRepository users;
     private final AiPlannerClient aiPlanner;
     private final ClientNotificationService notifications;
+    private final PushSender push;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
     public PlanService(WeddingPlanRepository plans, PlanTaskRepository tasks, PlanSyncCodeRepository syncCodes, UserRepository users,
-            AiPlannerClient aiPlanner, ClientNotificationService notifications, TransactionTemplate tx, Clock clock) {
+            AiPlannerClient aiPlanner, ClientNotificationService notifications, PushSender push, TransactionTemplate tx, Clock clock) {
         this.plans = plans;
         this.tasks = tasks;
         this.syncCodes = syncCodes;
         this.users = users;
         this.aiPlanner = aiPlanner;
         this.notifications = notifications;
+        this.push = push;
         this.tx = tx;
         this.clock = clock;
     }
@@ -173,6 +177,14 @@ public class PlanService {
         WeddingPlan plan = task.getPlan();
         long done = plan.getTasks().stream().filter(PlanTask::isCompleted).count();
         plan.setCompletedPercentage(PlanDtos.wholePercent(done, plan.getTasks().size()));
+        // FN-PLAN-05 (v1.1.5): the other half's devices reload the plan; data-only, not stored in the inbox
+        User other = plan.getOwner().getId().equals(userId) ? plan.getPartner() : plan.getOwner();
+        if (other != null) {
+            UUID otherId = other.getId();
+            String planId = plan.getId().toString();
+            ClientNotificationService.afterCommit(() -> push.send(otherId,
+                    PushSender.PushMessage.dataOnly(Map.of("type", "plan_updated", "planId", planId))));
+        }
         return TaskDto.of(task);
     }
 

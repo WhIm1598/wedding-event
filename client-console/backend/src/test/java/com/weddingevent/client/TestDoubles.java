@@ -41,14 +41,14 @@ public class TestDoubles {
         }
     }
 
-    public record Push(UUID userId, String title, String body) {}
+    public record Push(UUID userId, String title, String body, Map<String, String> data) {}
 
     public static class RecordingPushSender implements PushSender {
         private final List<Push> sent = new CopyOnWriteArrayList<>();
 
         @Override
-        public void send(UUID userId, String title, String body) {
-            sent.add(new Push(userId, title, body));
+        public void send(UUID userId, PushMessage message) {
+            sent.add(new Push(userId, message.title(), message.body(), message.data()));
         }
 
         public List<Push> sentTo(UUID userId) {

@@ -8,6 +8,7 @@ import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.NotificationRepository;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -58,7 +59,8 @@ public class ClientNotificationService {
         n.setTitle(title);
         n.setDescription(body.length() > 500 ? body.substring(0, 497) + "..." : body);
         notifications.save(n);
-        afterCommit(() -> push.send(userId, title, n.getDescription()));
+        afterCommit(() -> push.send(userId, new PushSender.PushMessage(title, n.getDescription(), Map.of(
+                "type", "notification", "kind", kind.name().toLowerCase(Locale.ROOT), "notificationId", n.getId().toString()))));
     }
 
     /** Runs {@code action} after the current transaction commits (immediately when there is none) */
