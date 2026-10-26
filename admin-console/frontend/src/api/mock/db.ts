@@ -13,6 +13,7 @@ import type {
   StudioSettings,
   Transaction,
   UserAccount,
+  ZaloOaSettings,
 } from '@/types';
 
 const today = todayISO();
@@ -108,6 +109,13 @@ export const db = {
     legalRepresentative: 'Nguyễn Văn A',
     bankInfo: 'Vietcombank - Chi nhánh HCM\nSTK: 0123456789\nChủ TK: NGUYEN VAN A',
   } as StudioSettings,
+
+  // Zalo OA of the studio (FN-ADM-SET-02); the mock keeps it connected so "Gửi Zalo" works in the demo
+  zaloOa: { appId: 'demo-app', templateId: 'demo-template', hasAppSecret: true, hasRefreshToken: true, configured: true, accessTokenExpiresAt: null } as ZaloOaSettings,
+  /** public link token → contract (FN-PUB-CONTR-01) */
+  // /c/demo opens in demo mode without sharing first (the in-memory db resets on reload)
+  shareLinks: { demo: { contractId: 'hd-102', expiresAt: '2099-12-31T00:00:00Z' } } as Record<string, { contractId: string; expiresAt: string }>,
+  acceptedAt: {} as Record<string, string>,
 
   revenueByMonth: [40, 70, 45, 90, 65, 85, 100, 50, 75, 60, 80, 95].map((m, i) => ({ month: i + 1, amount: m * 1_000_000 })),
 };

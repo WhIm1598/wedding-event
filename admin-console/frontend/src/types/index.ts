@@ -275,3 +275,51 @@ export interface CreateUserRequest {
 }
 
 export type UpdateUserRequest = Pick<UserAccount, 'name' | 'role' | 'isActive' | 'staffId'>;
+
+// --- Zalo sharing & public contract page (FN-ADM-CONTR-01 endpoint 3, FN-PUB-CONTR-01, FN-ADM-SET-02) ---
+export interface ShareResult {
+  /** masked, e.g. 0901***222 */
+  sentTo: string;
+  publicUrl: string;
+  shareExpiresAt: string;
+}
+
+export interface ZaloOaSettings {
+  appId: string | null;
+  templateId: string | null;
+  hasAppSecret: boolean;
+  hasRefreshToken: boolean;
+  configured: boolean;
+  accessTokenExpiresAt: string | null;
+}
+
+/** appSecret / refreshToken: empty keeps the stored value (they are never sent back) */
+export interface UpdateZaloOaRequest {
+  appId: string;
+  appSecret: string;
+  refreshToken: string;
+  templateId: string;
+}
+
+export interface Installment {
+  label: string;
+  percent: number;
+  amount: number;
+}
+
+export interface PublicContract {
+  contractNumber: string;
+  studio: { name: string; address: string; bankInfo: string };
+  customerName: string;
+  /** masked */
+  phone: string;
+  packageName: string;
+  features: string[];
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  installments: Installment[];
+  eventDate: string | null;
+  status: ContractStatus;
+  acceptedAt: string | null;
+}

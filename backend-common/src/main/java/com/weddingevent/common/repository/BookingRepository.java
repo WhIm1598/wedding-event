@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -36,6 +37,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     /** Has work on this contract already started? (a shoot can happen before the deposit arrives) */
     boolean existsByContractIdAndStatusIn(UUID contractId, Collection<BookingStatus> statuses);
+
+    /** The contract's first appointment, shown as the event date on the public contract page (FN-PUB-CONTR-01) */
+    Optional<Booking> findFirstByContractIdAndStatusNotOrderByEventDateAsc(UUID contractId, BookingStatus status);
 
     interface StaffBookingCount {
         UUID getStaffId();

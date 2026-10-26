@@ -3,6 +3,8 @@
 
 # FN-ADM-AUTH-01: at most 20 login requests per minute per IP (the backend also locks after 5 wrong passwords)
 limit_req_zone $binary_remote_addr zone=admin_login:10m rate=20r/m;
+# FN-PUB-CONTR-01: the customer's contract page, at most 30 requests per minute per IP
+limit_req_zone $binary_remote_addr zone=public_api:10m rate=30r/m;
 limit_req_status 429;
 
 server {
@@ -34,7 +36,8 @@ server {
 
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # This is the edge: replace, don't append, so a client can't plant the IP the backend records (contract acceptance)
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
     location = /api/v1/admin/auth/login {
@@ -47,6 +50,7 @@ server {
     }
 
     location /api/v1/public/ {
+        limit_req zone=public_api burst=10 nodelay;
         proxy_pass http://admin-backend:8082;
     }
 

@@ -50,6 +50,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/admin/auth/login", "/api/v1/admin/auth/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
+                        // The customer's contract page (FN-PUB-CONTR-01): the link token is the credential; rate-limited at the gateway
+                        .requestMatchers("/api/v1/public/contracts/**").permitAll()
                         // Also reachable with a temporary password, which grants no role (FN-ADM-AUTH-01 step 6)
                         .requestMatchers("/api/v1/admin/auth/me", "/api/v1/admin/auth/change-password",
                                 "/api/v1/admin/auth/logout-all").authenticated()
@@ -58,7 +60,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/dashboard/**", "/api/v1/admin/financials/**", "/api/v1/admin/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/staff/*/tasks", "/api/v1/admin/staff/tasks/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/packages", "/api/v1/admin/assets",
-                                "/api/v1/admin/staff", "/api/v1/admin/contracts", "/api/v1/admin/contracts/*/deliver").hasRole("ADMIN")
+                                "/api/v1/admin/staff", "/api/v1/admin/contracts", "/api/v1/admin/contracts/*/deliver",
+                                "/api/v1/admin/contracts/*/revoke-link").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/settings/zalo-oa").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/packages/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/admin/settings/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "STAFF")

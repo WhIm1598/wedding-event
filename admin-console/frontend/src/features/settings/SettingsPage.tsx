@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Building, FileText, KeyRound, Users, type LucideIcon } from 'lucide-react';
+import { Building, FileText, KeyRound, MessageCircle, Users, type LucideIcon } from 'lucide-react';
 import { errorMessage } from '@/api/http';
 import { settingsApi } from '@/api/system.api';
 import { useAsync } from '@/hooks/useAsync';
@@ -11,12 +11,14 @@ import { Field, Input, Textarea } from '@/components/ui/Form';
 import { Spinner } from '@/components/ui/States';
 import { cn } from '@/lib/cn';
 import { AccountsSection } from './AccountsSection';
+import { ZaloOaSection } from './ZaloOaSection';
 
-type Section = 'studio' | 'accounts' | 'contract' | 'roles';
+type Section = 'studio' | 'accounts' | 'zalo' | 'contract' | 'roles';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: LucideIcon }> = [
   { id: 'studio', label: 'Thông tin Studio', icon: Building },
   { id: 'accounts', label: 'Tài Khoản', icon: KeyRound },
+  { id: 'zalo', label: 'Zalo OA', icon: MessageCircle },
   { id: 'contract', label: 'Mẫu Hợp Đồng', icon: FileText },
   { id: 'roles', label: 'Phân Quyền', icon: Users },
 ];
@@ -50,6 +52,7 @@ export function SettingsPage() {
         <Card className="p-6 md:col-span-2 space-y-5">
           {section === 'studio' && <StudioForm />}
           {section === 'accounts' && <AccountsSection />}
+          {section === 'zalo' && <ZaloOaSection />}
           {section === 'contract' && <ContractTemplateInfo />}
           {section === 'roles' && <RolesMatrix />}
         </Card>

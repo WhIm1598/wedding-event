@@ -54,7 +54,9 @@ public class SettingsController {
     @PreAuthorize(ADMIN)
     @Transactional
     public ApiResponse<StudioSettingsDto> update(@Valid @RequestBody StudioSettingsDto req) {
-        StudioSettings s = load();
+        // Locked: Hibernate writes every column, which would undo a Zalo OA refresh token rotated meanwhile
+        StudioSettings s = settings.findByIdForUpdate(StudioSettings.SINGLETON_ID)
+                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", StudioSettings.SINGLETON_ID));
         s.setName(req.name().trim());
         s.setAddress(req.address().trim());
         s.setTaxCode(req.taxCode().trim());

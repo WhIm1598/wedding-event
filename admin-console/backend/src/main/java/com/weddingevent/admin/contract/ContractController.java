@@ -5,6 +5,8 @@ import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 import com.weddingevent.admin.contract.ContractService.ContractDto;
 import com.weddingevent.admin.contract.ContractService.CreateContractRequest;
 import com.weddingevent.admin.contract.ContractService.Document;
+import com.weddingevent.admin.contract.ContractShareService.ShareResultDto;
+import com.weddingevent.admin.contract.ContractShareService.ShareZaloRequest;
 import com.weddingevent.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -29,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ContractController {
 
     private final ContractService service;
+    private final ContractShareService sharing;
 
-    public ContractController(ContractService service) {
+    public ContractController(ContractService service, ContractShareService sharing) {
         this.service = service;
+        this.sharing = sharing;
     }
 
     @GetMapping
@@ -51,6 +55,20 @@ public class ContractController {
     @PreAuthorize(ADMIN)
     public ApiResponse<ContractDto> deliver(@PathVariable UUID id) {
         return ApiResponse.ok(service.deliver(id), "Đã xác nhận bàn giao");
+    }
+
+    /** FN-ADM-CONTR-01 endpoint 3: ZNS with the public contract link, through the studio's Zalo OA */
+    @PostMapping("/{id}/share-zalo")
+    public ApiResponse<ShareResultDto> shareZalo(@PathVariable UUID id, @Valid @RequestBody(required = false) ShareZaloRequest req) {
+        return ApiResponse.ok(sharing.shareZalo(id, req == null ? null : req.phoneNumber()), "Đã gửi hợp đồng qua Zalo");
+    }
+
+    /** FN-PUB-CONTR-01 */
+    @PostMapping("/{id}/revoke-link")
+    @PreAuthorize(ADMIN)
+    public ApiResponse<Void> revokeLink(@PathVariable UUID id) {
+        sharing.revokeLink(id);
+        return ApiResponse.ok(null, "Đã thu hồi link hợp đồng");
     }
 
     @GetMapping(value = "/{id}/preview-html", produces = MediaType.TEXT_HTML_VALUE)

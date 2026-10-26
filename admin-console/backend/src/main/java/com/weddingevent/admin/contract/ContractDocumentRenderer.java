@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 
@@ -24,18 +26,25 @@ public class ContractDocumentRenderer {
     static final String FONT_RESOURCE = "/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf";
     private static final String FONT_FAMILY = "Contract Sans";
 
+    public record Installment(String label, int percent, BigDecimal amount) {}
+
     private static final Object[][] INSTALLMENTS = {
         {"Đợt 1: Đặt cọc khi ký hợp đồng", 30},
         {"Đợt 2: Thanh toán vào ngày chụp / ngày cưới", 50},
         {"Đợt 3: Thanh toán khi nhận album & ảnh hoàn thiện", 20},
     };
 
+    /** shortcut: fixed 30/50/20 split of the total, until contract_installments (FN-ADM-FIN-02) exists */
+    public static List<Installment> installments(BigDecimal total) {
+        return Arrays.stream(INSTALLMENTS).map(row -> new Installment((String) row[0], (int) row[1],
+                total.multiply(BigDecimal.valueOf((int) row[1])).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP))).toList();
+    }
+
     public String html(Contract c, StudioSettings studio) {
         StringBuilder schedule = new StringBuilder();
-        for (Object[] row : INSTALLMENTS) {
-            BigDecimal part = c.getTotalAmount().multiply(BigDecimal.valueOf((int) row[1])).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
-            schedule.append("<tr><td>").append(esc((String) row[0])).append(" (").append(row[1]).append("%)</td><td class=\"r\">")
-                    .append(VndFormatter.vnd(part)).append("</td></tr>");
+        for (Installment i : installments(c.getTotalAmount())) {
+            schedule.append("<tr><td>").append(esc(i.label())).append(" (").append(i.percent()).append("%)</td><td class=\"r\">")
+                    .append(VndFormatter.vnd(i.amount())).append("</td></tr>");
         }
         // Clause 3: scope of work & deliverables = the package's benefit list
         StringBuilder deliverables = new StringBuilder();

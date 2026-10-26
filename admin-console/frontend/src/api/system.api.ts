@@ -1,7 +1,7 @@
 import { env } from '@/config/env';
 import { ApiError, http } from './http';
 import { db, delay } from './mock/db';
-import type { AppNotification, SearchResult, StudioSettings } from '@/types';
+import type { AppNotification, SearchResult, StudioSettings, UpdateZaloOaRequest, ZaloOaSettings } from '@/types';
 
 export const notificationsApi = {
   /** GET /admin/notifications */
@@ -52,5 +52,28 @@ export const settingsApi = {
     }
     db.settings = { ...settings, zaloPhone: settings.zaloPhone || null };
     return delay(settings);
+  },
+
+  /** GET /admin/settings/zalo-oa (FN-ADM-SET-02) — secrets are never returned */
+  getZaloOa(): Promise<ZaloOaSettings> {
+    if (!env.useMock) return http.get('/admin/settings/zalo-oa');
+    return delay(db.zaloOa);
+  },
+
+  /** PUT /admin/settings/zalo-oa — empty appSecret / refreshToken keep the stored ones */
+  updateZaloOa(req: UpdateZaloOaRequest): Promise<ZaloOaSettings> {
+    if (!env.useMock) return http.put('/admin/settings/zalo-oa', req);
+    if (!req.appId.trim() || !req.templateId.trim()) throw new ApiError(400, 'BAD_REQUEST', 'Cần App ID và mã mẫu ZNS');
+    const hasAppSecret = db.zaloOa.hasAppSecret || !!req.appSecret.trim();
+    const hasRefreshToken = db.zaloOa.hasRefreshToken || !!req.refreshToken.trim();
+    db.zaloOa = {
+      appId: req.appId.trim(),
+      templateId: req.templateId.trim(),
+      hasAppSecret,
+      hasRefreshToken,
+      configured: hasAppSecret && hasRefreshToken,
+      accessTokenExpiresAt: null,
+    };
+    return delay(db.zaloOa);
   },
 };
