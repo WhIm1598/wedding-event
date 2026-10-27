@@ -1,5 +1,7 @@
 # Deploy production — Lumière Studios web admin
 
+Lần đầu deploy, chưa quen Linux/Docker: đọc [hướng dẫn từng bước](../docs/setup/deploy-linux.md) (từ VPS trống tới kiểm thử).
+
 Một server Linux (Ubuntu 22.04+, 2 vCPU / 4 GB RAM là đủ), Docker Engine + Docker Compose v2, một tên miền trỏ về IP
 server. Stack gồm `postgres`, `admin-backend`, `admin-frontend`, `gateway` (nginx, HTTPS), `certbot` (gia hạn chứng
 chỉ) và `backup` (pg_dump hằng ngày). Chỉ `gateway` mở cổng 80/443; PostgreSQL không ra Internet.
