@@ -62,7 +62,7 @@ public class ZaloOaTokens {
         settings.findByIdForUpdate(CurrentStudio.require()).ifPresent(s -> s.setZaloOaAccessTokenExpiresAt(null));
     }
 
-    static AppException notConfigured() {
+    public static AppException notConfigured() {
         return AppException.badRequest("ZALO_OA_NOT_CONFIGURED", "Studio chưa kết nối Zalo OA (Cài đặt → Zalo OA)");
     }
 }

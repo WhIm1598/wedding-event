@@ -176,6 +176,29 @@ class ContractShareApiTest extends IntegrationTest {
     }
 
     @Test
+    void aRefusedResendKeepsThePreviousLinkWorking() throws Exception {
+        String id = createContract(adminToken(), uniquePhone(), 1_000_000, 0);
+        String token = tokenOf(sharedUrl(id));
+
+        ZALO.onZns(r -> "{\"error\":-108,\"message\":\"Phone number is invalid\"}");
+        share(adminToken(), id, null).andExpect(status().isBadGateway());
+        publicGet(token).andExpect(status().isOk());
+    }
+
+    @Test
+    void aLostAnswerKeepsTheNewLinkBecauseTheMessageMayHaveArrived() throws Exception {
+        String id = createContract(adminToken(), uniquePhone(), 1_000_000, 0);
+        String old = tokenOf(sharedUrl(id));
+
+        ZALO.onZns(r -> null);
+        share(adminToken(), id, null).andExpect(status().isBadGateway()).andExpect(jsonPath("$.code").value("ZALO_SEND_FAILED"));
+
+        String sentUrl = read(ZALO.requestsTo("/zns").getLast().body(), "$.template_data.contract_url");
+        publicGet(tokenOf(sentUrl)).andExpect(status().isOk());
+        publicGet(old).andExpect(status().isGone());
+    }
+
+    @Test
     void aRejectedAccessTokenIsRefreshedOnTheNextShare() throws Exception {
         ZALO.onZns(r -> "{\"error\":-124,\"message\":\"Access token is invalid\"}");
         String id = createContract(adminToken(), uniquePhone(), 1_000_000, 0);

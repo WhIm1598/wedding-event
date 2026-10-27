@@ -2220,7 +2220,8 @@ paths:
       description: |
         Issues a new 30-day public link (the previous link of the contract stops working) and sends the studio's
         approved ZNS template from its own Zalo OA (FN-ADM-SET-02) with `template_data`
-        `{customer_name, contract_number, total_amount, contract_url}`. Nothing is saved when Zalo refuses the message.
+        `{customer_name, contract_number, total_amount, contract_url}`. A definite refusal keeps the previous link; when Zalo's
+        answer is lost (timeout, HTTP error) the new link is kept, because the message may have arrived.
         The OA access token is refreshed in its own transaction, so the rotated single-use refresh token is kept.
       x-spec-function: FN-ADM-CONTR-01
       x-roles: [ROLE_ADMIN, ROLE_STAFF]

@@ -124,6 +124,14 @@ class UserAccountApiTest extends IntegrationTest {
     }
 
     @Test
+    void emailsAreStoredInLowerCase() throws Exception {
+        String email = uniqueEmail();
+        String created = createdBody(email.toUpperCase(), "ROLE_STAFF", null);
+        assertThat(read(created, "$.data.user.email")).isEqualTo(email);
+        loginBody(email, read(created, "$.data.temporaryPassword"));
+    }
+
+    @Test
     void duplicateEmailIsRejectedCaseInsensitively() throws Exception {
         create(adminToken(), ADMIN_EMAIL.toUpperCase(), "ROLE_ADMIN", null)
                 .andExpect(status().isConflict())

@@ -19,6 +19,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -89,7 +90,8 @@ public class UserAccountService {
     @Transactional
     public CreatedAccountDto createIn(UUID studioId, CreateUserRequest req) {
         requireConsoleRole(req.role());
-        String email = req.email().trim();
+        // Lower case, like AdminBootstrap: the unique index is case-sensitive while login compares lower(email)
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
         if (users.existsByEmailIgnoreCase(email)) {
             throw AppException.conflict("EMAIL_EXISTS", "Email đã được dùng cho một tài khoản khác");
         }
