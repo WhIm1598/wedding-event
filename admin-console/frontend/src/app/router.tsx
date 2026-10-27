@@ -13,6 +13,7 @@ import { StaffPage } from '@/features/staff/StaffPage';
 import { FinancialsPage } from '@/features/financials/FinancialsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PublicContractPage } from '@/features/public/PublicContractPage';
+import { PlatformPage } from '@/features/platform/PlatformPage';
 import type { Role } from '@/types';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -20,6 +21,16 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
   if (initializing) return <Spinner />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  // The platform admin has no studio: only the platform screen (ADR-0001)
+  if (user.role === 'ROLE_PLATFORM_ADMIN') return <Navigate to="/platform" replace />;
+  return <>{children}</>;
+}
+
+function RequirePlatformAdmin({ children }: { children: ReactNode }) {
+  const { user, initializing } = useAuth();
+  if (initializing) return <Spinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'ROLE_PLATFORM_ADMIN') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -35,6 +46,14 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   // The customer's contract page from the Zalo link (FN-PUB-CONTR-01): public, outside the admin layout
   { path: '/c/:token', element: <PublicContractPage /> },
+  {
+    path: '/platform',
+    element: (
+      <RequirePlatformAdmin>
+        <PlatformPage />
+      </RequirePlatformAdmin>
+    ),
+  },
   {
     path: '/',
     element: (

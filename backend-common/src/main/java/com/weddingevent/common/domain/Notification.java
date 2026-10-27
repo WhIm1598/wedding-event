@@ -32,6 +32,10 @@ public class Notification extends BaseEntity {
     @Column(name = "recipient_user_id")
     private UUID recipientUserId;
 
+    /** Studio feed owner (ADR-0001); null for a mobile user's inbox. Filtered by hand: the table is shared */
+    @Column(name = "studio_id")
+    private UUID studioId;
+
     /** Mobile icon hint; null for studio notifications */
     @Enumerated(EnumType.STRING)
     private NotificationKind kind;

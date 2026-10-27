@@ -20,6 +20,7 @@
 | 1.1.5 | Thông báo đẩy qua Firebase Cloud Messaging: đăng ký thiết bị (FN-NOTI-02, bảng `device_tokens`), mọi thông báo FN-NOTI-01 đồng thời được push, FN-PLAN-05 gửi sự kiện `plan_updated` cho bạn đời. Hướng dẫn tạo project Google Cloud/Firebase: `docs/setup/google-cloud-firebase.md`. |
 | 1.1.6 | FN-ADM-USER-01 quản lý tài khoản đăng nhập ✅ (mã lỗi mới `STAFF_ALREADY_LINKED`, PATCH gửi đủ trường, migration V16: `must_change_password`, `last_login_at`, mỗi nhân sự tối đa một tài khoản). FN-ADM-AUTH-01 bước 5–6 (`last_login_at`, mật khẩu tạm bắt đổi → `403 PASSWORD_CHANGE_REQUIRED`) và FN-ADM-AUTH-04 ✅. Nhật ký thao tác cho tài khoản chờ §3.2. |
 | 1.1.7 | Gửi hợp đồng qua Zalo thật: FN-ADM-CONTR-01 endpoint 3 ✅ qua Zalo OA riêng của từng studio (FN-ADM-SET-02 mới), FN-PUB-CONTR-01 trang hợp đồng công khai (xem, PDF, đồng ý; VietQR chưa làm), migration V17, mã lỗi `ZALO_OA_NOT_CONFIGURED`, `ZALO_OA_AUTH_FAILED`, `ZALO_SEND_FAILED`. Chia sẻ lại thay link. Gateway giới hạn `/api/v1/public/` 30 request/phút/IP. |
+| 1.2.0 | **Nhiều studio** (ADR-0001): một DB chung, `studio_id` trên dữ liệu studio, Hibernate `@TenantId` lọc tự động; vai trò `ROLE_PLATFORM_ADMIN` và Module 5B (FN-PLT-01..03: tạo, tạm ngưng/gia hạn studio, thêm quản lý); mã lỗi `STUDIO_SUSPENDED`; JWT claim `studioId`; mã `NV-/HD-/TRX-` đánh số riêng từng studio (`studio_counters`, `HD-%03d`); `studio_settings` theo studio; tài khoản đầu tiên của DB mới là platform admin; danh mục mobile gồm gói của mọi studio đang hoạt động. Migration V18 gán toàn bộ dữ liệu cũ cho studio đầu tiên. |
 
 ---
 
@@ -29,7 +30,7 @@
 * Tiền tệ: `VND`, số nguyên không có phần thập phân (`NUMERIC(15,0)` trong DB, `BigDecimal` trên Backend, `number` trên Frontend). Khi chia tỉ lệ phần trăm, làm tròn `HALF_UP` về đồng; phần chênh lệch làm tròn dồn vào đợt/hạng mục cuối cùng để tổng luôn khớp.
 * Ngày giờ: ISO 8601 (`YYYY-MM-DDTHH:mm:ssZ`), Ngày: `YYYY-MM-DD`, Giờ trong ngày: `HH:mm` (24h).
 * Múi giờ nghiệp vụ: **`Asia/Ho_Chi_Minh`** — "hôm nay", "tháng này", hạn thanh toán, job nhắc nợ đều tính theo múi giờ này.
-* ID: `UUIDv4` cho toàn bộ bảng. Mã nghiệp vụ hiển thị sinh từ PostgreSQL sequence: Nhân sự `NV-001`, Hợp đồng `HD-102`, Giao dịch `TRX-001`, Trang phục/Thiết bị nhập tay dạng `^[A-Z]{2,5}-\d{3,}$` (ví dụ `VAY-001`).
+* ID: `UUIDv4` cho toàn bộ bảng. Mã nghiệp vụ hiển thị **đánh số riêng từng studio** (bảng `studio_counters`, ADR-0001; mỗi studio bắt đầu từ `001`): Nhân sự `NV-001`, Hợp đồng `HD-001`, Giao dịch `TRX-001`; unique theo `(studio_id, mã)`, Trang phục/Thiết bị nhập tay dạng `^[A-Z]{2,5}-\d{3,}$` (ví dụ `VAY-001`).
 * Số điện thoại Việt Nam: `^(03|05|07|08|09)\d{8}$`.
 
 ### 1.2. Quy chuẩn phản hồi RESTful API
@@ -71,6 +72,7 @@
 | `EMAIL_EXISTS` | 409 | Email tài khoản đã tồn tại. |
 | `LAST_ADMIN` | 409 | Không thể hạ quyền/khóa quản lý cuối cùng. |
 | `CANNOT_MODIFY_SELF` | 409 | Không tự khóa / tự hạ quyền chính mình. |
+| `STUDIO_SUSPENDED` | 403 | Studio của tài khoản đang tạm ngưng hoặc đã quá hạn thuê bao (ADR-0001): đăng nhập và mọi API của studio bị từ chối. |
 | `STAFF_ALREADY_LINKED` | 409 | Hồ sơ nhân sự đã gắn với một tài khoản đăng nhập khác (FN-ADM-USER-01). |
 | `STAFF_NOT_FOUND` | 400 | Có nhân sự trong `staffIds` không tồn tại. |
 | `STAFF_SCHEDULE_CONFLICT` | 409 | Nhân sự trùng lịch (kèm tên). |
@@ -140,6 +142,8 @@ Quyền được thực thi ở **2 lớp**: (1) theo URL trong `SecurityFilterC
 | Cài đặt studio: xem | ✔ | ✔ |
 | Cài đặt studio: sửa; Quản lý tài khoản; Nhật ký hệ thống | ✔ | ✖ |
 | Đổi mật khẩu của mình | ✔ | ✔ |
+
+*(v1.2.0)* Mọi quyền trên chỉ trong **studio của người gọi** (ADR-0001). Vai trò thứ ba `ROLE_PLATFORM_ADMIN` (chủ nền tảng) chỉ dùng Module 5B `/api/v1/platform/**` (tạo, tạm ngưng/gia hạn studio, thêm quản lý) cùng `auth/me`, đổi mật khẩu, đăng xuất; không đọc được dữ liệu của studio nào.
 
 ### 1.6. Vòng đời trạng thái (State Machines) *(v1.1)*
 Mọi chuyển trạng thái ngoài các mũi tên dưới đây trả `409 INVALID_STATUS_TRANSITION`.
@@ -512,7 +516,8 @@ stateDiagram-v2
 * **Endpoint:** `GET /api/v1/client/services?category={photo|decor|restaurant|dress}&keyword={text}&page=0&size=10`
 * **Output:** Danh sách các gói dịch vụ có phân trang (§1.2), chỉ gồm gói `is_active = true`. Mỗi phần tử: `{ id, name, providerId, providerName, price, rating, reviewCount, address, category, thumbnailUrl, description }`.
   * *(v1.1.3)* Thêm `discountPrice` (giá sau giảm, `null` nếu không giảm — app hiển thị giá gốc gạch ngang) và `zaloUrl` = `https://zalo.me/{số}`: gói của Studio lấy `studio_settings.zalo_phone`, gói của Vendor lấy số điện thoại tài khoản Vendor (`users.phone`, sửa ở FN-AUTH-04); `null` khi chưa có số.
-  * *(v1.1.2)* `providerId` = id **tài khoản người dùng** của Vendor (dùng làm `recipientId` của FN-MSG-01); `null` với gói của Studio (`vendor_id IS NULL`) — khi đó `providerName`/`address` lấy từ `studio_settings`, `rating = 0`, `reviewCount = 0`. `category` chữ thường; giá trị khác `photo|decor|restaurant|dress` → `400`. `keyword` khớp không phân biệt hoa thường với tên gói hoặc tên nhà cung cấp (`%`, `_` là ký tự thường). `size` 1–100, mặc định 10.
+  * *(v1.2.0, nhiều studio — ADR-0001)* Danh mục gồm gói của **mọi studio** đang hoạt động và mọi Vendor. Gói của một studio lấy `providerName`, `address`, `zaloUrl` từ `studio_settings` **của chính studio đó**; `keyword` khớp cả tên studio. Gói của studio tạm ngưng hoặc quá hạn thuê bao không xuất hiện ở FN-SVC-01 và trả `404` ở FN-SVC-02.
+  * *(v1.1.2)* `providerId` = id **tài khoản người dùng** của Vendor (dùng làm `recipientId` của FN-MSG-01); `null` với gói của Studio (`vendor_id IS NULL`, có `studio_id`) — khi đó `providerName`/`address` lấy từ `studio_settings`, `rating = 0`, `reviewCount = 0`. `category` chữ thường; giá trị khác `photo|decor|restaurant|dress` → `400`. `keyword` khớp không phân biệt hoa thường với tên gói hoặc tên nhà cung cấp (`%`, `_` là ký tự thường). `size` 1–100, mặc định 10.
 
 #### `FN-SVC-02: Chi tiết dịch vụ`
 * **Endpoint:** `GET /api/v1/client/services/{id}` — cùng schema phần tử của FN-SVC-01 (mở rộng sau: thư viện ảnh, quyền lợi gói, đánh giá). Gói không tồn tại hoặc đã tắt → `404 NOT_FOUND`.
@@ -632,7 +637,9 @@ flowchart LR
 
 ## PHẦN B: ADMIN & STUDIO MANAGEMENT FUNCTIONS (LUMIÈRE STUDIOS)
 
-> Tất cả endpoint Phần B có tiền tố `/api/v1/admin` (trừ §FN-PUB-CONTR-01) và yêu cầu header `Authorization: Bearer <accessToken>` của `ROLE_ADMIN` hoặc `ROLE_STAFF`. Quyền chi tiết theo §1.5.
+> Tất cả endpoint Phần B có tiền tố `/api/v1/admin` (trừ §FN-PUB-CONTR-01 và Module 5B `/api/v1/platform`) và yêu cầu header `Authorization: Bearer <accessToken>` của `ROLE_ADMIN` hoặc `ROLE_STAFF`. Quyền chi tiết theo §1.5.
+>
+> **Nhiều studio (v1.2.0, ADR-0001):** một hệ thống, một DB, nhiều studio. Mỗi tài khoản `ROLE_ADMIN`/`ROLE_STAFF` thuộc đúng một studio (`users.studio_id`) và **mọi** endpoint `/api/v1/admin/**` chỉ đọc/ghi dữ liệu của studio đó: lịch hẹn, hợp đồng, khách hàng, kho, nhân sự, sổ quỹ (lọc tự động bằng Hibernate `@TenantId` trên cột `studio_id`), gói dịch vụ, thông báo, tài khoản, cài đặt và Zalo OA (lọc theo `studio_id`). Bản ghi của studio khác được coi như không tồn tại → `404` hoặc danh sách rỗng, không bao giờ `403`. Studio tạm ngưng/quá hạn → `403 STUDIO_SUSPENDED`.
 
 ### MODULE 5A: XÁC THỰC & TÀI KHOẢN QUẢN TRỊ (ADMIN AUTH & ACCOUNTS)
 
@@ -641,9 +648,9 @@ flowchart LR
 * **Input:** `{ "email": "admin@lumiere.vn", "password": "Admin@123" }` — `email` bắt buộc, đúng định dạng; `password` 6–100 ký tự.
 * **Business Logic:**
   1. Tìm user theo email (không phân biệt hoa thường). Không có, sai mật khẩu, **hoặc** vai trò không phải `ROLE_ADMIN`/`ROLE_STAFF` → `401 INVALID_CREDENTIALS` (cùng thông điệp).
-  2. `is_active = false` → `403 ACCOUNT_LOCKED`.
+  2. `is_active = false` → `403 ACCOUNT_LOCKED`. *(v1.2.0)* Studio của tài khoản tạm ngưng hoặc quá hạn → `403 STUDIO_SUSPENDED`; mỗi request cũng kiểm tra lại (studio bị khóa giữa phiên → `403 STUDIO_SUSPENDED`, làm mới token → `401`). Vai trò `ROLE_PLATFORM_ADMIN` cũng đăng nhập ở đây.
   3. Chống dò mật khẩu: sai 5 lần liên tiếp → khóa đăng nhập 15 phút (`locked_until`), trả `429 TOO_MANY_ATTEMPTS`; đăng nhập đúng reset `failed_login_count`. Giới hạn thêm 20 request/phút/IP ở gateway.
-  4. Sinh `accessToken` (JWT HS256, 2 giờ, issuer `app.jwt.issuer`, claim `sub`=userId, `email`, `name`, `roles` (mảng `ROLE_*`), `staffId` (khi tài khoản gắn nhân sự), `typ=access`) và `refreshToken` (30 ngày, cùng claim, `typ=refresh`; *(v1.1)* thêm claim `jti`). Resource server chỉ chấp nhận token `typ=access`.
+  4. Sinh `accessToken` (JWT HS256, 2 giờ, issuer `app.jwt.issuer`, claim `sub`=userId, `email`, `name`, `roles` (mảng `ROLE_*`), `staffId` (khi tài khoản gắn nhân sự), `studioId` (*v1.2.0*, tài khoản của studio; không có với `ROLE_PLATFORM_ADMIN`), `typ=access`) và `refreshToken` (30 ngày, cùng claim, `typ=refresh`; *(v1.1)* thêm claim `jti`). Resource server chỉ chấp nhận token `typ=access`.
   5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). Cập nhật `last_login_at`.
   6. Nếu `must_change_password = true` (mật khẩu tạm của FN-ADM-USER-01): vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài `change-password`/`me`/`logout`/`logout-all` trả `403 PASSWORD_CHANGE_REQUIRED`. Kiểm tra theo DB ở mỗi request, nên đặt lại mật khẩu cũng chặn ngay các access token đang dùng.
 * **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role", "mustChangePassword" } }`. *(v1.1)* `user` thêm `staffId`.
@@ -661,7 +668,7 @@ flowchart LR
 * `POST /api/v1/admin/auth/logout-all` — thu hồi mọi refresh token của chính mình.
 * `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi; đặt `must_change_password = false`. Web: tài khoản có `mustChangePassword` chỉ thấy hộp thoại đổi mật khẩu (hoặc đăng xuất) cho tới khi đổi xong.
 * Access token còn hiệu lực tối đa 2 giờ sau khi thu hồi (chấp nhận được); khóa tài khoản có hiệu lực ngay vì mọi request đọc lại tài khoản trong DB: `is_active = false`, hoặc vai trò / nhân sự gắn khác với token → `401` (frontend làm mới token để nhận vai trò mới).
-* **Tài khoản admin đầu tiên** (DB mới): backend tạo một `ROLE_ADMIN` từ biến môi trường `ADMIN_EMAIL` / `ADMIN_PASSWORD` khi chưa có admin nào; sau đó bỏ qua hai biến này.
+* **Tài khoản đầu tiên** (DB mới): backend tạo một `ROLE_PLATFORM_ADMIN` (*v1.2.0*; trước đây là `ROLE_ADMIN`) từ biến môi trường `ADMIN_EMAIL` / `ADMIN_PASSWORD` khi chưa có platform admin nào; sau đó bỏ qua hai biến này. Platform admin tạo studio và quản lý đầu tiên của studio (Module 5B). Quên mật khẩu platform admin: thêm `ADMIN_RESET_PASSWORD=true` cùng `ADMIN_EMAIL` (của platform admin hiện có) và `ADMIN_PASSWORD` mới, khởi động lại — mật khẩu bị ghi đè, tài khoản mở khoá, mọi refresh token bị thu hồi; email không phải platform admin thì backend dừng khởi động.
 
 #### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` ✅
 * **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Tài khoản*.
@@ -670,7 +677,25 @@ flowchart LR
   * `POST /api/v1/admin/users` — `{ "email", "name", "role": "ROLE_STAFF|ROLE_ADMIN", "staffId": "uuid|null" }`. Sinh mật khẩu tạm 12 ký tự ngẫu nhiên (có chữ và số, bỏ ký tự dễ nhầm `0/O/1/l/I`), trả về **một lần**: `201 { user: <item>, temporaryPassword }`, `must_change_password = true`. Email trùng (không phân biệt hoa thường, kể cả tài khoản mobile) → `409 EMAIL_EXISTS`. `role` khác hai giá trị trên → `400`. `ROLE_STAFF` nên gắn `staffId` (để lọc lịch "của mình"); `staffId` không tồn tại → `404`; mỗi nhân sự gắn tối đa 1 tài khoản → `409 STAFF_ALREADY_LINKED`.
   * `PATCH /api/v1/admin/users/{id}` — `{ "name", "role", "isActive", "staffId" }`, **gửi đủ cả bốn trường** (`staffId: null` = bỏ gắn nhân sự). Email không đổi được. Khóa tài khoản → thu hồi mọi refresh token. Trả item.
   * `POST /api/v1/admin/users/{id}/reset-password` — sinh mật khẩu tạm mới như trên (`{ user, temporaryPassword }`), bật lại `must_change_password`, mở khóa đăng nhập sai và thu hồi mọi refresh token.
-* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). *(v1.2, chưa làm — cùng §3.2)* Mọi thao tác ghi nhật ký.
+* *(v1.2.0)* Chỉ thấy và sửa tài khoản **của studio mình**; tài khoản mới thuộc studio của người tạo. Email vẫn duy nhất trên toàn hệ thống (trùng với tài khoản của studio khác hay tài khoản mobile → `409 EMAIL_EXISTS`).
+* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Mỗi studio luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). *(v1.2, chưa làm — cùng §3.2)* Mọi thao tác ghi nhật ký.
+
+---
+
+### MODULE 5B: QUẢN TRỊ NỀN TẢNG — NHIỀU STUDIO (PLATFORM) *(v1.2.0, ADR-0001)*
+
+> Endpoint tiền tố `/api/v1/platform`, chỉ `ROLE_PLATFORM_ADMIN` (chủ sản phẩm; không thuộc studio nào, không dùng được `/api/v1/admin/**` ngoài `auth/me`, `change-password`, `logout`, `logout-all`). Web: màn *Quản trị nền tảng* (`/platform`), tài khoản này chỉ thấy màn đó. Bảng `studios` (`id`, `status` `ACTIVE|SUSPENDED`, `subscription_expires_at`); hồ sơ studio ở `studio_settings` (khóa `studio_id`). Thu tiền thuê bao làm ngoài hệ thống.
+
+#### `FN-PLT-01: Danh sách & tạo studio` ✅
+* `GET /api/v1/platform/studios` → `[{ id, name, status, subscriptionExpiresAt, usable, adminCount, createdAt }]`, cũ nhất trước. `usable` = `status = ACTIVE` và (`subscriptionExpiresAt` null hoặc ≥ hôm nay); `name` từ `studio_settings`.
+* `POST /api/v1/platform/studios` — `{ "name" (1–200), "subscriptionExpiresAt": "YYYY-MM-DD|null", "adminEmail", "adminName" (1–100) }` → `201 { studio, admin: { user, temporaryPassword } }`. Trong một transaction: tạo studio `ACTIVE`, dòng `studio_settings` (các trường còn lại = "Chưa cập nhật", quản lý tự điền ở FN-ADM-SET-01) và tài khoản `ROLE_ADMIN` đầu tiên với mật khẩu tạm như FN-ADM-USER-01. Email đã dùng → `409 EMAIL_EXISTS` (không tạo gì).
+
+#### `FN-PLT-02: Tạm ngưng / kích hoạt / gia hạn studio` ✅
+* `PATCH /api/v1/platform/studios/{id}` — `{ "status": "ACTIVE|SUSPENDED", "subscriptionExpiresAt": "YYYY-MM-DD|null" }` (gửi đủ hai trường; `null` = không giới hạn). Trả phần tử như FN-PLT-01. Studio không tồn tại → `404`.
+* Studio không `usable` → người của studio nhận `403 STUDIO_SUSPENDED` (FN-ADM-AUTH-01); gói của studio ẩn khỏi danh mục mobile (FN-SVC-01). Dữ liệu được giữ nguyên.
+
+#### `FN-PLT-03: Thêm quản lý cho studio` ✅
+* `POST /api/v1/platform/studios/{id}/admins` — `{ "email", "name" }` → `201 { user, temporaryPassword }` (`ROLE_ADMIN` của studio đó, phải đổi mật khẩu khi đăng nhập lần đầu). Dùng khi studio mất quyền truy cập quản lý duy nhất. `404` nếu không có studio.
 
 ---
 
@@ -1026,11 +1051,12 @@ flowchart LR
 * *(v1.1)* Thêm `kind`: `"booking"` (tên khách), `"asset"` (mã/tên trang phục), `"staff"` (tên nhân sự); thêm `url` là route frontend để điều hướng: `lead → /customers?id={id}` (mở slide-over), `contract → /contracts?id={id}`, `booking → /bookings?date={date}&id={id}`, `asset → /assets?id={id}`, `staff → /staff?id={id}`. Các trang đích phải đọc query `id` để tự mở chi tiết. Kết quả tôn trọng quyền xem (§1.5).
 
 #### `FN-ADM-SET-01: Cài đặt studio` ⚠️
+* *(v1.2.0)* Mỗi studio một dòng `studio_settings` (khóa `studio_id`); endpoint đọc/sửa dòng của studio người gọi.
 * `GET /api/v1/admin/settings/studio` (mọi vai trò), `PUT /api/v1/admin/settings/studio` (`ROLE_ADMIN`).
 * Trường hiện có: `name ≤200`, `address ≤255`, `taxCode ≤20`, `legalRepresentative ≤100`, `bankInfo ≤500` (bắt buộc cả 5).
 * *(v1.1)* Bổ sung: `bankAccount: { bankBin, accountNumber, accountName }` (có cấu trúc để sinh VietQR), `paymentSchedule: [30, 50, 20]`, `deliveryDays: 30`, `bookingSlotMinutes: null`, `zaloPaymentReminder: false`, `requireFullPaymentBeforeDelivery: false`, `contractTermsTemplate` (đoạn điều khoản chung in cuối hợp đồng, ≤ 10.000 ký tự).
 * *(v1.1.3)* `zaloPhone` (tùy chọn, SĐT §1.1): số Zalo để cặp đôi trên app liên hệ Studio (FN-SVC-02).
-* Bảng `studio_settings` chỉ có 1 dòng (`id = 1`). Lưu hồ sơ studio khóa dòng này (cùng khóa với việc làm mới token Zalo OA, để không ghi đè refresh token vừa được thay).
+* ~~Bảng `studio_settings` chỉ có 1 dòng (`id = 1`)~~ *(thay bởi một dòng mỗi studio, v1.2.0)*. Lưu hồ sơ studio khóa dòng của studio (cùng khóa với việc làm mới token Zalo OA, để không ghi đè refresh token vừa được thay).
 
 #### `FN-ADM-SET-02: Kết nối Zalo OA của studio` ✅
 * **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Zalo OA*. Hướng dẫn đăng ký OA, mẫu ZNS và lấy refresh token: `docs/setup/zalo-oa-zns.md`.

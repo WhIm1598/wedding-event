@@ -49,7 +49,7 @@ graph TB
     AdminWeb -->|HTTPS| NginxProxy
 
     NginxProxy -->|/api/v1/auth/**, /api/v1/users/**, /api/v1/client/**, /api/v1/messages/**, /ws/**| ClientBE
-    NginxProxy -->|/api/v1/admin/** (gồm /admin/auth/**), /api/v1/public/**| AdminBE
+    NginxProxy -->|/api/v1/admin/** (gồm /admin/auth/**), /api/v1/platform/**, /api/v1/public/**| AdminBE
 
     ClientBE -.->|Compile & Runtime Dependency| CommonCore
     AdminBE -.->|Compile & Runtime Dependency| CommonCore
@@ -522,6 +522,14 @@ http {
         # 3b. Chống dò mật khẩu đăng nhập admin
         location = /api/v1/admin/auth/login {
             limit_req zone=login burst=5 nodelay;
+            proxy_pass http://admin_backend_upstream;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # 3b'. API quản trị nền tảng (tạo / tạm ngưng / gia hạn studio, ADR-0001)
+        location /api/v1/platform/ {
             proxy_pass http://admin_backend_upstream;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

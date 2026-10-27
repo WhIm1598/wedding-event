@@ -11,13 +11,13 @@ Two products share one PostgreSQL database and one Java domain library:
 | Module | Stack | Guide |
 |---|---|---|
 | `backend-common/` | Java 21 library: JPA entities, enums, repositories, API envelope, errors, **Flyway migrations** | [backend-common/CLAUDE.md](backend-common/CLAUDE.md) |
-| `admin-console/backend/` | Spring Boot 4 API, port 8082, `/api/v1/admin/**`, `/api/v1/public/**` | [admin-console/backend/CLAUDE.md](admin-console/backend/CLAUDE.md) |
+| `admin-console/backend/` | Spring Boot 4 API, port 8082, `/api/v1/admin/**`, `/api/v1/platform/**`, `/api/v1/public/**` | [admin-console/backend/CLAUDE.md](admin-console/backend/CLAUDE.md) |
 | `admin-console/frontend/` | React 18 + TS + Vite + Tailwind, mock or real API | [admin-console/frontend/CLAUDE.md](admin-console/frontend/CLAUDE.md) |
 | `client-console/mobile/` | Flutter app, mock or real API | [client-console/mobile/CLAUDE.md](client-console/mobile/CLAUDE.md) |
 | `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
-| `deploy/` | Production compose for the web admin (postgres, admin backend/frontend, HTTPS gateway, certbot, daily backup); secrets in an uncommitted `deploy/.env` | [deploy/README.md](deploy/README.md) |
+| `deploy/` | Production compose for the web admin (postgres, admin backend/frontend, HTTPS gateway, certbot, daily backup); secrets in an uncommitted `deploy/.env`; first install on Ubuntu: `sudo deploy/install.sh <domain> <email>` | [deploy/README.md](deploy/README.md) |
 | `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml` for the admin API, `client-api.yml` for the mobile API); maintained with the `api-documenter` agent | |
 | `docs/templates/` | UI reference mock-ups only (look & feel, not code to copy) | |
 | `.github/` | CI (`ci.yml`), spec-to-code agent (`claude-agent.yml`, `scripts/claude_coder.py`) | |

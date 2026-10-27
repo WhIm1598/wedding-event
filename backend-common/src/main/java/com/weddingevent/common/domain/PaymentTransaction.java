@@ -19,10 +19,10 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "payment_transactions")
-public class PaymentTransaction extends BaseEntity {
+public class PaymentTransaction extends StudioOwnedEntity {
 
     /** e.g. TRX-001 */
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String code;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -1,6 +1,6 @@
 # ADR-0001: Nhiều studio dùng chung một hệ thống (DB chung + `studio_id`)
 
-- **Trạng thái:** Đã chấp nhận hướng đi (2026-10-26). Thiết kế chi tiết dưới đây **chờ duyệt** trước khi code.
+- **Trạng thái:** Đã chấp nhận (2026-10-26); thiết kế được duyệt và đã triển khai (2026-10-27, spec v1.2.0, migration V18).
 - **Người quyết định:** chủ sản phẩm.
 
 ## Bối cảnh
@@ -29,7 +29,7 @@ Cài riêng cho khách lớn vẫn làm được bằng chính code này và th�
 
 **Rủi ro chính:** lộ dữ liệu giữa các studio nếu một truy vấn quên lọc. Chặn ở tầng framework, không trông vào từng truy vấn (xem thiết kế).
 
-## Thiết kế đề xuất (chờ duyệt)
+## Thiết kế
 
 ### Dữ liệu
 - **Bảng `studios` mới:** `id UUID`, `name`, `status` (`ACTIVE`/`SUSPENDED`), `subscription_expires_at`, `created_at`.
@@ -37,21 +37,24 @@ Cài riêng cho khách lớn vẫn làm được bằng chính code này và th�
   - tạo dòng Lumière từ `studio_settings` hiện có;
   - thêm `studio_id UUID NOT NULL REFERENCES studios` cho mọi bảng dữ liệu studio, giá trị mặc định là id của Lumière, rồi bỏ mặc định;
   - không mất dữ liệu cũ.
-- **Bảng có `studio_id`:** `staff_members`, `staff_tasks`, `service_packages` (gói của studio; gói vendor để null), `bookings`, `assets`, `asset_reservations`, `leads`, `contracts`, `payment_transactions`, `notifications` (feed studio), `users` (chỉ tài khoản console; tài khoản mobile để null).
+- **Bảng có `studio_id`:**
+  - lọc tự động bằng `@TenantId` (bảng mobile không bao giờ ghi): `staff_members`, `staff_tasks`, `bookings`, `assets`, `asset_reservations`, `leads`, `contracts`, `payment_transactions`;
+  - lọc tay, vì bảng dùng chung với app mobile và Hibernate sẽ tự gán studio cho cả dòng của mobile: `service_packages` (gói vendor để null), `notifications` (hộp thư mobile để null), `users` (chỉ tài khoản studio), `studio_settings`.
 - **`studio_settings`:** khoá chính đổi thành `studio_id` (một dòng mỗi studio), gồm cả cấu hình Zalo OA.
 - **Mã chứng từ theo từng studio:** bảng `studio_counters(studio_id, kind, next_value)`, tăng có khoá dòng. Mỗi studio bắt đầu từ `HD-001`. Unique `(studio_id, contract_number)` thay cho unique toàn cục.
 - **Không đổi:** bảng mobile (`wedding_plans`, `guests`, `vendor_*`, `quote_requests`, …), vì chúng thuộc cặp đôi/vendor, không thuộc studio.
 
 ### Cách lọc theo studio
-- **Hibernate `@TenantId`** trên trường `studioId` của các entity studio:
+- **Hibernate `@TenantId`** trên trường `studioId` của các entity studio (lớp cha `StudioOwnedEntity`):
   - Hibernate tự thêm điều kiện `studio_id` vào mọi truy vấn entity/JPQL và tự gán khi insert;
-  - một `CurrentTenantIdentifierResolver` đọc claim `studioId` trong JWT của request.
+  - `StudioTenantResolver` lấy studio từ `StudioTenant` (đặt tường minh) hoặc claim `studioId` trong JWT; request ẩn danh nhận `StudioTenant.NONE` (không khớp dòng nào) — an toàn hơn mặc định "thấy hết".
 - **Ngoại lệ, chạy ở chế độ "root" (không lọc):**
   - client-console/backend: app mobile đọc catalog của mọi studio;
   - job nền (dọn token, nhắc thanh toán);
   - trang hợp đồng công khai: tìm hợp đồng theo hash token, rồi làm việc trong studio của hợp đồng đó;
   - API super-admin.
 - **Truy vấn native SQL** (nếu có) phải tự lọc `studio_id`. Review và test chéo bắt chỗ thiếu.
+- **Kiểm chứng:** `StudioIsolationApiTest` (đọc/sửa/xoá chéo → 404, mã bắt đầu từ 001, khoá studio).
 - **Phương án dự phòng nếu `@TenantId` không đủ:** Row Level Security của PostgreSQL (`SET app.studio_id` mỗi transaction).
 
 ### Tài khoản & phân quyền

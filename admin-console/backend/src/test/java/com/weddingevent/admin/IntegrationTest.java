@@ -6,9 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.weddingevent.common.repository.UserRepository;
+import com.weddingevent.common.tenant.StudioTenant;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -72,6 +76,19 @@ public abstract class IntegrationTest {
 
     @Autowired
     protected MockMvc mvc;
+
+    @Autowired
+    private UserRepository baseUsers;
+
+    /** The demo studio (the one V18 made from the original data); admin@ and staff@ belong to it */
+    protected UUID demoStudioId() {
+        return baseUsers.findByEmailIgnoreCase(ADMIN_EMAIL).orElseThrow().getStudioId();
+    }
+
+    /** Repository calls on studio rows (@TenantId) outside a request see nothing unless a studio is set */
+    protected <T> T inDemoStudio(Supplier<T> work) {
+        return StudioTenant.callAs(demoStudioId(), work);
+    }
 
     protected String adminToken() throws Exception {
         return login(ADMIN_EMAIL, ADMIN_PASSWORD);

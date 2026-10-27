@@ -1,5 +1,6 @@
 package com.weddingevent.admin.notification;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.common.domain.Notification;
 import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.NotificationRepository;
@@ -26,14 +27,15 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationDto> latest() {
-        // Studio feed only — rows with a recipient belong to mobile users' inboxes (client-console)
-        return notifications.findTop30ByRecipientUserIdIsNullOrderByCreatedAtDesc().stream().map(NotificationDto::of).toList();
+        // The caller's studio feed only — rows with a recipient belong to mobile users' inboxes (client-console)
+        return notifications.findTop30ByStudioIdOrderByCreatedAtDesc(CurrentStudio.require()).stream().map(NotificationDto::of).toList();
     }
 
-    /** Called by other services when something needs the team's attention */
+    /** Called by other services when something needs the team's attention; goes to the current studio's feed */
     @Transactional
     public void notify(String title, String description) {
         Notification n = new Notification();
+        n.setStudioId(CurrentStudio.require());
         n.setTitle(title);
         n.setDescription(description);
         notifications.save(n);
@@ -41,11 +43,11 @@ public class NotificationService {
 
     @Transactional
     public void markRead(UUID id) {
-        notifications.findByIdAndRecipientUserIdIsNull(id).orElseThrow(() -> new ResourceNotFoundException("thông báo", id)).setRead(true);
+        notifications.findByIdAndStudioId(id, CurrentStudio.require()).orElseThrow(() -> new ResourceNotFoundException("thông báo", id)).setRead(true);
     }
 
     @Transactional
     public void markAllRead() {
-        notifications.markAllRead();
+        notifications.markAllRead(CurrentStudio.require());
     }
 }

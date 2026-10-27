@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -66,6 +67,10 @@ public class User extends BaseEntity {
     /** Last successful admin-console login */
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    /** Studio of a ROLE_ADMIN / ROLE_STAFF account (ADR-0001); null for mobile and platform accounts */
+    @Column(name = "studio_id")
+    private UUID studioId;
 
     /** Links a ROLE_STAFF account to its staff profile so they only see their own schedule. */
     @ManyToOne(fetch = FetchType.LAZY)

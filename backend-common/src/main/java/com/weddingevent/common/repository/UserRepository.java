@@ -24,19 +24,23 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByRole(Role role);
 
-    /** Console accounts for FN-ADM-USER-01; a null role or active filter matches everything */
+    /** One studio's console accounts for FN-ADM-USER-01; a null role or active filter matches everything */
     @EntityGraph(attributePaths = "staffMember")
     @Query("""
-            select u from User u where u.role in :roles
+            select u from User u where u.studioId = :studioId and u.role in :roles
               and (:role is null or u.role = :role) and (:active is null or u.active = :active)
             order by u.fullName, u.email""")
-    Page<User> findConsoleUsers(@Param("roles") Collection<Role> roles, @Param("role") Role role,
-            @Param("active") Boolean active, Pageable pageable);
+    Page<User> findConsoleUsers(@Param("studioId") UUID studioId, @Param("roles") Collection<Role> roles,
+            @Param("role") Role role, @Param("active") Boolean active, Pageable pageable);
 
-    /** Locks every active admin, so two admins demoting each other at once can't leave none (LAST_ADMIN) */
+    /** Locks the studio's active admins, so two admins demoting each other at once can't leave none (LAST_ADMIN) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select u from User u where u.role = com.weddingevent.common.domain.enums.Role.ROLE_ADMIN and u.active = true order by u.id")
-    List<User> findActiveAdminsForUpdate();
+    @Query("""
+            select u from User u where u.studioId = :studioId
+              and u.role = com.weddingevent.common.domain.enums.Role.ROLE_ADMIN and u.active = true order by u.id""")
+    List<User> findActiveAdminsForUpdate(@Param("studioId") UUID studioId);
+
+    long countByStudioIdAndRole(UUID studioId, Role role);
 
     Optional<User> findByStaffMemberId(UUID staffMemberId);
 

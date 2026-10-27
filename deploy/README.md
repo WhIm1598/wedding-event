@@ -1,5 +1,8 @@
 # Deploy production — Lumière Studios web admin
 
+Lần đầu deploy, chưa quen Linux/Docker: đọc [hướng dẫn từng bước](../docs/setup/deploy-linux.md) (từ VPS trống tới kiểm thử).
+Tự động các bước 1–3 dưới đây (cài đặt, `.env` với mật khẩu ngẫu nhiên, chứng chỉ, chạy, kiểm thử): `sudo deploy/install.sh <tên-miền> <email>`.
+
 Một server Linux (Ubuntu 22.04+, 2 vCPU / 4 GB RAM là đủ), Docker Engine + Docker Compose v2, một tên miền trỏ về IP
 server. Stack gồm `postgres`, `admin-backend`, `admin-frontend`, `gateway` (nginx, HTTPS), `certbot` (gia hạn chứng
 chỉ) và `backup` (pg_dump hằng ngày). Chỉ `gateway` mở cổng 80/443; PostgreSQL không ra Internet.
@@ -23,7 +26,8 @@ cp .env.example .env && chmod 600 .env
 | `DOMAIN` | Tên miền admin, ví dụ `admin.lumiere.vn` (bản ghi A đã trỏ về server) |
 | `DB_PASSWORD` | `openssl rand -base64 32` |
 | `JWT_SECRET` | `openssl rand -base64 48`. Đổi giá trị này sẽ đăng xuất mọi người |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Tài khoản admin đầu tiên, chỉ dùng khi DB chưa có admin. Mật khẩu ≥ 8 ký tự, có chữ và số |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Tài khoản **quản trị nền tảng** đầu tiên (`ROLE_PLATFORM_ADMIN`, ADR-0001), chỉ dùng khi DB chưa có. Mật khẩu ≥ 8 ký tự, có chữ và số |
+| `ADMIN_RESET_PASSWORD` | `false`. Quên mật khẩu quản trị nền tảng: đặt `true` cùng `ADMIN_EMAIL` và `ADMIN_PASSWORD` mới, khởi động lại backend, rồi xoá cả ba ([chi tiết](../docs/setup/deploy-linux.md#đặt-lại-mật-khẩu-quản-trị-nền-tảng)) |
 
 `.env` chứa bí mật: không commit, không gửi qua chat. Nên lưu thêm một bản trong trình quản lý mật khẩu của studio.
 
@@ -46,10 +50,12 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml ps        # admin-backend phải "healthy" (Flyway chạy migration lúc khởi động)
 ```
 
-1. Mở `https://<DOMAIN>`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-2. Đổi mật khẩu ngay (nút chìa khoá cạnh nút Đăng xuất).
-3. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
-4. Vào *Cài đặt* nhập thông tin studio.
+1. Mở `https://<DOMAIN>`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD`: đây là tài khoản **quản trị nền tảng**, chỉ thấy màn *Quản trị nền tảng*.
+2. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
+3. Ở màn *Quản trị nền tảng*:
+   - DB mới đã có sẵn một studio (tạo từ cài đặt mặc định). Bấm nút thêm quản lý (biểu tượng người) để tạo quản lý cho studio đó, ví dụ Lumière;
+   - mỗi khách mới: **Thêm studio** (tên, hạn thuê bao, email quản lý). Mật khẩu tạm chỉ hiện một lần, gửi cho quản lý của studio.
+4. Quản lý studio đăng nhập, đổi mật khẩu tạm, vào *Cài đặt* nhập thông tin studio.
 5. *Cài đặt → Tài khoản*: tạo tài khoản cho từng nhân viên (gắn hồ sơ nhân sự). Mật khẩu tạm chỉ hiện một lần; nhân viên phải đổi khi đăng nhập lần đầu.
 6. *(Tuỳ chọn)* *Cài đặt → Zalo OA*: kết nối Zalo OA của studio để nút **Gửi Zalo** gửi hợp đồng qua ZNS — làm theo [docs/setup/zalo-oa-zns.md](../docs/setup/zalo-oa-zns.md). Link trong tin dùng `https://<DOMAIN>/c/...` (compose tự đặt `PUBLIC_BASE_URL`).
 
@@ -91,6 +97,6 @@ Migration mới chạy tự động khi backend khởi động. Chạy một b�
 
 - HTTPS bắt buộc (HTTP chuyển hướng 301), HSTS; header CSP / X-Frame-Options trên trang web.
 - Đăng nhập: tối đa 20 request/phút/IP ở gateway; sai mật khẩu 5 lần liên tiếp thì khoá 15 phút.
-- Chỉ `/api/v1/admin/**` và `/api/v1/public/**` đi vào backend; actuator và các API khác không ra ngoài.
+- Chỉ `/api/v1/admin/**`, `/api/v1/platform/**` và `/api/v1/public/**` đi vào backend; actuator và các API khác không ra ngoài.
 - Trang hợp đồng công khai `/api/v1/public/**`: tối đa 30 request/phút/IP; gateway ghi đè `X-Forwarded-For` bằng IP thật của khách.
 - Log: `docker compose -f docker-compose.prod.yml logs -f admin-backend` (không ghi mật khẩu, token).

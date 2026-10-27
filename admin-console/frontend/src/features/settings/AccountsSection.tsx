@@ -11,7 +11,7 @@ import { Field, Input, Select } from '@/components/ui/Form';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { ROLES } from '@/constants/labels';
-import type { CreatedAccount, Role, UserAccount } from '@/types';
+import type { CreatedAccount, StudioRole, UserAccount } from '@/types';
 
 const formatLogin = (iso: string | null) => (iso ? new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : 'Chưa đăng nhập');
 
@@ -96,7 +96,7 @@ function AccountFormModal({ account, onClose, onSaved }: { account: UserAccount 
     const fd = new FormData(e.currentTarget);
     const common = {
       name: String(fd.get('name')).trim(),
-      role: fd.get('role') as Role,
+      role: fd.get('role') as StudioRole,
       staffId: String(fd.get('staffId') || '') || null,
     };
     setSaving(true);
@@ -125,7 +125,7 @@ function AccountFormModal({ account, onClose, onSaved }: { account: UserAccount 
         </Field>
         <Field label="Vai trò" required>
           <Select name="role" defaultValue={account?.role ?? 'ROLE_STAFF'}>
-            {(Object.keys(ROLES) as Role[]).map((r) => (
+            {(Object.keys(ROLES) as StudioRole[]).map((r) => (
               <option key={r} value={r}>
                 {ROLES[r].label}
               </option>
@@ -161,7 +161,7 @@ function AccountFormModal({ account, onClose, onSaved }: { account: UserAccount 
   );
 }
 
-function TemporaryPasswordModal({ issued, onClose }: { issued: CreatedAccount; onClose: () => void }) {
+export function TemporaryPasswordModal({ issued, onClose }: { issued: CreatedAccount; onClose: () => void }) {
   const showToast = useToast();
   const copy = () =>
     navigator.clipboard.writeText(issued.temporaryPassword).then(

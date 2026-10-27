@@ -14,7 +14,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "staff_tasks")
-public class StaffTask extends BaseEntity {
+public class StaffTask extends StudioOwnedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "staff_member_id", nullable = false)

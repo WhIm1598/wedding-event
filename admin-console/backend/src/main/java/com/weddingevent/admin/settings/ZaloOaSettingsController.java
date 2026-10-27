@@ -2,6 +2,7 @@ package com.weddingevent.admin.settings;
 
 import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.common.api.ApiResponse;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.exception.ResourceNotFoundException;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -78,8 +80,9 @@ public class ZaloOaSettingsController {
 
     /** The row lock keeps a save from overwriting a refresh token that a message send is rotating at the same moment */
     private StudioSettings load(boolean forUpdate) {
-        return (forUpdate ? settings.findByIdForUpdate(StudioSettings.SINGLETON_ID) : settings.findById(StudioSettings.SINGLETON_ID))
-                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", StudioSettings.SINGLETON_ID));
+        UUID studio = CurrentStudio.require();
+        return (forUpdate ? settings.findByIdForUpdate(studio) : settings.findById(studio))
+                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", studio));
     }
 
     private static boolean notBlank(String s) {

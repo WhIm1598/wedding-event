@@ -5,15 +5,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.weddingevent.common.domain.ServicePackage;
+import com.weddingevent.common.domain.Studio;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.domain.VendorProfile;
 import com.weddingevent.common.domain.enums.Role;
 import com.weddingevent.common.domain.enums.ServiceCategory;
+import com.weddingevent.common.domain.enums.StudioStatus;
 import com.weddingevent.common.repository.ServicePackageRepository;
+import com.weddingevent.common.repository.StudioRepository;
 import com.weddingevent.common.repository.StudioSettingsRepository;
 import com.weddingevent.common.repository.VendorProfileRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +34,9 @@ class CatalogApiTest extends ClientIntegrationTest {
     @Autowired
     StudioSettingsRepository studioSettings;
 
+    @Autowired
+    StudioRepository studios;
+
     private VendorProfile vendor(String businessName) {
         User u = createUser(Role.ROLE_VENDOR, true);
         VendorProfile v = new VendorProfile();
@@ -44,6 +51,7 @@ class CatalogApiTest extends ClientIntegrationTest {
     private ServicePackage pkg(VendorProfile vendor, String name, ServiceCategory category, long price, boolean active) {
         ServicePackage p = new ServicePackage();
         p.setVendorId(vendor == null ? null : vendor.getId());
+        p.setStudioId(vendor == null ? studioId() : null);
         p.setName(name);
         p.setType("Trọn gói");
         p.setCategory(category);
@@ -85,6 +93,44 @@ class CatalogApiTest extends ClientIntegrationTest {
                 .andExpect(jsonPath("$.data.items[?(@.id=='" + a.getId() + "')].description").value("Mô tả Trang trí hoa tươi"));
     }
 
+    /** ADR-0001: every studio's packages carry that studio's own profile; a suspended studio's are hidden */
+    @Test
+    void eachStudiosPackagesShowThatStudioAndSuspendedStudiosAreHidden() throws Exception {
+        String key = UUID.randomUUID().toString().substring(0, 8);
+        Studio other = studios.save(new Studio());
+        StudioSettings profile = new StudioSettings();
+        profile.setStudioId(other.getId());
+        profile.setName("Studio Hoa " + key);
+        profile.setAddress("Đà Nẵng");
+        profile.setTaxCode("0202");
+        profile.setLegalRepresentative("Hoa");
+        profile.setBankInfo("STK");
+        profile.setZaloPhone("0909090909");
+        studioSettings.save(profile);
+        ServicePackage p = pkg(null, "Gói Biển", ServiceCategory.PHOTO, 9_000_000, true);
+        p.setStudioId(other.getId());
+        packages.save(p);
+        String token = coupleToken();
+
+        // The studio's name is searchable, and its own profile is shown
+        mvc.perform(authed(get("/api/v1/client/services?keyword=" + key), token))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.items[0].providerName").value("Studio Hoa " + key))
+                .andExpect(jsonPath("$.data.items[0].address").value("Đà Nẵng"))
+                .andExpect(jsonPath("$.data.items[0].zaloUrl").value("https://zalo.me/0909090909"));
+
+        other.setStatus(StudioStatus.SUSPENDED);
+        studios.save(other);
+        mvc.perform(authed(get("/api/v1/client/services?keyword=" + key), token))
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        mvc.perform(authed(get("/api/v1/client/services/" + p.getId()), token)).andExpect(status().isNotFound());
+
+        other.setStatus(StudioStatus.ACTIVE);
+        other.setSubscriptionExpiresAt(LocalDate.now().minusDays(1));
+        studios.save(other);
+        mvc.perform(authed(get("/api/v1/client/services/" + p.getId()), token)).andExpect(status().isNotFound());
+    }
+
     @Test
     void studioPackagesShowTheStudioAsProvider() throws Exception {
         String key = UUID.randomUUID().toString().substring(0, 8);
@@ -116,7 +162,7 @@ class CatalogApiTest extends ClientIntegrationTest {
         mvc.perform(authed(get("/api/v1/client/services/" + noPhonePkg.getId()), couple))
                 .andExpect(jsonPath("$.data.zaloUrl").doesNotExist());
 
-        StudioSettings studio = studioSettings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        StudioSettings studio = studioSettings.findById(studioId()).orElseThrow();
         studio.setZaloPhone("0987654321");
         studioSettings.save(studio);
         try {

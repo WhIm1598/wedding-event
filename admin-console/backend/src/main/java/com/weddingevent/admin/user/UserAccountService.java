@@ -1,6 +1,7 @@
 package com.weddingevent.admin.user;
 
 import com.weddingevent.admin.security.ConsoleAuthenticationConverter;
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.common.api.PageResponse;
 import com.weddingevent.common.domain.StaffMember;
 import com.weddingevent.common.domain.User;
@@ -25,7 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FN-ADM-USER-01: admin-console login accounts. Accounts are never deleted, only locked. */
+/** FN-ADM-USER-01: login accounts of the caller's studio (ADR-0001). Accounts are never deleted, only locked. */
 @Service
 public class UserAccountService {
 
@@ -76,12 +77,18 @@ public class UserAccountService {
 
     @Transactional(readOnly = true)
     public PageResponse<UserAccountDto> list(int page, int size, Role role, Boolean active) {
-        return PageResponse.of(users.findConsoleUsers(ConsoleAuthenticationConverter.CONSOLE_ROLES, role, active,
+        return PageResponse.of(users.findConsoleUsers(CurrentStudio.require(), ConsoleAuthenticationConverter.STUDIO_ROLES, role, active,
                 PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 100))), UserAccountDto::of);
     }
 
     @Transactional
     public CreatedAccountDto create(CreateUserRequest req) {
+        return createIn(CurrentStudio.require(), req);
+    }
+
+    /** Also used by the platform admin for a studio's first admin (ADR-0001) */
+    @Transactional
+    public CreatedAccountDto createIn(UUID studioId, CreateUserRequest req) {
         requireConsoleRole(req.role());
         // Lower case, like AdminBootstrap: the unique index is case-sensitive while login compares lower(email)
         String email = req.email().trim().toLowerCase(Locale.ROOT);
@@ -92,6 +99,7 @@ public class UserAccountService {
         u.setEmail(email);
         u.setFullName(req.name().trim());
         u.setRole(req.role());
+        u.setStudioId(studioId);
         u.setVerified(true);
         u.setStaffMember(linkableStaff(req.staffId(), null));
         String temporary = temporaryPassword(u);
@@ -108,7 +116,7 @@ public class UserAccountService {
             throw AppException.conflict("CANNOT_MODIFY_SELF", "Không thể tự khóa hoặc tự hạ quyền tài khoản của mình");
         }
         if (wasActiveAdmin && !staysActiveAdmin
-                && users.findActiveAdminsForUpdate().stream().noneMatch(a -> !a.getId().equals(u.getId()))) {
+                && users.findActiveAdminsForUpdate(u.getStudioId()).stream().noneMatch(a -> !a.getId().equals(u.getId()))) {
             throw AppException.conflict("LAST_ADMIN", "Phải còn ít nhất một quản lý đang hoạt động");
         }
         if (u.isActive() && !req.isActive()) {
@@ -162,12 +170,13 @@ public class UserAccountService {
     }
 
     private User consoleUser(UUID id) {
-        return users.findById(id).filter(ConsoleAuthenticationConverter::isConsoleUser)
+        UUID studio = CurrentStudio.require();
+        return users.findById(id).filter(u -> studio.equals(u.getStudioId()))
                 .orElseThrow(() -> new ResourceNotFoundException("Tài khoản", id));
     }
 
     private static void requireConsoleRole(Role role) {
-        if (!ConsoleAuthenticationConverter.CONSOLE_ROLES.contains(role)) {
+        if (!ConsoleAuthenticationConverter.STUDIO_ROLES.contains(role)) {
             throw AppException.invalidField("role", "Vai trò phải là ROLE_ADMIN hoặc ROLE_STAFF");
         }
     }

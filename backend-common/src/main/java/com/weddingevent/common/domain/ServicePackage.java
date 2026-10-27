@@ -29,6 +29,10 @@ public class ServicePackage extends BaseEntity {
     @Column(name = "vendor_id")
     private UUID vendorId;
 
+    /** Owning studio (ADR-0001) for a studio package; null for a vendor's. Exactly one of the two is set */
+    @Column(name = "studio_id")
+    private UUID studioId;
+
     @Column(nullable = false)
     private String name;
 

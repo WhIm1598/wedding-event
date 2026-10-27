@@ -58,7 +58,9 @@ app:
   zalo:
     oauth-url: https://oauth.zaloapp.com/v4/oa/access_token
     zns-url: https://business.openapi.zalo.me/message/template
-  # First admin of an empty production database (#36); ignored once any ROLE_ADMIN exists
+  # Platform admin of an empty production database (#36, ADR-0001); ignored once one exists unless reset-password
   bootstrap-admin:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
+    # true: overwrite that platform admin's forgotten password on startup (then remove it)
+    reset-password: ${ADMIN_RESET_PASSWORD:false}

@@ -31,6 +31,8 @@ public class TokenService {
     public static final String CLAIM_EMAIL = "email";
     public static final String CLAIM_NAME = "name";
     public static final String CLAIM_STAFF_ID = "staffId";
+    /** The console user's studio (ADR-0001); absent for the platform admin */
+    public static final String CLAIM_STUDIO_ID = "studioId";
     public static final String CLAIM_TYPE = "typ";
     public static final String TYPE_ACCESS = "access";
     public static final String TYPE_REFRESH = "refresh";
@@ -96,6 +98,9 @@ public class TokenService {
         }
         if (user.getStaffMember() != null) {
             claims.claim(CLAIM_STAFF_ID, user.getStaffMember().getId().toString());
+        }
+        if (user.getStudioId() != null) {
+            claims.claim(CLAIM_STUDIO_ID, user.getStudioId().toString());
         }
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims.build())).getTokenValue();

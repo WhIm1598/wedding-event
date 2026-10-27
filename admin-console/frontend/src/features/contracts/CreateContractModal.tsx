@@ -25,11 +25,18 @@ const Label = ({ children, required }: { children: string; required?: boolean })
 export function CreateContractModal({ isOpen, onClose, onCreated }: Props) {
   const showToast = useToast();
   const [submitting, setSubmitting] = useState(false);
-  const { data: packages = [] } = useAsync(() => packagesApi.list(), [isOpen]);
+  const { data: packages = [], loading: loadingPackages } = useAsync(() => packagesApi.list(), [isOpen]);
   const [packageId, setPackageId] = useState('');
   const [total, setTotal] = useState(0);
+  // null = not typed yet, so it follows 30% of the total; a typed deposit is never overwritten
+  const [typedDeposit, setTypedDeposit] = useState<number | null>(null);
+  const deposit = typedDeposit ?? Math.round(total * 0.3);
 
   const activePackages = packages.filter((p) => p.isActive);
+
+  useEffect(() => {
+    if (!isOpen) setTypedDeposit(null);
+  }, [isOpen]);
 
   // Default to the first package; total follows the selected package price
   useEffect(() => {
@@ -43,7 +50,6 @@ export function CreateContractModal({ isOpen, onClose, onCreated }: Props) {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const deposit = parseMoney(fd.get('depositAmount'));
     if (deposit > total) {
       showToast('Tiền cọc không được lớn hơn tổng giá trị hợp đồng', 'error');
       return;
@@ -100,6 +106,9 @@ export function CreateContractModal({ isOpen, onClose, onCreated }: Props) {
                 </option>
               ))}
             </Select>
+            {!loadingPackages && !activePackages.length && (
+              <p className="mt-1 text-xs text-rose-600">Chưa có gói dịch vụ đang bán. Hãy tạo gói ở mục Gói dịch vụ trước.</p>
+            )}
           </div>
           <div>
             <Label>Ghi chú thêm (dịch vụ phát sinh)</Label>
@@ -125,9 +134,8 @@ export function CreateContractModal({ isOpen, onClose, onCreated }: Props) {
             <div>
               <Label required>Tiền cọc đợt 1 (gợi ý 30%)</Label>
               <Input
-                name="depositAmount"
-                key={total}
-                defaultValue={Math.round(total * 0.3).toLocaleString('vi-VN')}
+                value={deposit.toLocaleString('vi-VN')}
+                onChange={(e) => setTypedDeposit(parseMoney(e.target.value))}
                 inputMode="numeric"
                 className="text-sm font-bold text-rose-700 border-rose-300"
                 required
@@ -136,7 +144,7 @@ export function CreateContractModal({ isOpen, onClose, onCreated }: Props) {
           </div>
         </div>
 
-        <Button type="submit" className="w-full py-3 rounded-xl font-bold shadow-md shadow-rose-200" loading={submitting}>
+        <Button type="submit" className="w-full py-3 rounded-xl font-bold shadow-md shadow-rose-200" loading={submitting} disabled={!activePackages.length}>
           Lưu & Tạo Hợp Đồng
         </Button>
       </form>

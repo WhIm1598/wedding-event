@@ -22,10 +22,10 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "contracts")
-public class Contract extends BaseEntity {
+public class Contract extends StudioOwnedEntity {
 
     /** e.g. HD-102 */
-    @Column(name = "contract_number", nullable = false, unique = true)
+    @Column(name = "contract_number", nullable = false)
     private String contractNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)

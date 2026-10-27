@@ -2,6 +2,7 @@ package com.weddingevent.admin.settings;
 
 import static com.weddingevent.admin.security.SecurityConfig.ADMIN;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.common.api.ApiResponse;
 import com.weddingevent.common.domain.StudioSettings;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Studio profile printed as party B on contracts. Readable by staff (contract preview), editable by admins. */
+/** The caller's studio profile, printed as party B on contracts. Readable by staff (contract preview), editable by admins. */
 @RestController
 @RequestMapping("/api/v1/admin/settings/studio")
 public class SettingsController {
@@ -55,8 +56,8 @@ public class SettingsController {
     @Transactional
     public ApiResponse<StudioSettingsDto> update(@Valid @RequestBody StudioSettingsDto req) {
         // Locked: Hibernate writes every column, which would undo a Zalo OA refresh token rotated meanwhile
-        StudioSettings s = settings.findByIdForUpdate(StudioSettings.SINGLETON_ID)
-                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", StudioSettings.SINGLETON_ID));
+        StudioSettings s = settings.findByIdForUpdate(CurrentStudio.require())
+                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", CurrentStudio.require()));
         s.setName(req.name().trim());
         s.setAddress(req.address().trim());
         s.setTaxCode(req.taxCode().trim());
@@ -67,7 +68,7 @@ public class SettingsController {
     }
 
     private StudioSettings load() {
-        return settings.findById(StudioSettings.SINGLETON_ID)
-                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", StudioSettings.SINGLETON_ID));
+        return settings.findById(CurrentStudio.require())
+                .orElseThrow(() -> new ResourceNotFoundException("cấu hình studio", CurrentStudio.require()));
     }
 }

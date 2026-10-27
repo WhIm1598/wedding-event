@@ -37,7 +37,7 @@ class ContractShareApiTest extends IntegrationTest {
     @BeforeEach
     void connectedOa() {
         ZALO.reset();
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        StudioSettings s = settings.findById(demoStudioId()).orElseThrow();
         s.setZaloOaAppId("app-1");
         s.setZaloOaAppSecret("secret-1");
         s.setZaloOaRefreshToken("refresh-1");
@@ -87,7 +87,7 @@ class ContractShareApiTest extends IntegrationTest {
         assertThat(read(body, "$.data.configured")).isEqualTo("true");
         assertThat(body).doesNotContain("secret-1").doesNotContain("refresh-2");
 
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        StudioSettings s = settings.findById(demoStudioId()).orElseThrow();
         assertThat(s.getZaloOaAppSecret()).isEqualTo("secret-1"); // blank keeps the stored secret
         assertThat(s.getZaloOaRefreshToken()).isEqualTo("refresh-2");
 
@@ -125,7 +125,7 @@ class ContractShareApiTest extends IntegrationTest {
         assertThat(read(zns.body(), "$.template_data.total_amount")).isEqualTo("20000000");
         assertThat(read(zns.body(), "$.tracking_id")).matches("[A-Za-z0-9]{1,48}");
 
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        StudioSettings s = settings.findById(demoStudioId()).orElseThrow();
         assertThat(s.getZaloOaRefreshToken()).isEqualTo("stub-refresh-next");
         assertThat(s.getZaloOaAccessTokenExpiresAt()).isAfter(Instant.now().plusSeconds(24 * 3600));
 
@@ -154,7 +154,7 @@ class ContractShareApiTest extends IntegrationTest {
 
     @Test
     void anUnconnectedOaIsReported() throws Exception {
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseThrow();
+        StudioSettings s = settings.findById(demoStudioId()).orElseThrow();
         s.setZaloOaRefreshToken(null);
         settings.save(s);
         share(adminToken(), createContract(adminToken(), uniquePhone(), 1_000_000, 0), null)
@@ -170,9 +170,9 @@ class ContractShareApiTest extends IntegrationTest {
 
         share(adminToken(), id, null).andExpect(status().isBadGateway()).andExpect(jsonPath("$.code").value("ZALO_SEND_FAILED"));
 
-        assertThat(contracts.findById(UUID.fromString(id)).orElseThrow().getPublicTokenHash()).isNull();
+        assertThat(inDemoStudio(() -> contracts.findById(UUID.fromString(id))).orElseThrow().getPublicTokenHash()).isNull();
         // The single-use refresh token was spent: the new one must have been kept despite the rollback
-        assertThat(settings.findById(StudioSettings.SINGLETON_ID).orElseThrow().getZaloOaRefreshToken()).isEqualTo("stub-refresh-next");
+        assertThat(settings.findById(demoStudioId()).orElseThrow().getZaloOaRefreshToken()).isEqualTo("stub-refresh-next");
     }
 
     @Test
@@ -256,7 +256,7 @@ class ContractShareApiTest extends IntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(read(again, "$.data.acceptedAt")).isEqualTo(acceptedAt);
 
-        Contract c = contracts.findById(UUID.fromString(id)).orElseThrow();
+        Contract c = inDemoStudio(() -> contracts.findById(UUID.fromString(id))).orElseThrow();
         assertThat(c.getAcceptedUserAgent()).isEqualTo("Zalo iOS");
         assertThat(c.getAcceptedIp()).isNotBlank();
     }
@@ -267,9 +267,9 @@ class ContractShareApiTest extends IntegrationTest {
 
         String id = createContract(adminToken(), uniquePhone(), 1_000_000, 0);
         String token = tokenOf(sharedUrl(id));
-        Contract c = contracts.findById(UUID.fromString(id)).orElseThrow();
+        Contract c = inDemoStudio(() -> contracts.findById(UUID.fromString(id))).orElseThrow();
         c.setShareExpiresAt(Instant.now().minusSeconds(1));
-        contracts.save(c);
+        inDemoStudio(() -> contracts.save(c));
         publicGet(token).andExpect(status().isGone());
 
         String fresh = tokenOf(sharedUrl(id));

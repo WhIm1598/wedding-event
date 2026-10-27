@@ -63,7 +63,7 @@ tags:
   - name: guest
     description: Guest list and RSVP of the couple's plan (Module 3). `ROLE_COUPLE`.
   - name: catalog
-    description: Active service packages of vendors and of the studio (Module 4). Couples and vendors.
+    description: Active service packages of vendors and of every active studio (Module 4; a studio package shows its own studio's name, address and Zalo; packages of suspended or expired studios are hidden, ADR-0001). Couples and vendors.
   - name: notification
     description: In-app inbox of the signed-in user (FN-NOTI-01).
   - name: message

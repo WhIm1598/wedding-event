@@ -10,6 +10,7 @@ import com.weddingevent.common.domain.Notification;
 import com.weddingevent.common.domain.ServicePackage;
 import com.weddingevent.common.domain.StaffMember;
 import com.weddingevent.common.domain.StaffTask;
+import com.weddingevent.common.domain.Studio;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.domain.enums.AssetCategory;
@@ -29,15 +30,19 @@ import com.weddingevent.common.repository.NotificationRepository;
 import com.weddingevent.common.repository.ServicePackageRepository;
 import com.weddingevent.common.repository.StaffRepository;
 import com.weddingevent.common.repository.StaffTaskRepository;
+import com.weddingevent.common.repository.StudioRepository;
 import com.weddingevent.common.repository.StudioSettingsRepository;
 import com.weddingevent.common.repository.UserRepository;
 import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.support.CodeGenerator.Code;
+import com.weddingevent.common.tenant.StudioTenant;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -45,13 +50,16 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Seeds the data shown in the UI template (docs/templates/lumi_re_studios_admin_dashboard.tsx), with
  * dates relative to today. Runs only when app.demo-data.enabled=true and the database has no users.
  *
- * Demo logins: admin@lumiere.vn / Admin@123 (ROLE_ADMIN), staff@lumiere.vn / Staff@123 (ROLE_STAFF).
+ * Demo logins: admin@lumiere.vn / Admin@123 (ROLE_ADMIN), staff@lumiere.vn / Staff@123 (ROLE_STAFF),
+ * platform@lumiere.vn / Platform@123 (ROLE_PLATFORM_ADMIN). The studio data goes into the studio V18 created
+ * from the original single-studio database (ADR-0001).
  */
 @Component
 @ConditionalOnProperty(name = "app.demo-data.enabled", havingValue = "true")
@@ -74,11 +82,15 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final CodeGenerator codes;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+    private final StudioRepository studios;
+    private final TransactionTemplate transactions;
+    private UUID studioId;
 
     public DemoDataSeeder(UserRepository users, StaffRepository staff, StaffTaskRepository tasks, ServicePackageRepository packages,
             BookingRepository bookings, AssetRepository assets, AssetReservationRepository reservations, LeadRepository leads,
             ContractRepository contracts, NotificationRepository notifications, StudioSettingsRepository settings,
-            FinanceService finance, CodeGenerator codes, PasswordEncoder passwordEncoder, Clock clock) {
+            FinanceService finance, CodeGenerator codes, PasswordEncoder passwordEncoder, Clock clock, StudioRepository studios,
+            PlatformTransactionManager transactionManager) {
         this.users = users;
         this.staff = staff;
         this.tasks = tasks;
@@ -94,15 +106,23 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.codes = codes;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
+        this.studios = studios;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
+    /** The studio is chosen outside the transaction: Hibernate reads it when the session opens */
     @Override
-    @Transactional
     public void run(ApplicationArguments args) {
         // Not users.count(): the client backend shares the database and may have seeded mobile users first
         if (users.existsByEmailIgnoreCase("admin@lumiere.vn")) {
             return;
         }
+        UUID studio = studios.findAll().stream().min(Comparator.comparing(Studio::getCreatedAt)).orElseThrow().getId();
+        StudioTenant.runAs(studio, () -> transactions.executeWithoutResult(tx -> seed(studio)));
+    }
+
+    private void seed(UUID studio) {
+        this.studioId = studio;
         LocalDate today = LocalDate.now(clock);
         log.info("Seeding demo data (app.demo-data.enabled=true)");
 
@@ -113,6 +133,13 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         user("admin@lumiere.vn", "Admin@123", "Quản Lý Studio", Role.ROLE_ADMIN, null);
         user("staff@lumiere.vn", "Staff@123", "Hương Sale", Role.ROLE_STAFF, huong);
+        User platform = new User();
+        platform.setEmail("platform@lumiere.vn");
+        platform.setPasswordHash(passwordEncoder.encode("Platform@123"));
+        platform.setFullName("Quản Trị Nền Tảng");
+        platform.setRole(Role.ROLE_PLATFORM_ADMIN);
+        platform.setVerified(true);
+        users.save(platform);
 
         ServicePackage diamond = pkg("Gói Kim Cương (Ngày Cưới)", "Trọn gói", 25_000_000,
                 List.of("2 Thợ Phóng sự", "1 Quay Phim", "1 Album Photobook 30x30", "Makeup & Làm tóc trọn ngày", "Tặng 2 Ảnh Cổng"));
@@ -163,7 +190,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         notification("Trùng lịch trang phục 👗", "Váy \"Vera Wang\" đang được xếp cho 2 khách trong cùng khoảng bảo dưỡng. Vui lòng kiểm tra lại.", false);
         notification("Lịch chụp ngày mai 📸", "Có lịch trình vào ngày mai. Đã nhắc thợ chụp chuẩn bị thiết bị chưa?", true);
 
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseGet(StudioSettings::new);
+        StudioSettings s = settings.findById(studio).orElseThrow();
         s.setName("LUMIÈRE STUDIOS");
         s.setAddress("123 Nguyễn Văn Linh, Q7, TP.HCM");
         s.setTaxCode("0312345678");
@@ -183,7 +210,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private StaffMember staff(String name, String position, String phone, StaffWorkStatus status) {
         StaffMember s = new StaffMember();
-        s.setCode(codes.next(Code.STAFF));
+        s.setCode(codes.next(Code.STAFF, studioId));
         s.setFullName(name);
         s.setPosition(position);
         s.setPhone(phone);
@@ -198,12 +225,14 @@ public class DemoDataSeeder implements ApplicationRunner {
         u.setFullName(name);
         u.setRole(role);
         u.setVerified(true);
+        u.setStudioId(studioId);
         u.setStaffMember(staffMember);
         users.save(u);
     }
 
     private ServicePackage pkg(String name, String type, long price, List<String> features) {
         ServicePackage p = new ServicePackage();
+        p.setStudioId(studioId);
         p.setName(name);
         p.setType(type);
         p.setPrice(money(price));
@@ -256,7 +285,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private Contract contract(Lead lead, ServicePackage pkg, LocalDate date, ContractStatus status) {
         Contract c = new Contract();
-        c.setContractNumber(codes.next(Code.CONTRACT));
+        c.setContractNumber(codes.next(Code.CONTRACT, studioId));
         c.setLead(lead);
         c.setCustomerName(lead.getName());
         c.setPhone(lead.getPhone());
@@ -281,6 +310,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private void notification(String title, String description, boolean read) {
         Notification n = new Notification();
+        n.setStudioId(studioId);
         n.setTitle(title);
         n.setDescription(description);
         n.setRead(read);

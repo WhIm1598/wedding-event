@@ -1,17 +1,18 @@
 package com.weddingevent.admin.staff;
 
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.support.DateRange;
 import com.weddingevent.common.domain.StaffMember;
 import com.weddingevent.common.domain.StaffTask;
 import com.weddingevent.common.domain.enums.BookingStatus;
 import com.weddingevent.common.domain.enums.StaffWorkStatus;
 import com.weddingevent.common.exception.ResourceNotFoundException;
-import com.weddingevent.common.repository.BookingRepository;
 import com.weddingevent.common.repository.BookingRepository.StaffBookingCount;
+import com.weddingevent.common.repository.BookingRepository;
 import com.weddingevent.common.repository.StaffRepository;
 import com.weddingevent.common.repository.StaffTaskRepository;
-import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.support.CodeGenerator.Code;
+import com.weddingevent.common.support.CodeGenerator;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -79,7 +80,7 @@ public class StaffService {
     @Transactional
     public StaffDto create(CreateStaffRequest req) {
         StaffMember s = new StaffMember();
-        s.setCode(codes.next(Code.STAFF));
+        s.setCode(codes.next(Code.STAFF, CurrentStudio.require()));
         s.setFullName(req.name().trim());
         s.setPhone(req.phone());
         s.setPosition(req.position().trim());

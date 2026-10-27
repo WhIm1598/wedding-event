@@ -3,6 +3,7 @@ package com.weddingevent.admin.contract;
 import com.weddingevent.admin.crm.CustomerStageSync;
 import com.weddingevent.admin.finance.FinanceService;
 import com.weddingevent.admin.notification.NotificationService;
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.common.domain.Contract;
 import com.weddingevent.common.domain.Lead;
@@ -16,8 +17,8 @@ import com.weddingevent.common.repository.ContractRepository;
 import com.weddingevent.common.repository.LeadRepository;
 import com.weddingevent.common.repository.ServicePackageRepository;
 import com.weddingevent.common.repository.StudioSettingsRepository;
-import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.support.CodeGenerator.Code;
+import com.weddingevent.common.support.CodeGenerator;
 import com.weddingevent.common.util.VndFormatter;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -102,13 +103,13 @@ public class ContractService {
         if (req.depositAmount().compareTo(req.totalAmount()) > 0) {
             throw AppException.badRequest("DEPOSIT_EXCEEDS_TOTAL", "Tiền cọc không được lớn hơn tổng giá trị hợp đồng");
         }
-        ServicePackage pkg = packages.findById(req.servicePackageId())
+        ServicePackage pkg = packages.findByIdAndStudioId(req.servicePackageId(), CurrentStudio.require())
                 .orElseThrow(() -> new ResourceNotFoundException("gói dịch vụ", req.servicePackageId()));
         Lead lead = leads.findFirstByPhoneOrderByCreatedAtDesc(req.phone()).orElse(null);
         LocalDate today = LocalDate.now(clock);
 
         Contract c = new Contract();
-        c.setContractNumber(codes.next(Code.CONTRACT));
+        c.setContractNumber(codes.next(Code.CONTRACT, CurrentStudio.require()));
         c.setLead(lead);
         c.setCustomerName(req.customerName().trim());
         c.setPhone(req.phone());
@@ -158,6 +159,6 @@ public class ContractService {
     }
 
     private StudioSettings studio() {
-        return settings.findById(StudioSettings.SINGLETON_ID).orElseGet(StudioSettings::new);
+        return settings.findById(CurrentStudio.require()).orElseGet(StudioSettings::new);
     }
 }

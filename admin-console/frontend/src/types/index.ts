@@ -1,7 +1,10 @@
 // Domain types mirror docs/features/detailed_functional_specification.md (Part B).
 // Money is VND as a plain number; dates are ISO strings (YYYY-MM-DD).
 
-export type Role = 'ROLE_ADMIN' | 'ROLE_STAFF';
+/** ROLE_PLATFORM_ADMIN: owner of the platform, manages studios and belongs to none (ADR-0001) */
+export type Role = 'ROLE_ADMIN' | 'ROLE_STAFF' | 'ROLE_PLATFORM_ADMIN';
+/** Roles inside one studio (accounts screen, role matrix) */
+export type StudioRole = Exclude<Role, 'ROLE_PLATFORM_ADMIN'>;
 
 export interface AuthUser {
   id: string;
@@ -254,7 +257,7 @@ export interface UserAccount {
   id: string;
   email: string;
   name: string;
-  role: Role;
+  role: StudioRole;
   staffId: string | null;
   staffName: string | null;
   isActive: boolean;
@@ -270,7 +273,7 @@ export interface CreatedAccount {
 export interface CreateUserRequest {
   email: string;
   name: string;
-  role: Role;
+  role: StudioRole;
   staffId: string | null;
 }
 
@@ -322,4 +325,35 @@ export interface PublicContract {
   eventDate: string | null;
   status: ContractStatus;
   acceptedAt: string | null;
+}
+
+// --- Platform: studios (FN-PLT-01..03, ADR-0001) ---
+export type StudioStatus = 'ACTIVE' | 'SUSPENDED';
+
+export interface Studio {
+  id: string;
+  name: string | null;
+  status: StudioStatus;
+  subscriptionExpiresAt: string | null;
+  /** active and not past the subscription: its people can sign in */
+  usable: boolean;
+  adminCount: number;
+  createdAt: string;
+}
+
+export interface CreateStudioRequest {
+  name: string;
+  subscriptionExpiresAt: string | null;
+  adminEmail: string;
+  adminName: string;
+}
+
+export interface CreatedStudio {
+  studio: Studio;
+  admin: CreatedAccount;
+}
+
+export interface UpdateStudioRequest {
+  status: StudioStatus;
+  subscriptionExpiresAt: string | null;
 }

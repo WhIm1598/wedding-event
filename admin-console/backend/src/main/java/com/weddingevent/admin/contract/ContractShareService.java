@@ -4,9 +4,10 @@ import com.weddingevent.admin.config.AppProperties;
 import com.weddingevent.admin.contract.ContractDocumentRenderer.Installment;
 import com.weddingevent.admin.contract.ContractService.Document;
 import com.weddingevent.admin.notification.NotificationService;
+import com.weddingevent.admin.security.CurrentStudio;
 import com.weddingevent.admin.staff.StaffService;
-import com.weddingevent.admin.zalo.ZaloOaClient;
 import com.weddingevent.admin.zalo.ZaloOaClient.ZaloException;
+import com.weddingevent.admin.zalo.ZaloOaClient;
 import com.weddingevent.admin.zalo.ZaloOaTokens;
 import com.weddingevent.common.domain.Booking;
 import com.weddingevent.common.domain.Contract;
@@ -98,7 +99,7 @@ public class ContractShareService {
             throw AppException.badRequest("ZALO_NOT_AVAILABLE", "Khách chưa có Zalo, vui lòng nhập số Zalo khác");
         }
         String phone = phoneGiven ? phoneNumber : c.getPhone();
-        StudioSettings studio = settings.findById(StudioSettings.SINGLETON_ID).filter(StudioSettings::isZaloOaConfigured)
+        StudioSettings studio = settings.findById(CurrentStudio.require()).filter(StudioSettings::isZaloOaConfigured)
                 .orElseThrow(ZaloOaTokens::notConfigured);
         if (props.publicBaseUrl() == null || props.publicBaseUrl().isBlank()) {
             throw new IllegalStateException("app.public-base-url (env PUBLIC_BASE_URL) is not set");
@@ -141,10 +142,16 @@ public class ContractShareService {
         c.setShareExpiresAt(null);
     }
 
+    /** Call as {@link com.weddingevent.common.tenant.StudioTenant#ROOT}: the anonymous caller has no studio */
+    @Transactional(readOnly = true)
+    public UUID studioOfToken(String token) {
+        return byToken(token).getStudioId();
+    }
+
     @Transactional(readOnly = true)
     public PublicContractDto publicView(String token) {
         Contract c = byToken(token);
-        StudioSettings s = settings.findById(StudioSettings.SINGLETON_ID).orElseGet(StudioSettings::new);
+        StudioSettings s = settings.findById(CurrentStudio.require()).orElseGet(StudioSettings::new);
         List<String> features = c.getServicePackage() == null ? List.of() : List.copyOf(c.getServicePackage().getFeatures());
         LocalDate eventDate = bookings.findFirstByContractIdAndStatusNotOrderByEventDateAsc(c.getId(), BookingStatus.CANCELLED)
                 .map(Booking::getEventDate).orElse(null);
@@ -158,7 +165,7 @@ public class ContractShareService {
     public Document publicPdf(String token) {
         Contract c = byToken(token);
         return new Document(c.getContractNumber() + ".pdf",
-                renderer.pdf(c, settings.findById(StudioSettings.SINGLETON_ID).orElseGet(StudioSettings::new)));
+                renderer.pdf(c, settings.findById(CurrentStudio.require()).orElseGet(StudioSettings::new)));
     }
 
     /** "Tôi đã đọc và đồng ý" — recorded once; pressing it again changes nothing */

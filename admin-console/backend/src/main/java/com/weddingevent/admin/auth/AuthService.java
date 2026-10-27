@@ -3,6 +3,7 @@ package com.weddingevent.admin.auth;
 import com.weddingevent.admin.auth.AuthDtos.AuthUserDto;
 import com.weddingevent.admin.auth.AuthDtos.LoginResponse;
 import com.weddingevent.admin.security.ConsoleAuthenticationConverter;
+import com.weddingevent.admin.security.SecurityErrorHandler;
 import com.weddingevent.admin.security.TokenService;
 import com.weddingevent.admin.security.TokenService.TokenPair;
 import com.weddingevent.common.domain.RefreshToken;
@@ -35,16 +36,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokens;
     private final Clock clock;
+    private final ConsoleAuthenticationConverter accounts;
     /** Compared against when the email is unknown, so response time doesn't reveal which emails exist */
     private final String dummyHash;
 
     public AuthService(UserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder passwordEncoder,
-            TokenService tokens, Clock clock) {
+            TokenService tokens, Clock clock, ConsoleAuthenticationConverter accounts) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
         this.clock = clock;
+        this.accounts = accounts;
         this.dummyHash = passwordEncoder.encode("timing-equalizer");
     }
 
@@ -81,6 +84,9 @@ public class AuthService {
         if (!user.isActive()) {
             throw AppException.forbidden("ACCOUNT_LOCKED", "Tài khoản đã bị khóa, vui lòng liên hệ quản lý");
         }
+        if (!accounts.studioUsable(user)) {
+            throw AppException.forbidden("STUDIO_SUSPENDED", SecurityErrorHandler.STUDIO_SUSPENDED_MESSAGE);
+        }
         user.setFailedLoginCount(0);
         user.setLockedUntil(null);
         user.setLastLoginAt(now);
@@ -106,7 +112,7 @@ public class AuthService {
             }
             throw TokenService.invalidRefreshToken();
         }
-        if (!user.isActive()) {
+        if (!user.isActive() || !accounts.studioUsable(user)) {
             throw TokenService.invalidRefreshToken();
         }
         row.setUsedAt(now);

@@ -8,8 +8,11 @@ import com.weddingevent.common.domain.enums.ServiceCategory;
 import com.weddingevent.common.exception.AppException;
 import com.weddingevent.common.exception.ResourceNotFoundException;
 import com.weddingevent.common.repository.ServicePackageRepository;
+import com.weddingevent.common.repository.StudioRepository;
 import com.weddingevent.common.repository.StudioSettingsRepository;
 import com.weddingevent.common.repository.VendorProfileRepository;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -25,8 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FN-SVC-01..02: active service packages of vendors and of the studio. Studio packages (no vendor) show the studio's
- * name/address from the settings and have no {@code providerId}, because the studio has no mobile account.
+ * FN-SVC-01..02: active service packages of vendors and of the studios (ADR-0001). A studio package shows its own
+ * studio's name/address/Zalo from that studio's settings and has no {@code providerId}, because studios have no mobile
+ * account. Packages of a suspended or expired studio are hidden.
  */
 @Service
 public class CatalogService {
@@ -49,34 +53,43 @@ public class CatalogService {
     private final ServicePackageRepository packages;
     private final VendorProfileRepository vendors;
     private final StudioSettingsRepository settings;
+    private final StudioRepository studios;
+    private final Clock clock;
 
-    public CatalogService(ServicePackageRepository packages, VendorProfileRepository vendors, StudioSettingsRepository settings) {
+    public CatalogService(ServicePackageRepository packages, VendorProfileRepository vendors, StudioSettingsRepository settings,
+            StudioRepository studios, Clock clock) {
         this.packages = packages;
         this.vendors = vendors;
         this.settings = settings;
+        this.studios = studios;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public PageResponse<ServiceDto> search(String category, String keyword, int page, int size) {
         Set<ServiceCategory> categories = parseCategory(category);
         String kw = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
-        StudioSettings studio = studio();
-        boolean studioMatches = kw.isEmpty() || studio.getName().toLowerCase(Locale.ROOT).contains(kw);
-        Page<ServicePackage> result = packages.searchCatalog(categories, "%" + escapeLike(kw) + "%", studioMatches, PageRequest.of(page, size));
+        Page<ServicePackage> result = packages.searchCatalog(categories, "%" + escapeLike(kw) + "%", LocalDate.now(clock),
+                PageRequest.of(page, size));
 
         Map<UUID, VendorProfile> vendorById = vendors.findAllByIdIn(result.getContent().stream()
                         .map(ServicePackage::getVendorId).filter(Objects::nonNull).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(VendorProfile::getId, Function.identity()));
-        return PageResponse.of(result, p -> toDto(p, vendorById.get(p.getVendorId()), studio));
+        Map<UUID, StudioSettings> studioById = settings.findAllById(result.getContent().stream()
+                        .map(ServicePackage::getStudioId).filter(Objects::nonNull).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(StudioSettings::getStudioId, Function.identity()));
+        return PageResponse.of(result, p -> toDto(p, vendorById.get(p.getVendorId()), studioById.get(p.getStudioId())));
     }
 
     @Transactional(readOnly = true)
     public ServiceDto get(UUID id) {
         ServicePackage p = packages.findById(id).filter(ServicePackage::isActive)
+                .filter(pkg -> pkg.getStudioId() == null
+                        || studios.findById(pkg.getStudioId()).filter(s -> s.isUsable(LocalDate.now(clock))).isPresent())
                 .orElseThrow(() -> new ResourceNotFoundException("dịch vụ", id));
         VendorProfile vendor = p.getVendorId() == null ? null
                 : vendors.findAllByIdIn(List.of(p.getVendorId())).stream().findFirst().orElse(null);
-        return toDto(p, vendor, studio());
+        return toDto(p, vendor, p.getStudioId() == null ? null : settings.findById(p.getStudioId()).orElseThrow());
     }
 
     private static ServiceDto toDto(ServicePackage p, VendorProfile vendor, StudioSettings studio) {
@@ -96,13 +109,9 @@ public class CatalogService {
                 zaloUrl(vendor == null ? studio.getZaloPhone() : vendor.getUser().getPhone()));
     }
 
-    /** "Liên hệ đặt lịch" (FN-SVC-02, v1.1.3): the provider's Zalo; studio from the settings, vendor from its account phone */
+    /** "Liên hệ đặt lịch" (FN-SVC-02, v1.1.3): the provider's Zalo; a studio's from its settings, a vendor's from its account phone */
     private static String zaloUrl(String phone) {
         return phone == null || phone.isBlank() ? null : "https://zalo.me/" + phone;
-    }
-
-    private StudioSettings studio() {
-        return settings.findById((short) 1).orElseThrow();
     }
 
     private static Set<ServiceCategory> parseCategory(String category) {
