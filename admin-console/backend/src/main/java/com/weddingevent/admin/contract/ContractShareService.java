@@ -86,8 +86,11 @@ public class ContractShareService {
         this.clock = clock;
     }
 
-    /** Sends the ZNS with a fresh 30-day link; nothing is saved when Zalo refuses the message */
-    @Transactional
+    /**
+     * Sends the ZNS with a fresh 30-day link. The link is saved before the call: when Zalo's answer is lost (timeout)
+     * the message may have arrived, so the link must work. Only a definite refusal restores the previous link.
+     */
+    @Transactional(noRollbackFor = AppException.class)
     public ShareResultDto shareZalo(UUID contractId, String phoneNumber) {
         Contract c = contracts.findById(contractId).orElseThrow(() -> new ResourceNotFoundException("hợp đồng", contractId));
         boolean phoneGiven = phoneNumber != null && !phoneNumber.isBlank();
@@ -96,7 +99,7 @@ public class ContractShareService {
         }
         String phone = phoneGiven ? phoneNumber : c.getPhone();
         StudioSettings studio = settings.findById(StudioSettings.SINGLETON_ID).filter(StudioSettings::isZaloOaConfigured)
-                .orElseThrow(() -> AppException.badRequest("ZALO_OA_NOT_CONFIGURED", "Studio chưa kết nối Zalo OA (Cài đặt → Zalo OA)"));
+                .orElseThrow(ZaloOaTokens::notConfigured);
         if (props.publicBaseUrl() == null || props.publicBaseUrl().isBlank()) {
             throw new IllegalStateException("app.public-base-url (env PUBLIC_BASE_URL) is not set");
         }
@@ -109,18 +112,24 @@ public class ContractShareService {
                 "total_amount", c.getTotalAmount().toPlainString(),
                 "contract_url", url);
         String accessToken = zaloTokens.accessToken();
+        String previousHash = c.getPublicTokenHash();
+        Instant previousExpiry = c.getShareExpiresAt();
+        c.setPublicTokenHash(sha256(token));
+        c.setShareExpiresAt(clock.instant().plus(LINK_LIFETIME));
         try {
             zalo.sendTemplate(accessToken, "84" + phone.substring(1), studio.getZnsContractTemplateId(), data,
                     c.getContractNumber().replaceAll("[^A-Za-z0-9]", "") + clock.millis());
         } catch (ZaloException e) {
+            if (e.error() != ZaloException.UNKNOWN_OUTCOME) {
+                c.setPublicTokenHash(previousHash);
+                c.setShareExpiresAt(previousExpiry);
+            }
             if (e.error() == ZALO_INVALID_ACCESS_TOKEN) {
                 zaloTokens.invalidate();
             }
             throw new AppException(HttpStatus.BAD_GATEWAY, "ZALO_SEND_FAILED",
                     "Zalo không gửi được tin (mã " + e.error() + "). Kiểm tra số Zalo của khách hoặc mẫu ZNS rồi thử lại");
         }
-        c.setPublicTokenHash(sha256(token));
-        c.setShareExpiresAt(clock.instant().plus(LINK_LIFETIME));
         return new ShareResultDto(mask(phone), url, c.getShareExpiresAt());
     }
 

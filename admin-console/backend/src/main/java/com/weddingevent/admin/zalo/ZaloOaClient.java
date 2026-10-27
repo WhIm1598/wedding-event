@@ -27,8 +27,11 @@ public class ZaloOaClient {
 
     public record Tokens(String accessToken, String refreshToken, Duration expiresIn) {}
 
-    /** {@code error} is Zalo's code (0 = success); -1 when Zalo couldn't be reached or answered garbage */
+    /** {@code error} is Zalo's code (0 = success), or {@link #UNKNOWN_OUTCOME} */
     public static class ZaloException extends RuntimeException {
+        /** No usable answer (timeout, HTTP error, garbage): Zalo may still have sent the message */
+        public static final int UNKNOWN_OUTCOME = -1;
+
         private final int error;
 
         ZaloException(int error, String message) {
@@ -75,10 +78,10 @@ public class ZaloOaClient {
                     .body(TokenResponse.class);
         } catch (RestClientException e) {
             log.warn("Zalo OA token refresh failed: {}", e.getMessage());
-            throw new ZaloException(-1, e.getMessage());
+            throw new ZaloException(ZaloException.UNKNOWN_OUTCOME, e.getMessage());
         }
         if (res == null || res.accessToken() == null || res.refreshToken() == null) {
-            int error = res == null || res.error() == null ? -1 : res.error();
+            int error = res == null || res.error() == null ? ZaloException.UNKNOWN_OUTCOME : res.error();
             log.warn("Zalo OA token refresh refused: error {}", error);
             throw new ZaloException(error, res == null ? "empty response" : res.message());
         }
@@ -97,10 +100,10 @@ public class ZaloOaClient {
                     .body(ZnsResponse.class);
         } catch (RestClientException e) {
             log.warn("ZNS send failed: {}", e.getMessage());
-            throw new ZaloException(-1, e.getMessage());
+            throw new ZaloException(ZaloException.UNKNOWN_OUTCOME, e.getMessage());
         }
         if (res == null || res.error() == null || res.error() != 0) {
-            int error = res == null || res.error() == null ? -1 : res.error();
+            int error = res == null || res.error() == null ? ZaloException.UNKNOWN_OUTCOME : res.error();
             log.warn("ZNS send refused: error {} {}", error, res == null ? "" : res.message());
             throw new ZaloException(error, res == null ? "empty response" : res.message());
         }

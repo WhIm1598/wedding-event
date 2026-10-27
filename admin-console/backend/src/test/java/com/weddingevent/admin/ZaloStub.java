@@ -13,7 +13,7 @@ import java.util.function.Function;
 
 /**
  * Local stand-in for Zalo's OAuth v4 token endpoint and ZNS API. Records every request; responses can be swapped per
- * test with {@link #onToken} / {@link #onZns}.
+ * test with {@link #onToken} / {@link #onZns}. A handler returning null answers HTTP 500 (Zalo unreachable).
  */
 public final class ZaloStub {
 
@@ -79,9 +79,10 @@ public final class ZaloStub {
         Request req = new Request(ex.getRequestURI().getPath(), Map.copyOf(ex.getRequestHeaders()),
                 new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
         requests.add(req);
-        byte[] body = handler.apply(req).getBytes(StandardCharsets.UTF_8);
+        String answer = handler.apply(req);
+        byte[] body = (answer == null ? "{}" : answer).getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add("Content-Type", "application/json");
-        ex.sendResponseHeaders(200, body.length);
+        ex.sendResponseHeaders(answer == null ? 500 : 200, body.length);
         ex.getResponseBody().write(body);
         ex.close();
     }
