@@ -35,6 +35,8 @@ services:
       # Only read while the database has no platform admin yet (#36, ADR-0001)
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # true: overwrite that platform admin's forgotten password on startup (docs/setup/deploy-linux.md)
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-false}
     depends_on:
       postgres:
         condition: service_healthy

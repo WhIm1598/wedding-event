@@ -17,7 +17,7 @@ One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |
 | `crm/CustomerStageSync` | `contractChanged(contract)` — call after any contract status change (payment, delivery) so the customer's stage follows (FN-ADM-CRM-03) |
 | `demo/` | `DemoDataSeeder` — seeds the empty dev/test database (profile flag `app.demo-data.enabled`). There is no default profile: run with `--spring.profiles.active=dev` |
-| `auth/AdminBootstrap` | Production's platform admin from env `ADMIN_EMAIL`/`ADMIN_PASSWORD` while no `ROLE_PLATFORM_ADMIN` exists (deploy: `deploy/README.md`) |
+| `auth/AdminBootstrap` | Production's platform admin from env `ADMIN_EMAIL`/`ADMIN_PASSWORD` while no `ROLE_PLATFORM_ADMIN` exists; with `ADMIN_RESET_PASSWORD=true` it overwrites that platform admin's forgotten password instead (deploy: `deploy/README.md`) |
 
 Inside a module package: `XxxController` + `XxxService` holding the request/response **records** as nested types
 (e.g. `BookingService.CreateBookingRequest`, `BookingService.BookingDto` with a static `of(entity)`).

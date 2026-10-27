@@ -328,7 +328,7 @@ crontab -e                # thêm dòng dưới, lưu lại
 | `gateway` khởi động lại liên tục | Chưa có chứng chỉ (chưa làm bước 6) hoặc `DOMAIN` gõ sai | `docker compose -f docker-compose.prod.yml logs gateway`; làm bước 6 với đúng `DOMAIN` |
 | `admin-backend` không `healthy` | Sai `DB_PASSWORD` so với lần chạy đầu, hoặc `ADMIN_PASSWORD` quá yếu | Xem `logs admin-backend`. Lỗi `password authentication failed`: đặt lại đúng `DB_PASSWORD` cũ. Lỗi `ADMIN_PASSWORD must have`: đặt mật khẩu ≥ 8 ký tự có chữ và số |
 | Web báo `502 Bad Gateway` | Backend đang khởi động hoặc đã dừng | Đợi 1–2 phút; `ps` và `logs admin-backend` |
-| Đăng nhập báo sai dù đúng | `ADMIN_*` chỉ được đọc khi database **chưa có** quản trị nền tảng; đổi `.env` sau đó không có tác dụng | Dùng mật khẩu đã đặt lần đầu. Quên mật khẩu quản trị nền tảng: liên hệ đội phát triển để đặt lại trực tiếp trong database |
+| Đăng nhập báo sai dù đúng | `ADMIN_*` chỉ được đọc khi database **chưa có** quản trị nền tảng; đổi `.env` sau đó không có tác dụng | Dùng mật khẩu đã đặt lần đầu. Quên mật khẩu: xem [Đặt lại mật khẩu quản trị nền tảng](#đặt-lại-mật-khẩu-quản-trị-nền-tảng) |
 | Ổ đĩa đầy | Image build cũ, log | `df -h`; `docker system prune -f` (xoá image/container không dùng, **không** xoá database) |
 
 ---
@@ -366,6 +366,36 @@ dc ps                     # đợi admin-backend healthy
 
 Migration database chạy tự động khi backend khởi động. Sau khi cập nhật, làm nhanh vài dòng ở mục 9.2 (đăng nhập, mở
 một hợp đồng, xuất PDF).
+
+### Đặt lại mật khẩu quản trị nền tảng
+
+Khi quên mật khẩu (hoặc tài khoản bị khoá 15 phút do sai nhiều lần):
+
+1. Thêm ba dòng vào `.env` (email là email của tài khoản quản trị nền tảng hiện có):
+
+   ```dotenv
+   ADMIN_EMAIL=ban@tenstudio.vn
+   ADMIN_PASSWORD=<mật khẩu mới ≥ 8 ký tự, có chữ và số>
+   ADMIN_RESET_PASSWORD=true
+   ```
+
+2. Khởi động lại backend và xem log:
+
+   ```bash
+   dc up -d admin-backend
+   dc logs --tail 50 admin-backend | grep -i "platform admin"
+   ```
+
+   Thấy `Reset the platform admin password` là xong: mật khẩu đã đổi, tài khoản được mở khoá, mọi phiên đăng nhập cũ
+   bị đăng xuất. Email sai (không phải tài khoản quản trị nền tảng) thì backend dừng với lỗi
+   `ADMIN_EMAIL is not a platform admin account` và không đổi tài khoản nào.
+
+3. **Xoá cả ba dòng** khỏi `.env` rồi `dc up -d admin-backend`. Nếu để lại, mỗi lần backend khởi động sẽ đặt lại mật khẩu
+   về giá trị trong `.env`.
+4. Đăng nhập bằng mật khẩu mới, bấm biểu tượng chìa khoá để đổi sang mật khẩu chỉ bạn biết.
+
+Quản lý studio quên mật khẩu thì không cần làm vậy: quản lý khác của studio đặt lại ở *Cài đặt → Tài khoản*, hoặc quản
+trị nền tảng tạo thêm quản lý cho studio đó.
 
 ### Khôi phục từ backup (khi có sự cố thật)
 

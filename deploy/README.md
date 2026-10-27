@@ -26,6 +26,7 @@ cp .env.example .env && chmod 600 .env
 | `DB_PASSWORD` | `openssl rand -base64 32` |
 | `JWT_SECRET` | `openssl rand -base64 48`. Đổi giá trị này sẽ đăng xuất mọi người |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Tài khoản **quản trị nền tảng** đầu tiên (`ROLE_PLATFORM_ADMIN`, ADR-0001), chỉ dùng khi DB chưa có. Mật khẩu ≥ 8 ký tự, có chữ và số |
+| `ADMIN_RESET_PASSWORD` | `false`. Quên mật khẩu quản trị nền tảng: đặt `true` cùng `ADMIN_EMAIL` và `ADMIN_PASSWORD` mới, khởi động lại backend, rồi xoá cả ba ([chi tiết](../docs/setup/deploy-linux.md#đặt-lại-mật-khẩu-quản-trị-nền-tảng)) |
 
 `.env` chứa bí mật: không commit, không gửi qua chat. Nên lưu thêm một bản trong trình quản lý mật khẩu của studio.
 
