@@ -8,6 +8,26 @@ Bản tóm tắt cho người đã quen: [deploy/README.md](../../deploy/README.
 > **Phạm vi:** web admin (backend admin, frontend, PostgreSQL, nginx HTTPS, sao lưu). Backend của app mobile chưa nằm
 > trong bản deploy này (issue #56).
 
+## Cách nhanh: script `install.sh`
+
+Sau khi làm **bước 0, 1** (VPS, tên miền đã trỏ về server) và đăng nhập SSH, một script làm thay các bước 2.2–9.1:
+
+```bash
+sudo apt update && sudo apt install -y git
+git clone https://github.com/WhIm1598/wedding-event.git && cd wedding-event
+sudo deploy/install.sh admin.tenstudio.vn ban@tenstudio.vn
+```
+
+Script cài Docker, bật tường lửa và swap, **tự sinh mật khẩu** vào `deploy/.env` (không cần gõ, không đi qua chat), kiểm tra
+tên miền trỏ đúng, lấy chứng chỉ HTTPS, build và chạy, đợi backend sẵn sàng rồi chạy các kiểm tra ở mục 9.1. Cuối cùng in
+ra **mật khẩu quản trị nền tảng (chỉ hiện một lần)** và các việc còn lại: bước 8 (đổi mật khẩu, xoá `ADMIN_*`, tạo studio),
+9.2–9.4 (kiểm thử chức năng, thử khôi phục, chép backup ra ngoài).
+
+Chạy lại script nhiều lần không sao: nó giữ `.env`, chứng chỉ và database đã có. Script dừng ở bước nào thì đọc thông báo,
+xem mục tương ứng bên dưới và [Xử lý sự cố](#10-xử-lý-sự-cố). Bước 2.3 (tạo người dùng riêng) vẫn nên tự làm trước.
+
+Muốn hiểu từng bước, hoặc làm tay: đọc tiếp từ bước 0.
+
 ---
 
 ## 0. Cần chuẩn bị trước
