@@ -44,8 +44,14 @@ public abstract class IntegrationTest {
         }
     }
 
+    /** Shared by the whole context (one Spring context for every test class) */
+    protected static final ZaloStub ZALO = ZaloStub.start();
+
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("app.zalo.oauth-url", ZALO::oauthUrl);
+        registry.add("app.zalo.zns-url", ZALO::znsUrl);
+        registry.add("app.public-base-url", () -> "https://studio.test");
         if (POSTGRES != null) {
             registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
             registry.add("spring.datasource.username", POSTGRES::getUsername);

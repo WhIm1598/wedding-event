@@ -125,7 +125,7 @@ wedding-event/
   * Tự động điền thông tin Đại diện Bên A (Khách hàng) và Đại diện Bên B (lấy từ Cài đặt studio).
   * Bảng chi tiết dịch vụ, tiến độ thanh toán 3 đợt (số tiền & hạn thực tế), khu vực chữ ký hai bên.
   * **Xuất bản**: Hỗ trợ xuất file PDF tải xuống hoặc tạo link chia sẻ trực tiếp qua Zalo cho khách hàng.
-* 🆕 **Trang hợp đồng công khai cho khách**: Link Zalo mở trang `/c/{mã bí mật}` trên điện thoại khách — xem hợp đồng, tải PDF, xem đợt cần thanh toán kèm mã VietQR, bấm "Tôi đồng ý". Link hết hạn sau 30 ngày, Quản lý có thể thu hồi. *(FN-PUB-CONTR-01)*
+* ✅ **Trang hợp đồng công khai cho khách** *(mã VietQR chưa làm)*: Link Zalo mở trang `/c/{mã bí mật}` trên điện thoại khách — xem hợp đồng, tải PDF, xem đợt cần thanh toán kèm mã VietQR, bấm "Tôi đồng ý". Link hết hạn sau 30 ngày, Quản lý có thể thu hồi. *(FN-PUB-CONTR-01)*
 
 ### 5.4. Quản lý Gói Dịch Vụ Cưới (Packages Management)
 * Quản lý các gói chủ lực: *Gói Kim Cương (Ngày Cưới)*, *Gói Tiêu Chuẩn (Pre-wedding)*, *Gói Lễ Ăn Hỏi*.
@@ -296,8 +296,8 @@ Quyền: **A** = chỉ `ROLE_ADMIN`; **A/S** = cả Quản lý và Nhân viên (
 | | 🆕 `PUT /staff/{id}`, `PATCH /staff/{id}/work-status` (A) · `GET /me/tasks`, `PATCH /me/tasks/{id}` (A/S) | | FN-ADM-STAFF-01/03 |
 | CRM | ✅ `GET /crm/pipeline`, `POST /crm/customers`, `PATCH /crm/customers/{id}/stage` | A/S | FN-ADM-CRM-01 |
 | | 🆕 `GET /crm/customers?page&stage&q`, `GET/PUT /crm/customers/{id}`, `POST /crm/customers/{id}/activities` (A/S), `DELETE /crm/customers/{id}` (A) | | FN-ADM-CRM-01/02 |
-| Hợp đồng | ✅ `GET /contracts`, `GET /contracts/{id}/preview-html`, `GET /contracts/{id}/export-pdf`, `POST /contracts/{id}/share-zalo` (A/S), `POST /contracts` (A) | | FN-ADM-CONTR-01/02 |
-| | 🆕 `PUT /contracts/{id}`, `POST /contracts/{id}/cancel`, `POST /contracts/{id}/deliver`, `POST /contracts/{id}/revoke-link`, `PUT /contracts/{id}/installments` (A) · `GET /contracts/{id}/installments` (A/S) | | FN-ADM-CONTR-02, FIN-02 |
+| Hợp đồng | ✅ `GET /contracts`, `GET /contracts/{id}/preview-html`, `GET /contracts/{id}/export-pdf`, `POST /contracts/{id}/share-zalo` (A/S), `POST /contracts`, `POST /contracts/{id}/revoke-link` (A), `GET/PUT /settings/zalo-oa` (A) | | FN-ADM-CONTR-01/02 |
+| | 🆕 `PUT /contracts/{id}`, `POST /contracts/{id}/cancel`, `POST /contracts/{id}/deliver`, `PUT /contracts/{id}/installments` (A) · `GET /contracts/{id}/installments` (A/S) | | FN-ADM-CONTR-02, FIN-02 |
 | Sổ quỹ | ✅ `GET /financials/transactions`, `GET /financials/summary`, `POST /financials/transactions` | A | FN-ADM-FIN-01/03 |
 | | 🆕 `POST /financials/transactions/{id}/void`, `GET /financials/export`, `GET /financials/receivables` | A | FN-ADM-FIN-02/03 |
 | Thông báo | ✅ `GET /notifications`, `PATCH /notifications/{id}/read`, `PATCH /notifications/read-all` | A/S | FN-ADM-NOTI-01 |

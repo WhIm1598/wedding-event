@@ -5,6 +5,7 @@ import com.weddingevent.common.domain.enums.ContractStatus;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,6 +21,8 @@ public interface ContractRepository extends JpaRepository<Contract, UUID> {
     long countByContractDateBetween(LocalDate from, LocalDate to);
 
     boolean existsByLeadId(UUID leadId);
+
+    Optional<Contract> findByPublicTokenHash(String publicTokenHash);
 
     /** Does the customer still have an effective contract in these states? Drafts aren't effective (GLOSSARY). */
     boolean existsByLeadIdAndStatusIn(UUID leadId, Collection<ContractStatus> statuses);

@@ -53,6 +53,11 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   demo-data:
     enabled: false
+  # Origin of the customer's public contract page (link in the Zalo message), e.g. https://admin.example.vn
+  public-base-url: ${PUBLIC_BASE_URL:}
+  zalo:
+    oauth-url: https://oauth.zaloapp.com/v4/oa/access_token
+    zns-url: https://business.openapi.zalo.me/message/template
   # First admin of an empty production database (#36); ignored once any ROLE_ADMIN exists
   bootstrap-admin:
     email: ${ADMIN_EMAIL:}

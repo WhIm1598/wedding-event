@@ -75,6 +75,23 @@ public class Contract extends BaseEntity {
     @Column(name = "delivered_at")
     private Instant deliveredAt;
 
+    /** SHA-256 (hex) of the public link token (FN-PUB-CONTR-01); null = no link */
+    @Column(name = "public_token_hash")
+    private String publicTokenHash;
+
+    @Column(name = "share_expires_at")
+    private Instant shareExpiresAt;
+
+    /** The customer pressed "Tôi đã đọc và đồng ý" on the public page */
+    @Column(name = "accepted_at")
+    private Instant acceptedAt;
+
+    @Column(name = "accepted_ip")
+    private String acceptedIp;
+
+    @Column(name = "accepted_user_agent")
+    private String acceptedUserAgent;
+
     @Version
     private long version;
 

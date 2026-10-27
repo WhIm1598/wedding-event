@@ -2,20 +2,24 @@ import { useState, type FormEvent } from "react";
 import { KeyRound } from "lucide-react";
 import { authApi } from "@/api/auth.api";
 import { errorMessage } from "@/api/http";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Form";
 import { Modal } from "@/components/ui/Modal";
 
-/** FN-ADM-AUTH-04: change one's own password */
+/** FN-ADM-AUTH-04: change one's own password. `forced`: first login with a temporary password (FN-ADM-AUTH-01 step 6) */
 export function ChangePasswordModal({
   isOpen,
   onClose,
+  forced = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  forced?: boolean;
 }) {
   const showToast = useToast();
+  const { setUser } = useAuth();
   const [saving, setSaving] = useState(false);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
@@ -28,11 +32,17 @@ export function ChangePasswordModal({
     }
     setSaving(true);
     try {
-      await authApi.changePassword(
-        String(fd.get("currentPassword")),
-        newPassword,
+      setUser(
+        await authApi.changePassword(
+          String(fd.get("currentPassword")),
+          newPassword,
+        ),
       );
-      showToast("Đã đổi mật khẩu. Các thiết bị khác cần đăng nhập lại.");
+      showToast(
+        forced
+          ? "Đã đổi mật khẩu, chào mừng bạn!"
+          : "Đã đổi mật khẩu. Các thiết bị khác cần đăng nhập lại.",
+      );
       onClose();
     } catch (err) {
       showToast(errorMessage(err), "error");
@@ -52,7 +62,16 @@ export function ChangePasswordModal({
       }
     >
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Mật khẩu hiện tại" required>
+        {forced && (
+          <p className="text-sm text-slate-600">
+            Bạn đang dùng mật khẩu tạm do quản lý cấp. Hãy đặt mật khẩu mới để
+            tiếp tục.
+          </p>
+        )}
+        <Field
+          label={forced ? "Mật khẩu tạm" : "Mật khẩu hiện tại"}
+          required
+        >
           <Input
             name="currentPassword"
             type="password"
@@ -80,7 +99,7 @@ export function ChangePasswordModal({
         </Field>
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>
-            Hủy
+            {forced ? "Đăng xuất" : "Hủy"}
           </Button>
           <Button type="submit" loading={saving}>
             Đổi mật khẩu

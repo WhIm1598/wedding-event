@@ -1,7 +1,12 @@
 import type { BadgeVariant } from '@/components/ui/Badge';
-import type { AssetCategory, AssetStatus, BookingProgressStatus, BookingStatus, ContractStatus, LeadStage, StaffWorkStatus } from '@/types';
+import type { AssetCategory, AssetStatus, BookingProgressStatus, BookingStatus, ContractStatus, LeadStage, Role, StaffWorkStatus } from '@/types';
 
 type LabelMap<K extends string> = Record<K, { label: string; variant: BadgeVariant }>;
+
+export const ROLES: LabelMap<Role> = {
+  ROLE_ADMIN: { label: 'Quản lý', variant: 'brand' },
+  ROLE_STAFF: { label: 'Nhân viên', variant: 'info' },
+};
 
 export const BOOKING_STATUS: LabelMap<BookingStatus> = {
   UPCOMING: { label: 'Chờ xác nhận', variant: 'warning' },

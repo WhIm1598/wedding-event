@@ -9,6 +9,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   loginAsDemo: (role: Role) => Promise<void>;
   logout: () => void;
+  /** After a password change, e.g. to clear mustChangePassword */
+  setUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, initializing, isAdmin: user?.role === 'ROLE_ADMIN', login, loginAsDemo, logout }}>
+    <AuthContext.Provider value={{ user, initializing, isAdmin: user?.role === 'ROLE_ADMIN', login, loginAsDemo, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );

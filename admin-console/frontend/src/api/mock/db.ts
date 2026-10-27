@@ -12,6 +12,8 @@ import type {
   StaffTask,
   StudioSettings,
   Transaction,
+  UserAccount,
+  ZaloOaSettings,
 } from '@/types';
 
 const today = todayISO();
@@ -37,6 +39,12 @@ const ref = (id: string) => {
 
 export const db = {
   staff,
+
+  // Login accounts (FN-ADM-USER-01); ids match the demo users in auth.api.ts
+  users: [
+    { id: 'u-admin', email: 'admin@lumiere.vn', name: 'Quản Lý Studio', role: 'ROLE_ADMIN', staffId: null, staffName: null, isActive: true, lastLoginAt: minutesAgo(5) },
+    { id: 'u-staff', email: 'staff@lumiere.vn', name: 'Nhân Viên', role: 'ROLE_STAFF', staffId: 'nv-02', staffName: 'Hương Sale', isActive: true, lastLoginAt: minutesAgo(180) },
+  ] as UserAccount[],
 
   packages: [
     { id: 'pkg-1', name: 'Gói Kim Cương (Ngày Cưới)', price: 25_000_000, type: 'Trọn gói', isActive: true,
@@ -101,6 +109,13 @@ export const db = {
     legalRepresentative: 'Nguyễn Văn A',
     bankInfo: 'Vietcombank - Chi nhánh HCM\nSTK: 0123456789\nChủ TK: NGUYEN VAN A',
   } as StudioSettings,
+
+  // Zalo OA of the studio (FN-ADM-SET-02); the mock keeps it connected so "Gửi Zalo" works in the demo
+  zaloOa: { appId: 'demo-app', templateId: 'demo-template', hasAppSecret: true, hasRefreshToken: true, configured: true, accessTokenExpiresAt: null } as ZaloOaSettings,
+  /** public link token → contract (FN-PUB-CONTR-01) */
+  // /c/demo opens in demo mode without sharing first (the in-memory db resets on reload)
+  shareLinks: { demo: { contractId: 'hd-102', expiresAt: '2099-12-31T00:00:00Z' } } as Record<string, { contractId: string; expiresAt: string }>,
+  acceptedAt: {} as Record<string, string>,
 
   revenueByMonth: [40, 70, 45, 90, 65, 85, 100, 50, 75, 60, 80, 95].map((m, i) => ({ month: i + 1, amount: m * 1_000_000 })),
 };

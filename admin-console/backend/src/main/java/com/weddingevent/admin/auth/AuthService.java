@@ -83,6 +83,7 @@ public class AuthService {
         }
         user.setFailedLoginCount(0);
         user.setLockedUntil(null);
+        user.setLastLoginAt(now);
         return respond(user);
     }
 
@@ -141,6 +142,7 @@ public class AuthService {
             throw AppException.invalidField("newPassword", "Mật khẩu mới phải khác mật khẩu hiện tại");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(false);
         refreshTokens.revokeAll(userId, clock.instant());
         return respond(user);
     }

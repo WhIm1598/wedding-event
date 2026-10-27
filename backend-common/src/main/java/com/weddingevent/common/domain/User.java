@@ -59,6 +59,14 @@ public class User extends BaseEntity {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    /** Set on a temporary password (FN-ADM-USER-01): only change-password, me and logout work until it is changed */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
+    /** Last successful admin-console login */
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
     /** Links a ROLE_STAFF account to its staff profile so they only see their own schedule. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "staff_member_id")

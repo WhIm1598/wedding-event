@@ -12,6 +12,7 @@ import { AssetsPage } from '@/features/assets/AssetsPage';
 import { StaffPage } from '@/features/staff/StaffPage';
 import { FinancialsPage } from '@/features/financials/FinancialsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { PublicContractPage } from '@/features/public/PublicContractPage';
 import type { Role } from '@/types';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -32,6 +33,8 @@ const adminOnly = (el: ReactNode) => <RequireRole roles={['ROLE_ADMIN']}>{el}</R
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  // The customer's contract page from the Zalo link (FN-PUB-CONTR-01): public, outside the admin layout
+  { path: '/c/:token', element: <PublicContractPage /> },
   {
     path: '/',
     element: (

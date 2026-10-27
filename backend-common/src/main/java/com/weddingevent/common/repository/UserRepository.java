@@ -3,9 +3,12 @@ package com.weddingevent.common.repository;
 import com.weddingevent.common.domain.User;
 import com.weddingevent.common.domain.enums.Role;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -20,6 +23,22 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByEmailIgnoreCase(String email);
 
     boolean existsByRole(Role role);
+
+    /** Console accounts for FN-ADM-USER-01; a null role or active filter matches everything */
+    @EntityGraph(attributePaths = "staffMember")
+    @Query("""
+            select u from User u where u.role in :roles
+              and (:role is null or u.role = :role) and (:active is null or u.active = :active)
+            order by u.fullName, u.email""")
+    Page<User> findConsoleUsers(@Param("roles") Collection<Role> roles, @Param("role") Role role,
+            @Param("active") Boolean active, Pageable pageable);
+
+    /** Locks every active admin, so two admins demoting each other at once can't leave none (LAST_ADMIN) */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.role = com.weddingevent.common.domain.enums.Role.ROLE_ADMIN and u.active = true order by u.id")
+    List<User> findActiveAdminsForUpdate();
+
+    Optional<User> findByStaffMemberId(UUID staffMemberId);
 
     /** Row lock for the admin login, so concurrent wrong attempts all count (FN-ADM-AUTH-01 step 3) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

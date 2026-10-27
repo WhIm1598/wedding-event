@@ -10,3 +10,4 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   demo-data:
     enabled: true
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:5173}

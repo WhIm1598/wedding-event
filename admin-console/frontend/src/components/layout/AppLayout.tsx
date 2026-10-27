@@ -3,6 +3,8 @@ import { Outlet, useOutletContext } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { CreateContractModal } from '@/features/contracts/CreateContractModal';
+import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface LayoutContext {
   openCreateContract: () => void;
@@ -13,11 +15,21 @@ export interface LayoutContext {
 export const useLayout = () => useOutletContext<LayoutContext>();
 
 export function AppLayout() {
+  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isContractOpen, setIsContractOpen] = useState(false);
   const [contractsVersion, setContractsVersion] = useState(0);
 
   const context: LayoutContext = { openCreateContract: () => setIsContractOpen(true), contractsVersion };
+
+  // Every other API call answers 403 PASSWORD_CHANGE_REQUIRED until the temporary password is changed
+  if (user?.mustChangePassword) {
+    return (
+      <div className="h-screen bg-slate-50">
+        <ChangePasswordModal isOpen forced onClose={logout} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">

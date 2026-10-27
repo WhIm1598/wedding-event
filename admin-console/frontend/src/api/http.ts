@@ -82,7 +82,8 @@ function sessionExpired() {
 async function send(method: string, path: string, body: unknown, query: Query | undefined, accept: string): Promise<Response> {
   const headers: Record<string, string> = { Accept: accept };
   const token = tokenStorage.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  // A stale staff token on the customer's public page would get 401 and a redirect to /login
+  if (token && !path.startsWith('/public/')) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   return fetch(buildUrl(path, query), { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
 }

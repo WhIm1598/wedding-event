@@ -18,6 +18,8 @@
 | 1.1.3 | Không gian Vendor (Module 4B): yêu cầu báo giá → dự án Vendor, dashboard và gói của Vendor (FN-VND-01..05), trạng thái `QuoteRequestStatus`/`VendorProjectStatus` (§1.6), mã lỗi `PACKAGE_NOT_QUOTABLE`, `QUOTE_ALREADY_OPEN` (§1.3). Bảo mật tài khoản mobile: email mới chờ xác nhận (`pendingEmail`, FN-AUTH-04), mã OTP gắn với địa chỉ nhận và tối đa 5 mã/giờ (FN-AUTH-02), Google chỉ nhận email đã xác thực và không gộp vào tài khoản chưa xác thực. FN-ADM-CRM-03: khách chuyển `IN_PROGRESS` khi hợp đồng nhận cọc, không phải khi tạo hợp đồng nháp (khớp sơ đồ). Hợp đồng `DEPOSITED` không có lịch hẹn (chỉ thuê váy) bàn giao được trực tiếp. Duyệt Module 4B: Vendor tạo/sửa gói và giảm giá (`discountPrice`), doanh thu Vendor chỉ tính dự án `COMPLETED`, Cặp đôi xin hủy dự án và Vendor duyệt, gói Studio và Vendor liên hệ qua Zalo (`zaloUrl`; số Studio `zaloPhone` FN-ADM-SET-01, số Vendor = SĐT tài khoản), chat Cặp đôi–Studio/Vendor (FN-MSG-01) tạm ẩn trên app, thanh toán Cặp đôi–Vendor ngoài app. Thuật ngữ thống nhất trong `GLOSSARY.md`. |
 | 1.1.4 | Đối chiếu Phần A với `docs/api/client-api.yml` (sinh từ code). Thêm FN-AUTH-05 (đăng nhập Google) và FN-AUTH-06 (`/auth/me`) đúng như đang chạy; đặc tả mới FN-AUTH-07 làm mới phiên và đăng xuất trên mobile (refresh token xoay vòng, bảng `refresh_tokens`). Đối tượng `user` có đủ `phone`, `avatarUrl`, `pendingEmail`. Envelope: `data` vắng mặt khi không có giá trị (FN-PLAN-02 chưa có kế hoạch). Ghi các quy tắc code đang áp dụng: FN-PLAN-01 (tối đa 30 danh mục), FN-GUEST-01/02 (`tableNumber`, `notes`, giới hạn độ dài, lọc), FN-VND-04 (phân trang phía Cặp đôi, giá trị trạng thái, thông báo khi từ chối yêu cầu hủy). FN-VND-03: khi chốt, địa điểm gửi kèm cập nhật địa điểm; ngày gửi kèm chỉ dùng khi yêu cầu chưa có ngày. `sort=` (§1.2) và `TOO_MANY_REQUESTS` (§1.3) ghi rõ là chưa làm. |
 | 1.1.5 | Thông báo đẩy qua Firebase Cloud Messaging: đăng ký thiết bị (FN-NOTI-02, bảng `device_tokens`), mọi thông báo FN-NOTI-01 đồng thời được push, FN-PLAN-05 gửi sự kiện `plan_updated` cho bạn đời. Hướng dẫn tạo project Google Cloud/Firebase: `docs/setup/google-cloud-firebase.md`. |
+| 1.1.6 | FN-ADM-USER-01 quản lý tài khoản đăng nhập ✅ (mã lỗi mới `STAFF_ALREADY_LINKED`, PATCH gửi đủ trường, migration V16: `must_change_password`, `last_login_at`, mỗi nhân sự tối đa một tài khoản). FN-ADM-AUTH-01 bước 5–6 (`last_login_at`, mật khẩu tạm bắt đổi → `403 PASSWORD_CHANGE_REQUIRED`) và FN-ADM-AUTH-04 ✅. Nhật ký thao tác cho tài khoản chờ §3.2. |
+| 1.1.7 | Gửi hợp đồng qua Zalo thật: FN-ADM-CONTR-01 endpoint 3 ✅ qua Zalo OA riêng của từng studio (FN-ADM-SET-02 mới), FN-PUB-CONTR-01 trang hợp đồng công khai (xem, PDF, đồng ý; VietQR chưa làm), migration V17, mã lỗi `ZALO_OA_NOT_CONFIGURED`, `ZALO_OA_AUTH_FAILED`, `ZALO_SEND_FAILED`. Chia sẻ lại thay link. Gateway giới hạn `/api/v1/public/` 30 request/phút/IP. |
 
 ---
 
@@ -69,6 +71,7 @@
 | `EMAIL_EXISTS` | 409 | Email tài khoản đã tồn tại. |
 | `LAST_ADMIN` | 409 | Không thể hạ quyền/khóa quản lý cuối cùng. |
 | `CANNOT_MODIFY_SELF` | 409 | Không tự khóa / tự hạ quyền chính mình. |
+| `STAFF_ALREADY_LINKED` | 409 | Hồ sơ nhân sự đã gắn với một tài khoản đăng nhập khác (FN-ADM-USER-01). |
 | `STAFF_NOT_FOUND` | 400 | Có nhân sự trong `staffIds` không tồn tại. |
 | `STAFF_SCHEDULE_CONFLICT` | 409 | Nhân sự trùng lịch (kèm tên). |
 | `INVALID_STATUS_TRANSITION` | 409 | Chuyển trạng thái không hợp lệ theo §1.6. |
@@ -83,6 +86,9 @@
 | `TRANSACTION_ALREADY_VOIDED` | 409 | Hủy phiếu thu/chi đã bị hủy. |
 | `ZALO_NOT_AVAILABLE` | 400 | SĐT khách chưa đăng ký Zalo. |
 | `SHARE_LINK_EXPIRED` | 410 | Link hợp đồng công khai hết hạn hoặc đã bị thu hồi. |
+| `ZALO_OA_NOT_CONFIGURED` | 400 | Studio chưa kết nối Zalo OA (FN-ADM-SET-02). |
+| `ZALO_OA_AUTH_FAILED` | 502 | Không lấy được access token từ Zalo (App ID/Secret sai, refresh token hết hạn hoặc đã dùng). |
+| `ZALO_SEND_FAILED` | 502 | Zalo từ chối hoặc không nhận tin ZNS; thông điệp kèm mã lỗi của Zalo. |
 
 **Mã nghiệp vụ phía Mobile (Phần A)** *(v1.1.2)* — dùng chung `INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `EMAIL_EXISTS`, `INVALID_STATUS_TRANSITION` và *(v1.1.4)* `INVALID_REFRESH_TOKEN` (FN-AUTH-07) ở trên:
 | Mã | HTTP | Ngữ cảnh |
@@ -638,9 +644,9 @@ flowchart LR
   2. `is_active = false` → `403 ACCOUNT_LOCKED`.
   3. Chống dò mật khẩu: sai 5 lần liên tiếp → khóa đăng nhập 15 phút (`locked_until`), trả `429 TOO_MANY_ATTEMPTS`; đăng nhập đúng reset `failed_login_count`. Giới hạn thêm 20 request/phút/IP ở gateway.
   4. Sinh `accessToken` (JWT HS256, 2 giờ, issuer `app.jwt.issuer`, claim `sub`=userId, `email`, `name`, `roles` (mảng `ROLE_*`), `staffId` (khi tài khoản gắn nhân sự), `typ=access`) và `refreshToken` (30 ngày, cùng claim, `typ=refresh`; *(v1.1)* thêm claim `jti`). Resource server chỉ chấp nhận token `typ=access`.
-  5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). *(v1.1)* cập nhật `last_login_at`.
-  6. *(v1.1)* Nếu `must_change_password = true`: vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài đổi mật khẩu/`me`/`logout` trả `403 PASSWORD_CHANGE_REQUIRED`.
-* **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role" } }`. *(v1.1)* `user` thêm `staffId`, `mustChangePassword`.
+  5. Lưu `jti` của refresh token vào bảng `refresh_tokens` (dùng chung với FN-AUTH-07; job xoá dòng hết hạn quá 7 ngày). Cập nhật `last_login_at`.
+  6. Nếu `must_change_password = true` (mật khẩu tạm của FN-ADM-USER-01): vẫn trả token nhưng `user.mustChangePassword = true`; mọi API khác ngoài `change-password`/`me`/`logout`/`logout-all` trả `403 PASSWORD_CHANGE_REQUIRED`. Kiểm tra theo DB ở mỗi request, nên đặt lại mật khẩu cũng chặn ngay các access token đang dùng.
+* **Output (200):** `{ "accessToken", "refreshToken", "user": { "id", "name", "email", "role", "mustChangePassword" } }`. *(v1.1)* `user` thêm `staffId`.
 
 #### `FN-ADM-AUTH-02: Làm mới token (Refresh, có xoay vòng)` ✅
 * **Endpoint:** `POST /api/v1/admin/auth/refresh` — Public. Input: `{ "refreshToken": "..." }`.
@@ -650,21 +656,21 @@ flowchart LR
 #### `FN-ADM-AUTH-03: Thông tin người dùng hiện tại` ✅
 * **Endpoint:** `GET /api/v1/admin/auth/me` → `user` như FN-ADM-AUTH-01.
 
-#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` ⚠️
+#### `FN-ADM-AUTH-04: Đăng xuất & Đổi mật khẩu` ✅
 * `POST /api/v1/admin/auth/logout` — Public, body `{ "refreshToken": "..." }`, đánh dấu thu hồi `jti`. Luôn trả 200 (idempotent).
 * `POST /api/v1/admin/auth/logout-all` — thu hồi mọi refresh token của chính mình.
-* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi. *(v1.1, cùng FN-ADM-USER-01)* `must_change_password = false`.
+* `POST /api/v1/admin/auth/change-password` — `{ "currentPassword", "newPassword" }`. `currentPassword` sai → `400 WRONG_PASSWORD`. Chính sách mật khẩu: 8–100 ký tự, có chữ và số, khác mật khẩu hiện tại. Thành công: thu hồi mọi refresh token và trả cặp token mới (`{ accessToken, refreshToken, user }`) cho phiên đang đổi; đặt `must_change_password = false`. Web: tài khoản có `mustChangePassword` chỉ thấy hộp thoại đổi mật khẩu (hoặc đăng xuất) cho tới khi đổi xong.
 * Access token còn hiệu lực tối đa 2 giờ sau khi thu hồi (chấp nhận được); khóa tài khoản có hiệu lực ngay vì mọi request đọc lại tài khoản trong DB: `is_active = false`, hoặc vai trò / nhân sự gắn khác với token → `401` (frontend làm mới token để nhận vai trò mới).
 * **Tài khoản admin đầu tiên** (DB mới): backend tạo một `ROLE_ADMIN` từ biến môi trường `ADMIN_EMAIL` / `ADMIN_PASSWORD` khi chưa có admin nào; sau đó bỏ qua hai biến này.
 
-#### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` 🆕
+#### `FN-ADM-USER-01: Quản lý Tài khoản đăng nhập` ✅
 * **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Tài khoản*.
 * **Endpoints:**
-  * `GET /api/v1/admin/users?page&size&role&active` — phân trang. Item: `{ id, email, name, role, staffId, staffName, isActive, lastLoginAt }`.
-  * `POST /api/v1/admin/users` — `{ "email", "name", "role": "ROLE_STAFF|ROLE_ADMIN", "staffId": "uuid|null" }`. Sinh mật khẩu tạm 12 ký tự ngẫu nhiên, trả về **một lần** trong response (`temporaryPassword`), `must_change_password = true`. Email trùng → `409 EMAIL_EXISTS`. `ROLE_STAFF` nên gắn `staffId` (để lọc lịch "của mình"); mỗi nhân sự gắn tối đa 1 tài khoản.
-  * `PATCH /api/v1/admin/users/{id}` — đổi `role`, `isActive`, `staffId`, `name`. Khóa tài khoản → thu hồi mọi refresh token.
-  * `POST /api/v1/admin/users/{id}/reset-password` — sinh mật khẩu tạm mới như trên.
-* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). Mọi thao tác ghi nhật ký (§3.2).
+  * `GET /api/v1/admin/users?page&size&role&active` — phân trang (`size` mặc định 20, tối đa 100), chỉ tài khoản `ROLE_ADMIN`/`ROLE_STAFF` (không có tài khoản mobile). Item: `{ id, email, name, role, staffId, staffName, isActive, lastLoginAt }`.
+  * `POST /api/v1/admin/users` — `{ "email", "name", "role": "ROLE_STAFF|ROLE_ADMIN", "staffId": "uuid|null" }`. Sinh mật khẩu tạm 12 ký tự ngẫu nhiên (có chữ và số, bỏ ký tự dễ nhầm `0/O/1/l/I`), trả về **một lần**: `201 { user: <item>, temporaryPassword }`, `must_change_password = true`. Email trùng (không phân biệt hoa thường, kể cả tài khoản mobile) → `409 EMAIL_EXISTS`. `role` khác hai giá trị trên → `400`. `ROLE_STAFF` nên gắn `staffId` (để lọc lịch "của mình"); `staffId` không tồn tại → `404`; mỗi nhân sự gắn tối đa 1 tài khoản → `409 STAFF_ALREADY_LINKED`.
+  * `PATCH /api/v1/admin/users/{id}` — `{ "name", "role", "isActive", "staffId" }`, **gửi đủ cả bốn trường** (`staffId: null` = bỏ gắn nhân sự). Email không đổi được. Khóa tài khoản → thu hồi mọi refresh token. Trả item.
+  * `POST /api/v1/admin/users/{id}/reset-password` — sinh mật khẩu tạm mới như trên (`{ user, temporaryPassword }`), bật lại `must_change_password`, mở khóa đăng nhập sai và thu hồi mọi refresh token.
+* **Quy tắc:** Không tự khóa/hạ quyền chính mình → `409 CANNOT_MODIFY_SELF`. Luôn còn ≥ 1 `ROLE_ADMIN` đang active → `409 LAST_ADMIN`. Không xóa cứng tài khoản (giữ lịch sử nhật ký). *(v1.2, chưa làm — cùng §3.2)* Mọi thao tác ghi nhật ký.
 
 ---
 
@@ -895,10 +901,13 @@ flowchart LR
 * **Mục tiêu:** Tạo văn bản hợp đồng pháp lý đầy đủ, hỗ trợ xuất PDF và chia sẻ qua Zalo.
 * **Endpoint 1:** `GET /api/v1/admin/contracts/{id}/preview-html` (`text/html`, dùng để render xem trước trong modal; mọi dữ liệu người dùng nhập phải được escape HTML).
 * **Endpoint 2:** `GET /api/v1/admin/contracts/{id}/export-pdf` (Trả về file nhị phân `application/pdf` chuẩn kích thước A4: 210mm x 297mm, tên file `HD-xxx.pdf`, font nhúng hỗ trợ tiếng Việt). *(v1.1)* PDF của hợp đồng không còn `DRAFT` được lưu MinIO (bucket `contracts`, key `{contractNumber}-v{version}.pdf`) và tái sử dụng; render lại khi hợp đồng thay đổi.
-* **Endpoint 3:** 🆕 `POST /api/v1/admin/contracts/{id}/share-zalo` — *chưa làm (cần tài khoản Zalo OA/ZNS và FN-PUB-CONTR-01). Bản giả chỉ ghi log đã bị gỡ (#39); hiện nút "Nhắn Zalo" mở `https://zalo.me/{sđt}` để nhân viên tự gửi file PDF.*
-  * Body (tùy chọn): `{ "phoneNumber": "0901112222" }` — mặc định SĐT trên hợp đồng.
-  * Không truyền `phoneNumber` và hợp đồng `hasZalo = false` → `400 ZALO_NOT_AVAILABLE`.
-  * Logic: Gửi tin nhắn Zalo ZNS tới khách kèm **link công khai có token** (FN-PUB-CONTR-01) và thông tin chuyển khoản *(v1.1 — không còn gửi link chứa UUID hợp đồng)*. Ghi activity "Đã gửi Zalo" vào hồ sơ khách.
+* **Endpoint 3:** ✅ `POST /api/v1/admin/contracts/{id}/share-zalo` (`ROLE_ADMIN`, `ROLE_STAFF`) — gửi ZNS từ **Zalo OA riêng của studio** (FN-ADM-SET-02; cách đăng ký: `docs/setup/zalo-oa-zns.md`). Nút "Nhắn Zalo" (`https://zalo.me/{sđt}`, nhân viên tự gửi PDF) vẫn giữ làm phương án dự phòng.
+  * Body (tùy chọn): `{ "phoneNumber": "0901112222" }` — mặc định SĐT trên hợp đồng; nếu có phải đúng §1.1.
+  * Không truyền `phoneNumber` và hợp đồng `hasZalo = false` → `400 ZALO_NOT_AVAILABLE`. Studio chưa nhập đủ cấu hình OA → `400 ZALO_OA_NOT_CONFIGURED`.
+  * Logic: sinh link công khai mới (FN-PUB-CONTR-01, hạn 30 ngày; link cũ của hợp đồng ngừng hoạt động vì DB chỉ giữ hash), lấy access token OA (mục dưới), gọi `POST https://business.openapi.zalo.me/message/template` với `phone` dạng `84xxxxxxxxx`, `template_id` của studio, `tracking_id` = số HĐ không dấu + mili-giây, `template_data` = `{ customer_name, contract_number, total_amount (số nguyên VND), contract_url }`. Zalo từ chối (`error ≠ 0`) hoặc không kết nối được → `502 ZALO_SEND_FAILED` (kèm mã Zalo). Zalo từ chối rõ ràng → giữ link cũ (link mới không được lưu); không nhận được câu trả lời (timeout, lỗi HTTP) → **giữ link mới**, vì tin có thể đã tới khách.
+  * **Access token OA:** lưu trong `studio_settings`, dùng lại tới 10 phút trước khi hết hạn (Zalo cấp ~25 giờ). Hết hạn → `POST https://oauth.zaloapp.com/v4/oa/access_token` (header `secret_key`, form `refresh_token`, `app_id`, `grant_type=refresh_token`). Refresh token chỉ dùng được một lần nên token mới được lưu trong **transaction riêng, khóa dòng cài đặt** — vẫn giữ dù gửi tin thất bại. Làm mới thất bại → `502 ZALO_OA_AUTH_FAILED` (Quản lý nhập refresh token mới). Zalo trả `-124` (access token không hợp lệ) → bỏ token đang lưu để lần sau làm mới.
+  * Output (200): `{ sentTo: "0901***222", publicUrl, shareExpiresAt }`.
+  * *(v1.2, chưa làm)* Ghi activity "Đã gửi Zalo" vào hồ sơ khách (cùng FN-ADM-CRM-02); gửi kèm thông tin chuyển khoản trong tin.
 * **Các điều khoản bắt buộc trong Hợp đồng:**
   1. Đại diện Bên A (Họ tên, SĐT; *(v1.1)* Địa chỉ khách hàng từ `contracts.customer_address`).
   2. Đại diện Bên B (Tên studio, Địa chỉ, Mã số thuế, Đại diện pháp luật, Thông tin ngân hàng — lấy từ Cài đặt studio, FN-ADM-SET-01).
@@ -909,16 +918,16 @@ flowchart LR
      * Đợt 3: Thanh toán 20% còn lại khi nhận toàn bộ album và ảnh gốc hoàn thiện.
   5. Ghi chú riêng (`notes`), khu vực chữ ký hai bên.
 
-#### `FN-PUB-CONTR-01: Trang hợp đồng công khai cho khách (Zalo link)` 🆕
+#### `FN-PUB-CONTR-01: Trang hợp đồng công khai cho khách (Zalo link)` ⚠️
 * **Mục tiêu:** Link trong tin Zalo mở được trên điện thoại khách mà không cần tài khoản, không lộ dữ liệu khách khác.
-* **Token:** Khi chia sẻ lần đầu, sinh `public_token` ngẫu nhiên 32 byte (base64url, lưu **hash SHA-256** trong DB) và `share_expires_at = now + 30 ngày`. Link: `${PUBLIC_BASE_URL}/c/{token}` (route SPA công khai).
+* **Token:** Mỗi lần chia sẻ sinh `public_token` ngẫu nhiên 32 byte (base64url, lưu **hash SHA-256** ở `contracts.public_token_hash`) và `share_expires_at = now + 30 ngày`; chia sẻ lại thay token (link cũ hết hiệu lực, vì không khôi phục được token từ hash). Link: `${PUBLIC_BASE_URL}/c/{token}` (route SPA công khai; production đặt `PUBLIC_BASE_URL=https://${DOMAIN}`).
 * **Endpoints (Public, rate-limit 30 request/phút/IP):**
-  * `GET /api/v1/public/contracts/{token}` → `{ contractNumber, studio: { name, address, bankInfo }, customerName, packageName, features[], totalAmount, paidAmount, remainingAmount, installments[], eventDate, status, acceptedAt }`. **Không** trả SĐT đầy đủ (che `0901***222`), không trả ghi chú nội bộ.
+  * `GET /api/v1/public/contracts/{token}` → `{ contractNumber, studio: { name, address, bankInfo }, customerName, phone, packageName, features[], totalAmount, paidAmount, remainingAmount, installments[], eventDate, status, acceptedAt }`. **Không** trả SĐT đầy đủ (`phone` đã che `0901***222`), không trả id hay ghi chú nội bộ. `installments[]` = `{ label, percent, amount }`, hiện chia cố định 30/50/20 trên tổng như bản PDF, tới khi có `contract_installments` (FN-ADM-FIN-02). `eventDate` = ngày lịch hẹn sớm nhất chưa hủy của hợp đồng (null nếu chưa có).
   * `GET /api/v1/public/contracts/{token}/pdf` → PDF như Endpoint 2.
-  * `POST /api/v1/public/contracts/{token}/accept` → khách bấm "Tôi đã đọc và đồng ý": lưu `accepted_at`, IP, user-agent; thông báo cho Admin. Chỉ cho phép một lần.
+  * `POST /api/v1/public/contracts/{token}/accept` → khách bấm "Tôi đã đọc và đồng ý": lưu `accepted_at`, IP (gateway ghi đè `X-Forwarded-For` bằng IP thật), user-agent; thông báo cho studio. Chỉ ghi lần đầu; bấm lại trả 200 với `acceptedAt` cũ.
 * Token hết hạn, sai hoặc hợp đồng đã hủy → `410 SHARE_LINK_EXPIRED` (trang hiển thị "Link đã hết hạn, vui lòng liên hệ studio").
 * `POST /api/v1/admin/contracts/{id}/revoke-link` (`ROLE_ADMIN`) — thu hồi link; chia sẻ lại sẽ sinh token mới.
-* Trang hiển thị thêm mã **VietQR** chuyển khoản cho số tiền của đợt kế tiếp (nội dung CK: `HD-xxx`), sinh phía client từ `bankInfo` có cấu trúc (FN-ADM-SET-01).
+* Trang hiển thị `bankInfo` và nội dung chuyển khoản `HD-xxx`. *(v1.2, chưa làm)* mã **VietQR** cho số tiền của đợt kế tiếp, sinh phía client từ `bankAccount` có cấu trúc (FN-ADM-SET-01).
 
 ---
 
@@ -1021,7 +1030,13 @@ flowchart LR
 * Trường hiện có: `name ≤200`, `address ≤255`, `taxCode ≤20`, `legalRepresentative ≤100`, `bankInfo ≤500` (bắt buộc cả 5).
 * *(v1.1)* Bổ sung: `bankAccount: { bankBin, accountNumber, accountName }` (có cấu trúc để sinh VietQR), `paymentSchedule: [30, 50, 20]`, `deliveryDays: 30`, `bookingSlotMinutes: null`, `zaloPaymentReminder: false`, `requireFullPaymentBeforeDelivery: false`, `contractTermsTemplate` (đoạn điều khoản chung in cuối hợp đồng, ≤ 10.000 ký tự).
 * *(v1.1.3)* `zaloPhone` (tùy chọn, SĐT §1.1): số Zalo để cặp đôi trên app liên hệ Studio (FN-SVC-02).
-* Bảng `studio_settings` chỉ có 1 dòng (`id = 1`).
+* Bảng `studio_settings` chỉ có 1 dòng (`id = 1`). Lưu hồ sơ studio khóa dòng này (cùng khóa với việc làm mới token Zalo OA, để không ghi đè refresh token vừa được thay).
+
+#### `FN-ADM-SET-02: Kết nối Zalo OA của studio` ✅
+* **Quyền:** `ROLE_ADMIN`. Màn hình: *Cài đặt → Zalo OA*. Hướng dẫn đăng ký OA, mẫu ZNS và lấy refresh token: `docs/setup/zalo-oa-zns.md`.
+* `GET /api/v1/admin/settings/zalo-oa` → `{ appId, templateId, hasAppSecret, hasRefreshToken, configured, accessTokenExpiresAt }`. **Không bao giờ** trả App Secret, refresh token hay access token.
+* `PUT /api/v1/admin/settings/zalo-oa` — `{ "appId" (bắt buộc, ≤50), "appSecret" (≤255), "refreshToken" (≤2000), "templateId" (bắt buộc, ≤50) }`; `appSecret`/`refreshToken` rỗng hoặc null = giữ giá trị đang lưu. Đổi App ID, secret hoặc refresh token → xoá access token đang lưu. `configured = true` khi đủ App ID, secret, refresh token và template.
+* Lưu ở các cột `studio_settings.zalo_oa_*`, `zns_contract_template_id` (migration V17); khi chuyển sang nhiều studio, cấu hình này đi theo từng studio.
 
 ---
 
