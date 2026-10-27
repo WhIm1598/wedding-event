@@ -129,9 +129,7 @@ function ContractTemplateInfo() {
         <li>Đại diện Bên A (khách hàng) và Bên B (studio, mã số thuế, đại diện pháp luật)</li>
         <li>Nội dung công việc & quy cách bàn giao</li>
         <li>Thanh toán 3 đợt: 30% khi ký • 50% ngày chụp/cưới • 20% khi nhận album</li>
-      </ul>
-      <p className="text-xs text-slate-400">TODO: cho phép chỉnh sửa mẫu khi backend hỗ trợ template động.</p>
-    </div>
+      </ul>    </div>
   );
 }
 
