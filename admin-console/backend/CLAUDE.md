@@ -1,7 +1,7 @@
 # admin-console/backend — Lumière Studios admin API
 
 Spring Boot 4.1 · Java 21 · Spring Security 7 (stateless JWT HS256) · Spring Data JPA / Hibernate 7 · Flyway · PostgreSQL 16.
-Port 8082. Every route is under `/api/v1/admin/**` (nginx forwards only that prefix here, plus `/api/v1/public/**`).
+Port 8082. Every route is under `/api/v1/admin/**` (nginx forwards only that prefix here, plus `/api/v1/platform/**` and `/api/v1/public/**`).
 Entities, enums, repositories and migrations live in **backend-common**, not here.
 
 ## Layout (`src/main/java/com/weddingevent/admin/`)

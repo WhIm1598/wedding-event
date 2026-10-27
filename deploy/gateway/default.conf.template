@@ -49,6 +49,11 @@ server {
         proxy_pass http://admin-backend:8082;
     }
 
+    # Platform admin: studios (ADR-0001)
+    location /api/v1/platform/ {
+        proxy_pass http://admin-backend:8082;
+    }
+
     location /api/v1/public/ {
         limit_req zone=public_api burst=10 nodelay;
         proxy_pass http://admin-backend:8082;

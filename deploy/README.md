@@ -93,6 +93,6 @@ Migration mới chạy tự động khi backend khởi động. Chạy một b�
 
 - HTTPS bắt buộc (HTTP chuyển hướng 301), HSTS; header CSP / X-Frame-Options trên trang web.
 - Đăng nhập: tối đa 20 request/phút/IP ở gateway; sai mật khẩu 5 lần liên tiếp thì khoá 15 phút.
-- Chỉ `/api/v1/admin/**` và `/api/v1/public/**` đi vào backend; actuator và các API khác không ra ngoài.
+- Chỉ `/api/v1/admin/**`, `/api/v1/platform/**` và `/api/v1/public/**` đi vào backend; actuator và các API khác không ra ngoài.
 - Trang hợp đồng công khai `/api/v1/public/**`: tối đa 30 request/phút/IP; gateway ghi đè `X-Forwarded-For` bằng IP thật của khách.
 - Log: `docker compose -f docker-compose.prod.yml logs -f admin-backend` (không ghi mật khẩu, token).

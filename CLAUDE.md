@@ -11,7 +11,7 @@ Two products share one PostgreSQL database and one Java domain library:
 | Module | Stack | Guide |
 |---|---|---|
 | `backend-common/` | Java 21 library: JPA entities, enums, repositories, API envelope, errors, **Flyway migrations** | [backend-common/CLAUDE.md](backend-common/CLAUDE.md) |
-| `admin-console/backend/` | Spring Boot 4 API, port 8082, `/api/v1/admin/**`, `/api/v1/public/**` | [admin-console/backend/CLAUDE.md](admin-console/backend/CLAUDE.md) |
+| `admin-console/backend/` | Spring Boot 4 API, port 8082, `/api/v1/admin/**`, `/api/v1/platform/**`, `/api/v1/public/**` | [admin-console/backend/CLAUDE.md](admin-console/backend/CLAUDE.md) |
 | `admin-console/frontend/` | React 18 + TS + Vite + Tailwind, mock or real API | [admin-console/frontend/CLAUDE.md](admin-console/frontend/CLAUDE.md) |
 | `client-console/mobile/` | Flutter app, mock or real API | [client-console/mobile/CLAUDE.md](client-console/mobile/CLAUDE.md) |
 | `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
