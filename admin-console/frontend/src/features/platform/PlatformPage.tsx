@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Building2, LogOut, Plus, UserPlus } from 'lucide-react';
+import { Building2, KeyRound, LogOut, Plus, UserPlus } from 'lucide-react';
 import { errorMessage } from '@/api/http';
 import { platformApi } from '@/api/platform.api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { STUDIO_STATUS } from '@/constants/labels';
 import { formatDate } from '@/lib/format';
+import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal';
 import { TemporaryPasswordModal } from '@/features/settings/AccountsSection';
 import type { CreatedAccount, Studio } from '@/types';
 
@@ -25,6 +26,7 @@ export function PlatformPage() {
   const [editing, setEditing] = useState<Studio | null>(null);
   const [addingAdmin, setAddingAdmin] = useState<Studio | null>(null);
   const [issued, setIssued] = useState<CreatedAccount | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const replace = (s: Studio) => setData((list) => list?.map((x) => (x.id === s.id ? s : x)));
 
@@ -48,10 +50,16 @@ export function PlatformPage() {
             <p className="text-xs text-slate-500">{user?.name}</p>
           </div>
         </div>
-        <Button variant="ghost" onClick={logout}>
-          <LogOut size={18} className="mr-2" /> Đăng xuất
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => setChangingPassword(true)} aria-label="Đổi mật khẩu">
+            <KeyRound size={18} />
+          </Button>
+          <Button variant="ghost" onClick={logout}>
+            <LogOut size={18} className="mr-2" /> Đăng xuất
+          </Button>
+        </div>
       </header>
+      <ChangePasswordModal isOpen={changingPassword} onClose={() => setChangingPassword(false)} />
 
       <main className="max-w-5xl mx-auto p-4 sm:p-8 space-y-6">
         <div className="flex items-center justify-between gap-4">

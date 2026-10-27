@@ -149,6 +149,22 @@ class StudioIsolationApiTest extends IntegrationTest {
     }
 
     @Test
+    void dashboardTotalsCountOnlyTheCallersStudio() throws Exception {
+        String a = adminToken();
+        createContract(a, uniquePhone(), 8_000_000, 2_000_000);
+        StudioB b = studioB();
+
+        String chartA = body(get("/api/v1/admin/dashboard/revenue-chart"), a);
+        assertThat(JsonPath.<List<Number>>read(chartA, "$.data[*].amount")).anyMatch(n -> n.longValue() > 0);
+        mvc.perform(authed(get("/api/v1/admin/dashboard/stats"), b.token()))
+                .andExpect(jsonPath("$.data.monthlyRevenue.amount").value(0))
+                .andExpect(jsonPath("$.data.activeContractsCount.value").value(0))
+                .andExpect(jsonPath("$.data.pendingLeadsCount.value").value(0));
+        String chartB = body(get("/api/v1/admin/dashboard/revenue-chart"), b.token());
+        assertThat(JsonPath.<List<Number>>read(chartB, "$.data[*].amount")).allMatch(n -> n.longValue() == 0);
+    }
+
+    @Test
     void anEmailBelongsToOneAccountAcrossStudios() throws Exception {
         createStudio(platformToken(), "Studio Trùng Email", ADMIN_EMAIL)
                 .andExpect(status().isConflict())
