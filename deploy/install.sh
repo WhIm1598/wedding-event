@@ -21,7 +21,8 @@ step() { echo; echo "==> $*"; }
 step "Cập nhật hệ thống, cài git, curl, ufw"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq git ca-certificates curl openssl ufw dnsutils >/dev/null
+apt-get install -y -qq git ca-certificates curl openssl dnsutils >/dev/null
+[[ -f /etc/iptables/rules.v4 ]] || apt-get install -y -qq ufw >/dev/null
 timedatectl set-timezone Asia/Ho_Chi_Minh 2>/dev/null || true
 
 step "Docker"
@@ -32,10 +33,30 @@ if [[ $OWNER != root ]]; then usermod -aG docker "$OWNER"; fi
 docker compose version
 
 step "Tường lửa: chỉ SSH, 80, 443"
-ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null   # the profile comes with openssh-server
-ufw allow 80,443/tcp >/dev/null
-ufw --force enable >/dev/null
-ufw status
+RULES=/etc/iptables/rules.v4
+if [[ -f $RULES ]]; then
+  # Oracle Cloud images: iptables-persistent with a final REJECT; Oracle says not to turn on ufw there.
+  # Add ACCEPT lines above that REJECT, in the file (survives reboot) and live. Never `netfilter-persistent save`:
+  # it would also store Docker's own rules.
+  for port in 80 443; do
+    rule="-A INPUT -p tcp -m state --state NEW -m tcp --dport $port -j ACCEPT"
+    if ! grep -qF -- "$rule" "$RULES"; then
+      awk -v r="$rule" '!done && /^-A INPUT .*-j REJECT/ {print r; done=1} {print}' "$RULES" > "$RULES.new"
+      cat "$RULES.new" > "$RULES" && rm "$RULES.new"
+    fi
+    if ! iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport "$port" -j ACCEPT 2>/dev/null; then
+      reject=$(iptables -L INPUT --line-numbers -n | awk '$2 == "REJECT" {print $1; exit}')
+      iptables -I INPUT "${reject:-1}" -p tcp -m state --state NEW -m tcp --dport "$port" -j ACCEPT
+    fi
+  done
+  iptables -L INPUT -n --line-numbers | head -12
+  echo "Nhớ mở thêm cổng 80, 443 ở Security List của VCN trên trang quản lý cloud (docs/setup/deploy-oracle-duckdns.md)."
+else
+  ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null   # the profile comes with openssh-server
+  ufw allow 80,443/tcp >/dev/null
+  ufw --force enable >/dev/null
+  ufw status
+fi
 
 step "Swap (máy ≤ 4 GB RAM cần để build)"
 if [[ $(awk '/SwapTotal/ {print $2}' /proc/meminfo) -eq 0 && $(awk '/MemTotal/ {print $2}' /proc/meminfo) -le 4194304 ]]; then
