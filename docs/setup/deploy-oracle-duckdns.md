@@ -62,10 +62,20 @@ Oracle có thể **thu hồi máy Always Free chạy quá nhàn** (CPU thấp k�
 
 ## 2. Tạo khoá SSH (trên máy của bạn)
 
-Khoá SSH thay cho mật khẩu khi đăng nhập server. Trên **PowerShell** (Windows) hoặc **Terminal** (macOS/Linux):
+Khoá SSH thay cho mật khẩu khi đăng nhập server.
+
+**Windows (PowerShell):** PowerShell không hiểu `~` khi truyền cho `ssh-keygen`, và thư mục `.ssh` có thể chưa có, nên
+dùng đường dẫn đầy đủ:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\oracle_demo" -C "wedding-demo"
+```
+
+**macOS / Linux (Terminal):**
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/oracle_demo -C "wedding-demo"
+mkdir -p ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/oracle_demo -C "wedding-demo"
 ```
 
 Hỏi *passphrase*: đặt một mật khẩu cho khoá (khuyên làm) hoặc Enter để bỏ trống. Kết quả là hai file:
@@ -75,7 +85,7 @@ Hỏi *passphrase*: đặt một mật khẩu cho khoá (khuyên làm) hoặc En
 | `~/.ssh/oracle_demo` | **Khoá bí mật**: không gửi cho ai, sao lưu vào trình quản lý mật khẩu |
 | `~/.ssh/oracle_demo.pub` | Khoá công khai: dán vào Oracle ở bước 5 |
 
-Trên Windows, `~` là `C:\Users\<tên bạn>`.
+Trên Windows, `~/.ssh` là `C:\Users\<tên bạn>\.ssh`, ví dụ `C:\Users\Admin\.ssh\oracle_demo.pub`.
 
 ---
 
@@ -161,7 +171,8 @@ Oracle chặn mọi cổng trừ SSH (22) ở mức mạng. Let's Encrypt cần 
 ### 7.1. Đăng nhập
 
 ```bash
-ssh -i ~/.ssh/oracle_demo ubuntu@140.245.10.20
+ssh -i ~/.ssh/oracle_demo ubuntu@140.245.10.20                    # macOS / Linux
+ssh -i "$env:USERPROFILE\.ssh\oracle_demo" ubuntu@140.245.10.20   # Windows PowerShell
 ```
 
 Lần đầu hỏi `Are you sure you want to continue connecting?` → `yes`. Người dùng mặc định của Ubuntu trên Oracle là
@@ -286,7 +297,7 @@ Dữ liệu (studio, hợp đồng, tài khoản) giữ nguyên, chỉ địa ch
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | Tạo máy báo `Out of capacity` | Vùng hết máy ARM miễn phí | Mục 5: thử lại giờ khác, giảm 1 OCPU / 6 GB, nâng Pay As You Go |
-| `ssh` báo `Permission denied (publickey)` | Sai khoá hoặc sai tên người dùng | Dùng `-i ~/.ssh/oracle_demo` và người dùng `ubuntu`; kiểm tra đã dán đúng file `.pub` khi tạo máy |
+| `ssh` báo `Permission denied (publickey)` | Sai khoá hoặc sai tên người dùng | Dùng `-i` với đường dẫn khoá (Windows: `"$env:USERPROFILE\.ssh\oracle_demo"`) và người dùng `ubuntu`; kiểm tra đã dán đúng file `.pub` khi tạo máy |
 | `ssh` treo, không phản hồi | Máy chưa chạy xong hoặc luật cổng 22 bị xoá | Đợi trạng thái *Running*; kiểm tra Security List còn luật cổng 22 |
 | Script báo `... đang trỏ về '...', server là ...` | DuckDNS chưa cập nhật IP hoặc DNS chưa lan | Bước 6.3 nhập lại IP, đợi vài phút, chạy lại script |
 | Lấy chứng chỉ báo `Timeout during connect` | Cổng 80 bị chặn | Kiểm tra luật cổng 80 ở Security List (bước 4). Trong máy: `sudo iptables -L INPUT -n --line-numbers`, luật `dpt:80` phải nằm **trên** dòng `REJECT` |
@@ -294,6 +305,7 @@ Dữ liệu (studio, hợp đồng, tài khoản) giữ nguyên, chỉ địa ch
 | Build dừng với `exit code 137` / `Killed` | Hết RAM (máy 1 OCPU / 6 GB vẫn đủ, nhỏ hơn thì không) | Tăng RAM của máy (Edit → Shape) |
 | Web mở được bằng IP nhưng không bằng tên miền | DNS sai | `nslookup <tên-miền>` phải ra IP Oracle |
 | Máy bị dừng hoặc xoá sau vài tuần không dùng | Oracle thu hồi máy Always Free nhàn rỗi | Mục 1.1: nâng Pay As You Go. Khôi phục: tạo máy mới, chạy lại script, khôi phục database từ backup ngoài server ([deploy-linux.md mục 11](deploy-linux.md#khôi-phục-từ-backup-khi-có-sự-cố-thật)) |
+| `ssh-keygen` báo `Saving key "~/.ssh/oracle_demo" failed: No such file or directory` | PowerShell không hiểu `~`, hoặc chưa có thư mục `.ssh` | Dùng lệnh Windows ở bước 2 |
 | Lỗi khác | | [deploy-linux.md mục 10](deploy-linux.md#10-xử-lý-sự-cố) |
 
 ---
