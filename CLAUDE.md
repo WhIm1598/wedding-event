@@ -16,6 +16,7 @@ Two products share one PostgreSQL database and one Java domain library:
 | `client-console/mobile/` | Flutter app, mock or real API | [client-console/mobile/CLAUDE.md](client-console/mobile/CLAUDE.md) |
 | `client-console/backend/` | Spring Boot 4 API, port 8081, `/api/v1/auth\|users\|client\|messages/**`, STOMP `/ws` | [client-console/backend/CLAUDE.md](client-console/backend/CLAUDE.md) |
 | `docs/features/` | Specs — **source of truth** | `detailed_functional_specification.md` (contracts), `wedding_platform_feature_spec.md` (product) |
+| `docs/guides/` | Plain-language guides for the owner and studio support | `web-admin-overview.md` (roles, studio workflow, many studios), `operations-readiness.md` (accounts, image storage, speed targets + measurements) |
 | `docs/architecture/` | Infra, nginx routing, Docker | `system_architecture_and_infrastructure.md` |
 | `deploy/` | Production compose for the web admin (postgres, admin backend/frontend, HTTPS gateway, certbot, daily backup); secrets in an uncommitted `deploy/.env`; first install on Ubuntu: `sudo deploy/install.sh <domain> <email>` | [deploy/README.md](deploy/README.md) |
 | `docs/api/` | OpenAPI 3.1 contract of what the backends actually serve (`admin-api.yml` for the admin API, `client-api.yml` for the mobile API); maintained with the `api-documenter` agent | |

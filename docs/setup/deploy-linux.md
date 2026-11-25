@@ -3,7 +3,8 @@
 Tài liệu này dẫn từng bước, từ một server Linux trống tới khi web admin chạy ở `https://<tên-miền>` và đã kiểm thử xong.
 Không cần biết Java, React hay Docker trước. Chỉ cần gõ lệnh theo đúng thứ tự.
 
-Bản tóm tắt cho người đã quen: [deploy/README.md](../../deploy/README.md).
+Bản tóm tắt cho người đã quen: [deploy/README.md](../../deploy/README.md). Bản demo miễn phí (Oracle Cloud + DuckDNS):
+[deploy-oracle-duckdns.md](deploy-oracle-duckdns.md).
 
 > **Phạm vi:** web admin (backend admin, frontend, PostgreSQL, nginx HTTPS, sao lưu). Backend của app mobile chưa nằm
 > trong bản deploy này (issue #56).
