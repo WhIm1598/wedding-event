@@ -51,11 +51,11 @@ Migration mới (V19 hoặc số tiếp theo): `studio_settings` thêm `logo byt
 
 ### Logo đi trong JSON dưới dạng data URL
 
-Trường `logo`: `"data:image/png|jpeg|webp;base64,..."` hoặc `null`. Không cần endpoint multipart hay endpoint GET ảnh
+Trường `logo`: `"data:image/png|jpeg;base64,..."` (không WebP: PDFBox không vẽ được) hoặc `null`. Không cần endpoint multipart hay endpoint GET ảnh
 riêng: `<img src>` dùng thẳng (CSP `img-src` đã cho `data:`), renderer PDF nhúng được.
 
-- Trình duyệt thu nhỏ trước khi gửi: cạnh dài ≤ 256 px, WebP (JPEG nếu trình duyệt không xuất WebP), dưới 200 KB.
-- Backend kiểm tra: đúng tiền tố một trong ba loại, base64 hợp lệ, giải mã ≤ 200 KB; sai → `400 VALIDATION_ERROR`
+- Trình duyệt thu nhỏ trước khi gửi: cạnh dài ≤ 256 px, PNG (giữ nền trong suốt; quá 200 KB thì JPEG), dưới 200 KB.
+- Backend kiểm tra: đúng tiền tố PNG hoặc JPEG, base64 hợp lệ, giải mã ≤ 200 KB; sai → `400 BAD_REQUEST`
   lỗi trường `logo`.
 - Gửi `null` → xoá logo; không gửi trường → giữ nguyên (chỉ ở endpoint sửa).
 
@@ -64,12 +64,12 @@ riêng: `<img src>` dùng thẳng (CSP `img-src` đã cho `data:`), renderer PDF
 **FN-PLT-01 (sửa)** `POST /api/v1/platform/studios`
 
 ```json
-{ "name": "Lumière Studios", "subscriptionExpiresAt": "2027-11-30", "logo": "data:image/webp;base64,...",
+{ "name": "Lumière Studios", "subscriptionExpiresAt": "2027-11-30", "logo": "data:image/png;base64,...",
   "address": null, "taxCode": null, "legalRepresentative": null, "bankInfo": null,
   "admins": [ { "email": "a@lumiere.vn", "name": "Anh A" }, { "email": "b@lumiere.vn", "name": "Chị B" } ] }
 ```
 
-- `admins` 1–10 dòng; email trùng nhau trong danh sách (không phân biệt hoa thường) → `400 VALIDATION_ERROR`;
+- `admins` 1–10 dòng; email trùng nhau trong danh sách (không phân biệt hoa thường) → `400 BAD_REQUEST`;
   email đã có tài khoản → `409 EMAIL_EXISTS` và không tạo gì.
 - Các trường thông tin hợp đồng bỏ trống → "Chưa cập nhật" như hiện nay; giới hạn độ dài như FN-ADM-SET-01.
 - Trả `201 { studio, admins: [ { user, temporaryPassword } ] }` (thay cho `admin` đơn).
