@@ -103,6 +103,12 @@ Trên Windows, `~/.ssh` là `C:\Users\<tên bạn>\.ssh`, ví dụ `C:\Users\Adm
 
 ## 3. Tạo mạng (VCN)
 
+> **Cách nhanh, thay cho bước 3–4:** trong Oracle **Cloud Shell** (biểu tượng `>_` góc trên bên phải), menu ⚙ →
+> **Upload** file [`deploy/oracle-prepare.sh`](../../deploy/oracle-prepare.sh), rồi chạy `bash oracle-prepare.sh`.
+> Script dùng lại `learn-automation-vcn` nếu đã có (không thì tạo `wedding-vcn`), đảm bảo có subnet public, route ra
+> Internet, Security List mở cổng 22/80/443, kiểm tra còn đủ hạn mức A1 cho máy 1 OCPU / 6 GB, rồi in sẵn lệnh
+> `oracle-create-vm.sh` cho bước 5. Chạy lại bao nhiêu lần cũng được: chỉ thêm cái còn thiếu.
+
 1. Menu ☰ → **Networking** → **Virtual Cloud Networks**.
 2. Góc trên bên trái, **Compartment** để `(root)`.
 3. **Start VCN Wizard** → **Create VCN with Internet Connectivity** → **Start VCN Wizard**.
