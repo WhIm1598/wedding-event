@@ -17,6 +17,18 @@ Làm lần lượt từ bước 1. Tổng thời gian khoảng 1–2 giờ, ph�
 > [Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
 > trước khi tạo máy.
 
+> **Đã deploy automation-tool trên cùng tài khoản Oracle?** Dùng lại những gì đã có, bỏ qua bước 1–4:
+>
+> | Bước | Dùng lại |
+> |---|---|
+> | 1. Tài khoản Oracle | Tài khoản đó |
+> | 2. Khoá SSH | `oracle_demo` / `oracle_demo.pub` |
+> | 3–4. VCN và cổng 80/443 | `learn-automation-vcn`: Security List đã mở 80, 443 |
+>
+> Mỗi repo chạy **máy riêng**: không cài chung máy với automation-tool (hai stack cùng cần cổng 80/443). Máy
+> automation-tool đã dùng 1 OCPU / 6 GB trong tổng 2 OCPU / 12 GB miễn phí, nên máy này cũng là **1 OCPU / 6 GB** (đủ cho
+> stack này). Làm tiếp từ [bước 5](#5-tạo-máy-ảo-miễn-phí), chọn `learn-automation-vcn` thay cho `wedding-vcn`.
+
 Khi có studio trả tiền, chuyển sang tên miền thật: [mục 9](#9-chuyển-sang-tên-miền-thật). Bản production đầy đủ:
 [deploy-linux.md](deploy-linux.md).
 
@@ -125,11 +137,12 @@ Oracle chặn mọi cổng trừ SSH (22) ở mức mạng. Let's Encrypt cần 
 3. **Placement:** giữ mặc định (nếu báo hết máy, thử *Availability Domain* khác nếu có).
 4. **Image and shape** → **Edit**:
    - **Change image** → **Ubuntu** → **Canonical Ubuntu 24.04** (bản thường, **không** chọn *Minimal*) → **Select image**.
-   - **Change shape** → **Ampere** → **VM.Standard.A1.Flex** → **Number of OCPUs: 2**, **Amount of memory (GB): 12**
-     (hoặc mức tối đa mà trang Always Free hiện cho phép). Phải thấy nhãn **Always Free-eligible** → **Select shape**.
+   - **Change shape** → **Ampere** → **VM.Standard.A1.Flex** → **Number of OCPUs: 1**, **Amount of memory (GB): 6**
+     (đủ cho stack này; tài khoản chưa có máy nào khác thì được tới 2 / 12). Phải thấy nhãn **Always Free-eligible** →
+     **Select shape**.
 5. **Networking** → **Edit**:
-   - **Select existing virtual cloud network:** `wedding-vcn`.
-   - **Subnet:** `public subnet-wedding-vcn`.
+   - **Select existing virtual cloud network:** `wedding-vcn` (hoặc `learn-automation-vcn` nếu dùng lại).
+   - **Subnet:** `public subnet-wedding-vcn` (hoặc `public subnet-learn-automation-vcn`).
    - **Automatically assign public IPv4 address:** bật.
 6. **Add SSH keys** → **Upload public key files (.pub)** → chọn `~/.ssh/oracle_demo.pub`
    (hoặc **Paste public keys** rồi dán nội dung file `.pub`).
@@ -140,8 +153,19 @@ Oracle chặn mọi cổng trừ SSH (22) ở mức mạng. Let's Encrypt cần 
 **Báo `Out of capacity for shape VM.Standard.A1.Flex`?** Vùng đang hết máy ARM miễn phí. Cách xử lý:
 
 - Thử lại sau vài giờ, nhất là sáng sớm hoặc khuya (giờ Việt Nam).
-- Tạm chọn **1 OCPU / 6 GB**, sau này **Edit → Shape** để tăng.
 - Sau khi nâng Pay As You Go (mục 1.1), tỉ lệ tạo được máy thường cao hơn.
+- **Để máy tự thử lại** bằng [`deploy/oracle-create-vm.sh`](../../deploy/oracle-create-vm.sh) (cùng script đã dùng cho
+  automation-tool), chạy trong Oracle **Cloud Shell** (biểu tượng `>_` góc trên bên phải):
+  1. Menu ⚙ của Cloud Shell → **Upload**: tải lên `deploy/oracle-create-vm.sh` và `oracle_demo.pub`.
+  2. Chạy `bash oracle-create-vm.sh oracle_demo.pub`.
+
+  Script tạo máy `wedding-demo` 1 OCPU / 6 GB / 50 GB trong subnet `public subnet-learn-automation-vcn`, thử lại mỗi 5
+  phút tới khi được rồi in Public IP. Dùng VCN riêng thì chạy
+  `SUBNET_NAME="public subnet-wedding-vcn" bash oracle-create-vm.sh oracle_demo.pub`. Cloud Shell tự đóng sau một thời
+  gian: mở lại và chạy lại lệnh (đã có máy cùng tên thì script không tạo thêm).
+
+**Báo `LimitExceeded` / `exceeds service limit`?** Tài khoản đã hết hạn mức A1 (thường do máy automation-tool đang dùng
+2 OCPU / 12 GB): đổi máy đó xuống 1 OCPU / 6 GB (**Edit → Shape**, máy khởi động lại), rồi tạo máy này 1 OCPU / 6 GB.
 
 > IP công khai gắn với máy cho tới khi **xoá** máy. Nếu xoá rồi tạo lại, IP đổi: cập nhật lại DuckDNS (bước 6).
 
@@ -196,7 +220,7 @@ Script làm lần lượt:
 |---|---|
 | 1 | Cập nhật hệ thống, cài Docker |
 | 2 | **Tường lửa trong máy:** phát hiện image Oracle (có `/etc/iptables/rules.v4`), thêm luật mở cổng 80, 443 **phía trên** luật REJECT, cả trong file (giữ sau khi khởi động lại) lẫn đang chạy. **Không** bật `ufw`, theo khuyến cáo của Oracle |
-| 3 | Bỏ qua swap (máy 12 GB RAM không cần) |
+| 3 | Bỏ qua swap (máy 6 GB RAM trở lên không cần) |
 | 4 | Tạo `deploy/.env` với mật khẩu ngẫu nhiên |
 | 5 | Kiểm tra tên miền DuckDNS trỏ đúng IP của máy |
 | 6 | Lấy chứng chỉ HTTPS từ Let's Encrypt (mục 8) |
@@ -296,7 +320,8 @@ Dữ liệu (studio, hợp đồng, tài khoản) giữ nguyên, chỉ địa ch
 
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| Tạo máy báo `Out of capacity` | Vùng hết máy ARM miễn phí | Mục 5: thử lại giờ khác, giảm 1 OCPU / 6 GB, nâng Pay As You Go |
+| Tạo máy báo `Out of capacity` | Vùng hết máy ARM miễn phí | Mục 5: `oracle-create-vm.sh` tự thử lại, nâng Pay As You Go |
+| Tạo máy báo `LimitExceeded` | Máy khác (automation-tool) đã dùng hết 2 OCPU / 12 GB | Mục 5: đổi máy kia xuống 1 OCPU / 6 GB |
 | `ssh` báo `Permission denied (publickey)` | Sai khoá hoặc sai tên người dùng | Dùng `-i` với đường dẫn khoá (Windows: `"$env:USERPROFILE\.ssh\oracle_demo"`) và người dùng `ubuntu`; kiểm tra đã dán đúng file `.pub` khi tạo máy |
 | `ssh` treo, không phản hồi | Máy chưa chạy xong hoặc luật cổng 22 bị xoá | Đợi trạng thái *Running*; kiểm tra Security List còn luật cổng 22 |
 | Script báo `... đang trỏ về '...', server là ...` | DuckDNS chưa cập nhật IP hoặc DNS chưa lan | Bước 6.3 nhập lại IP, đợi vài phút, chạy lại script |
