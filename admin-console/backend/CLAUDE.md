@@ -13,6 +13,7 @@ One package per spec module: `auth`, `dashboard`, `booking`, `packages`, `asset`
 | `config/` | `AppProperties` (`app.*`: zone, jwt, cors, demo-data, `public-base-url` for customer links, `zalo` endpoint URLs), `TimeConfig` (`Clock` in Asia/Ho_Chi_Minh) |
 | `zalo/` | `ZaloOaClient` (OAuth v4 token refresh + ZNS send; Zalo answers 200 with `error ≠ 0`), `ZaloOaTokens.accessToken()` (the studio's OA token, refreshed in a `REQUIRES_NEW` transaction under the settings row lock — the refresh token is single-use). Tests fake Zalo with `ZaloStub` (`IntegrationTest.ZALO`) |
 | `contract/ContractShareService` + `PublicContractController` | Zalo sharing and the public `/api/v1/public/contracts/{token}` page (only the token's SHA-256 is stored) |
+| `settings/StudioLogo` | `apply(settings, dataUrl)` / `dataUrl(settings)`: the studio logo as a PNG/JPEG data URL ≤ 200 KB (`null`/`""` clears); used by settings, platform studios, the contract PDF and the public page |
 | `support/` | `DateRange` (day / Monday-based week / month, instant bounds) |
 | `notification/` | `NotificationService.notify(title, description)` — call it for events the team should see |
 | `crm/CustomerStageSync` | `contractChanged(contract)` — call after any contract status change (payment, delivery) so the customer's stage follows (FN-ADM-CRM-03) |

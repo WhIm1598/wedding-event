@@ -262,7 +262,7 @@ docker compose -f docker-compose.prod.yml logs --tail 100 admin-backend
 
 5. Ở màn **Quản trị nền tảng**:
    - Database mới đã có sẵn một studio. Bấm nút **thêm quản lý** (biểu tượng người) để tạo tài khoản quản lý cho studio đó.
-   - Khách mới mua: bấm **Thêm studio** (tên, hạn thuê bao, email quản lý).
+   - Khách mới mua: bấm **Thêm studio** (tên, logo, hạn thuê bao, một hoặc nhiều quản lý).
    - **Mật khẩu tạm chỉ hiện một lần**: sao chép và gửi riêng cho quản lý studio.
 6. Quản lý studio đăng nhập → bắt buộc đổi mật khẩu tạm → **Cài đặt** nhập thông tin studio (tên, địa chỉ, mã số thuế,
    tài khoản ngân hàng), tạo **Gói dịch vụ**, tạo tài khoản nhân viên ở **Cài đặt → Tài khoản**.

@@ -34,7 +34,7 @@ Ngoài web admin:
 
 | Việc | Cách làm | Kết quả |
 |---|---|---|
-| Bán cho studio mới | **Thêm studio**: tên, hạn thuê bao (trống = không giới hạn), email và họ tên quản lý đầu tiên | Tạo studio và tài khoản quản lý. Mật khẩu tạm hiện **một lần**, gửi riêng cho chủ studio |
+| Bán cho studio mới | **Thêm studio**: tên, logo, hạn thuê bao (trống = không giới hạn), thông tin hợp đồng (tuỳ chọn) và **một hoặc nhiều quản lý** (email + họ tên, tối đa 10) | Tạo studio và tài khoản cho từng quản lý. Mật khẩu tạm của mỗi người hiện **một lần**, gửi riêng cho từng người. Nhân viên do quản lý studio tự thêm trong *Cài đặt → Tài khoản*. Sửa tên/logo: nút bút chì |
 | Thêm quản lý | Nút biểu tượng người trên dòng studio | Thêm tài khoản quản lý (mật khẩu tạm). Dùng khi chủ studio quên mật khẩu và studio không còn quản lý nào khác |
 | Gia hạn | **Gia hạn** → chọn ngày hết hạn mới | Studio dùng tiếp tới ngày đó |
 | Hết hạn | Tự động khi qua ngày hết hạn | Badge "Hết hạn". Mọi người của studio bị chặn ngay, kể cả đang dùng dở |

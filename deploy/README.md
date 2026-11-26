@@ -57,7 +57,7 @@ docker compose -f docker-compose.prod.yml ps        # admin-backend phải "heal
 2. Xoá hai dòng `ADMIN_EMAIL`, `ADMIN_PASSWORD` khỏi `.env`, rồi `docker compose -f docker-compose.prod.yml up -d`.
 3. Ở màn *Quản trị nền tảng*:
    - DB mới đã có sẵn một studio (tạo từ cài đặt mặc định). Bấm nút thêm quản lý (biểu tượng người) để tạo quản lý cho studio đó, ví dụ Lumière;
-   - mỗi khách mới: **Thêm studio** (tên, hạn thuê bao, email quản lý). Mật khẩu tạm chỉ hiện một lần, gửi cho quản lý của studio.
+   - mỗi khách mới: **Thêm studio** (tên, logo, hạn thuê bao, thông tin hợp đồng nếu có, một hoặc nhiều quản lý). Mật khẩu tạm của mỗi quản lý chỉ hiện một lần, gửi riêng cho từng người.
 4. Quản lý studio đăng nhập, đổi mật khẩu tạm, vào *Cài đặt* nhập thông tin studio.
 5. *Cài đặt → Tài khoản*: tạo tài khoản cho từng nhân viên (gắn hồ sơ nhân sự). Mật khẩu tạm chỉ hiện một lần; nhân viên phải đổi khi đăng nhập lần đầu.
 6. *(Tuỳ chọn)* *Cài đặt → Zalo OA*: kết nối Zalo OA của studio để nút **Gửi Zalo** gửi hợp đồng qua ZNS — làm theo [docs/setup/zalo-oa-zns.md](../docs/setup/zalo-oa-zns.md). Link trong tin dùng `https://<DOMAIN>/c/...` (compose tự đặt `PUBLIC_BASE_URL`).
