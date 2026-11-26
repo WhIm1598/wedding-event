@@ -242,6 +242,24 @@ class ContractShareApiTest extends IntegrationTest {
     }
 
     @Test
+    void thePublicPageShowsTheStudioLogo() throws Exception {
+        StudioSettings s = settings.findById(demoStudioId()).orElseThrow();
+        s.setLogo(new byte[] {1, 2, 3});
+        s.setLogoContentType("image/png");
+        settings.save(s);
+        try {
+            String token = tokenOf(sharedUrl(createContract(adminToken(), uniquePhone(), 1_000_000, 0)));
+            publicGet(token).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.studio.logo").value("data:image/png;base64,AQID"));
+        } finally {
+            StudioSettings restore = settings.findById(demoStudioId()).orElseThrow();
+            restore.setLogo(null);
+            restore.setLogoContentType(null);
+            settings.save(restore);
+        }
+    }
+
+    @Test
     void theCustomerAcceptsOnce() throws Exception {
         String id = createContract(adminToken(), uniquePhone(), 1_000_000, 0);
         String token = tokenOf(sharedUrl(id));

@@ -5,6 +5,7 @@ import com.weddingevent.admin.contract.ContractDocumentRenderer.Installment;
 import com.weddingevent.admin.contract.ContractService.Document;
 import com.weddingevent.admin.notification.NotificationService;
 import com.weddingevent.admin.security.CurrentStudio;
+import com.weddingevent.admin.settings.StudioLogo;
 import com.weddingevent.admin.staff.StaffService;
 import com.weddingevent.admin.zalo.ZaloOaClient.ZaloException;
 import com.weddingevent.admin.zalo.ZaloOaClient;
@@ -56,7 +57,7 @@ public class ContractShareService {
 
     public record ShareResultDto(String sentTo, String publicUrl, Instant shareExpiresAt) {}
 
-    public record PublicStudioDto(String name, String address, String bankInfo) {}
+    public record PublicStudioDto(String name, String address, String bankInfo, String logo) {}
 
     public record PublicContractDto(String contractNumber, PublicStudioDto studio, String customerName, String phone,
             String packageName, List<String> features, BigDecimal totalAmount, BigDecimal paidAmount, BigDecimal remainingAmount,
@@ -155,7 +156,7 @@ public class ContractShareService {
         List<String> features = c.getServicePackage() == null ? List.of() : List.copyOf(c.getServicePackage().getFeatures());
         LocalDate eventDate = bookings.findFirstByContractIdAndStatusNotOrderByEventDateAsc(c.getId(), BookingStatus.CANCELLED)
                 .map(Booking::getEventDate).orElse(null);
-        return new PublicContractDto(c.getContractNumber(), new PublicStudioDto(s.getName(), s.getAddress(), s.getBankInfo()),
+        return new PublicContractDto(c.getContractNumber(), new PublicStudioDto(s.getName(), s.getAddress(), s.getBankInfo(), StudioLogo.dataUrl(s)),
                 c.getCustomerName(), mask(c.getPhone()), c.getPackageName(), features, c.getTotalAmount(), c.getPaidAmount(),
                 c.getRemainingAmount(), ContractDocumentRenderer.installments(c.getTotalAmount()), eventDate, c.getStatus(),
                 c.getAcceptedAt());

@@ -1,6 +1,7 @@
 package com.weddingevent.admin.contract;
 
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+import com.weddingevent.admin.settings.StudioLogo;
 import com.weddingevent.common.domain.Contract;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.util.VndFormatter;
@@ -63,6 +64,7 @@ public class ContractDocumentRenderer {
                 .bar { height: 6px; background: #e11d48; margin-bottom: 16px; }
                 .head { width: 100%%; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; }
                 .brand { font-size: 20pt; color: #0f172a; }
+                .logo { height: 48px; }
                 .tag { font-size: 8pt; color: #64748b; letter-spacing: 2px; }
                 h1 { text-align: center; font-size: 15pt; letter-spacing: 1px; margin: 18px 0; }
                 h3 { font-size: 11pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin: 16px 0 6px; }
@@ -78,7 +80,7 @@ public class ContractDocumentRenderer {
                 </style></head><body>
                 <div class="bar"></div>
                 <table class="head"><tr>
-                  <td><div class="brand">%s</div><div class="tag">LƯU GIỮ KHOẢNH KHẮC</div></td>
+                  <td>%s<div class="brand">%s</div><div class="tag">LƯU GIỮ KHOẢNH KHẮC</div></td>
                   <td class="r">Số HĐ: %s<br/>Ngày lập: %s</td>
                 </tr></table>
                 <h1>HỢP ĐỒNG DỊCH VỤ CƯỚI</h1>
@@ -107,13 +109,19 @@ public class ContractDocumentRenderer {
                 </body></html>
                 """.formatted(
                 FONT_FAMILY,
-                esc(studio.getName()), esc(c.getContractNumber()), VndFormatter.date(c.getContractDate()),
+                logo(studio), esc(studio.getName()), esc(c.getContractNumber()), VndFormatter.date(c.getContractDate()),
                 esc(c.getCustomerName()), esc(c.getPhone()),
                 esc(studio.getName()), esc(studio.getTaxCode()), esc(studio.getLegalRepresentative()), esc(studio.getAddress()),
                 esc(c.getPackageName()), notes, VndFormatter.vnd(c.getTotalAmount()),
                 schedule,
                 VndFormatter.vnd(c.getTotalAmount()), VndFormatter.vnd(c.getPaidAmount()), VndFormatter.vnd(c.getRemainingAmount()),
                 esc(studio.getBankInfo()));
+    }
+
+    /** The data URL comes from validated bytes; escaped anyway */
+    private static String logo(StudioSettings studio) {
+        String url = StudioLogo.dataUrl(studio);
+        return url == null ? "" : "<img class=\"logo\" src=\"" + esc(url) + "\" alt=\"\"/>";
     }
 
     public byte[] pdf(Contract c, StudioSettings studio) {
