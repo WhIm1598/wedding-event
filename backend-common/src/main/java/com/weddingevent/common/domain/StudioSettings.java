@@ -60,6 +60,13 @@ public class StudioSettings {
     @Column(name = "zns_contract_template_id")
     private String znsContractTemplateId;
 
+    /** Small PNG/JPEG (checked by the admin API); plain byte[] maps to bytea, @Lob would be an oid */
+    @Column(name = "logo")
+    private byte[] logo;
+
+    @Column(name = "logo_content_type", length = 20)
+    private String logoContentType;
+
     public boolean isZaloOaConfigured() {
         return notBlank(zaloOaAppId) && notBlank(zaloOaAppSecret) && notBlank(zaloOaRefreshToken) && notBlank(znsContractTemplateId);
     }
