@@ -107,6 +107,49 @@ class StudioIsolationApiTest extends IntegrationTest {
         assertThat(ids(cashBook, "$.data[*].code")).containsExactly("TRX-001");
     }
 
+    private static String png(int bytes) {
+        return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(new byte[bytes]);
+    }
+
+    private static final String B_SETTINGS =
+            "'name':'Studio B Logo','address':'1 Đường B','taxCode':'0101','legalRepresentative':'Bê','bankInfo':'STK B','zaloPhone':''";
+
+    /** FN-ADM-SET-01: the form always sends the current logo back; null removes it */
+    @Test
+    void settingsLogoIsSavedReadAndKeptWhenSentBack() throws Exception {
+        StudioB b = studioB();
+        String logo = png(10);
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token()).content(json("{" + B_SETTINGS + ",'logo':'" + logo + "'}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.logo").value(logo));
+        mvc.perform(authed(get("/api/v1/admin/settings/studio"), b.token())).andExpect(jsonPath("$.data.logo").value(logo));
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token())
+                        .content(json("{" + B_SETTINGS.replace("1 Đường B", "2 Đường B") + ",'logo':'" + logo + "'}")))
+                .andExpect(jsonPath("$.data.address").value("2 Đường B"))
+                .andExpect(jsonPath("$.data.logo").value(logo));
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token()).content(json("{" + B_SETTINGS + ",'logo':null}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.logo").doesNotExist());
+    }
+
+    @Test
+    void settingsLogoOfTheWrongTypeIs400() throws Exception {
+        StudioB b = studioB();
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token())
+                        .content(json("{" + B_SETTINGS + ",'logo':'data:image/webp;base64,AAAA'}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.errors[0].field").value("logo"));
+    }
+
+    @Test
+    void aStudiosLogoIsItsOwn() throws Exception {
+        StudioB b = studioB();
+        mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token()).content(json("{" + B_SETTINGS + ",'logo':'" + png(8) + "'}")))
+                .andExpect(status().isOk());
+        mvc.perform(authed(get("/api/v1/admin/settings/studio"), adminToken())).andExpect(jsonPath("$.data.logo").doesNotExist());
+    }
+
     @Test
     void aStudioCannotReadOrTouchAnotherStudiosRows() throws Exception {
         String a = adminToken();

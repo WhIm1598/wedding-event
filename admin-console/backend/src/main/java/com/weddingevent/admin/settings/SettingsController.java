@@ -31,11 +31,13 @@ public class SettingsController {
             @NotBlank @Size(max = 20) String taxCode,
             @NotBlank @Size(max = 100) String legalRepresentative,
             @NotBlank @Size(max = 500) String bankInfo,
-            @Pattern(regexp = "^$|" + StaffService.VN_PHONE, message = "Số Zalo không hợp lệ") String zaloPhone) {
+            @Pattern(regexp = "^$|" + StaffService.VN_PHONE, message = "Số Zalo không hợp lệ") String zaloPhone,
+            /** data URL, checked by {@link StudioLogo}; the form always sends the current one, null removes it */
+            String logo) {
 
         public static StudioSettingsDto of(StudioSettings s) {
             return new StudioSettingsDto(s.getName(), s.getAddress(), s.getTaxCode(), s.getLegalRepresentative(), s.getBankInfo(),
-                    s.getZaloPhone());
+                    s.getZaloPhone(), StudioLogo.dataUrl(s));
         }
     }
 
@@ -64,6 +66,7 @@ public class SettingsController {
         s.setLegalRepresentative(req.legalRepresentative().trim());
         s.setBankInfo(req.bankInfo().trim());
         s.setZaloPhone(req.zaloPhone() == null || req.zaloPhone().isBlank() ? null : req.zaloPhone());
+        StudioLogo.apply(s, req.logo());
         return ApiResponse.ok(StudioSettingsDto.of(s), "Đã lưu cấu hình");
     }
 
