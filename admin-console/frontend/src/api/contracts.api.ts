@@ -107,7 +107,7 @@ const INSTALLMENTS: Array<[string, number]> = [
 function toPublic(c: Contract): PublicContract {
   return {
     contractNumber: c.contractNumber,
-    studio: { name: db.settings.name, address: db.settings.address, bankInfo: db.settings.bankInfo },
+    studio: { name: db.settings.name, address: db.settings.address, bankInfo: db.settings.bankInfo, logo: db.settings.logo },
     customerName: c.customerName,
     phone: maskPhone(c.phone),
     packageName: c.packageName,

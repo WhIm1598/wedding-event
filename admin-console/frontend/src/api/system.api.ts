@@ -1,6 +1,6 @@
 import { env } from '@/config/env';
 import { ApiError, http } from './http';
-import { db, delay } from './mock/db';
+import { checkMockLogo, db, delay } from './mock/db';
 import type { AppNotification, SearchResult, StudioSettings, UpdateZaloOaRequest, ZaloOaSettings } from '@/types';
 
 export const notificationsApi = {
@@ -50,6 +50,7 @@ export const settingsApi = {
     if (settings.zaloPhone && !/^0(3|5|7|8|9)[0-9]{8}$/.test(settings.zaloPhone)) {
       throw new ApiError(400, 'BAD_REQUEST', 'Số Zalo không hợp lệ');
     }
+    checkMockLogo(settings.logo);
     db.settings = { ...settings, zaloPhone: settings.zaloPhone || null };
     return delay(settings);
   },

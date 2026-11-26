@@ -9,11 +9,11 @@ No state library, no form library, no test runner. Import alias `@/` = `src/`. U
 | `src/types/index.ts` | All domain types, mirroring the detailed spec JSON (enums = string unions, money = `number` VND, dates = ISO strings) |
 | `src/api/http.ts` | `http.get/post/put/patch/delete/download`, envelope unwrapping, Bearer token + single-flight refresh, `ApiError`, `errorMessage(err)` |
 | `src/api/<module>.api.ts` | One object per spec module (`bookingsApi`, `crmApi`, `contractsApi`, …; notifications/search/settings in `system.api.ts`) |
-| `src/api/mock/db.ts` | In-memory demo data (`db`), `delay()`, `nextId()`; dates relative to today. Shared mock rules: `applyMockPayment()` (contract payment, §1.6) and `syncCustomerStage()` (FN-ADM-CRM-03) |
+| `src/api/mock/db.ts` | In-memory demo data (`db`), `delay()`, `nextId()`; dates relative to today. Shared mock rules: `applyMockPayment()` (contract payment, §1.6) , `syncCustomerStage()` (FN-ADM-CRM-03) and `checkMockLogo()` (studio logo rule) |
 | `src/features/<module>/` | `XxxPage.tsx` + `components/` (modals, tables, slide-overs) for that screen |
 | `src/features/platform/` | `PlatformPage` (`/platform`, ROLE_PLATFORM_ADMIN only, own header, no `AppLayout`; `RequireAuth` sends this role there) — `platformApi` |
 | `src/features/public/` | Pages without login, outside `AppLayout`: `PublicContractPage` (`/c/:token`, the Zalo link; mock link `/c/demo`) |
-| `src/components/ui/` | `Badge`, `Button`, `Card`, `Field/Input/Select/Textarea` (Form.tsx), `Modal`/`SlideOver`, `PageHeader`, `Spinner/ErrorState/EmptyState` |
+| `src/components/ui/` | `Badge`, `Button`, `Card`, `Field/Input/Select/Textarea` (Form.tsx), `Modal`/`SlideOver`, `PageHeader`, `Spinner/ErrorState/EmptyState`, `LogoInput` (studio logo picker → data URL) |
 | `src/components/layout/` | `AppLayout` (+ `useLayout()` outlet context), `Sidebar`, `Header`, `GlobalSearch` (Ctrl+K), `NotificationBell` |
 | `src/app/router.tsx` | Routes; admin-only pages wrapped with `adminOnly(...)` |
 | `src/app/navigation.ts` | Sidebar menu + allowed roles per entry (`NAVIGATION`) |
@@ -21,7 +21,7 @@ No state library, no form library, no test runner. Import alias `@/` = `src/`. U
 | `src/contexts/` | `useAuth()` (user, role, login/logout — logout revokes the refresh token; `setUser` after a password change), `useToast()` |
 | `src/features/auth/` | `LoginPage`, `ChangePasswordModal` (opened from the sidebar; `forced` when `user.mustChangePassword` — `AppLayout` then renders only that modal) |
 | `src/hooks/useAsync.ts` | `useAsync(fn, deps)` → `{ data, error, loading, reload, setData }` |
-| `src/lib/` | `format.ts` (`formatVND`, `formatDate`, `parseMoney`, …), `date.ts` (`todayISO`, `weekRange`, …), `cn.ts` |
+| `src/lib/` | `format.ts` (`formatVND`, `formatDate`, `parseMoney`, …), `date.ts` (`todayISO`, `weekRange`, …), `cn.ts`, `image.ts` (`resizeToDataUrl`: shrink to 256 px PNG/JPEG ≤ 200 KB with a canvas) |
 | `src/config/env.ts` | `env.useMock` (`VITE_USE_MOCK`), API base; `.env.api` switches to the real backend |
 
 ## Recipe: new screen or endpoint

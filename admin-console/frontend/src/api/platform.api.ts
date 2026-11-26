@@ -1,7 +1,7 @@
 import { env } from '@/config/env';
 import { todayISO } from '@/lib/date';
 import { ApiError, http } from './http';
-import { db, delay, nextId } from './mock/db';
+import { checkMockLogo, db, delay, nextId } from './mock/db';
 import type { CreatedAccount, CreatedStudio, CreateStudioRequest, Studio, UpdateStudioRequest } from '@/types';
 
 const mockTemporaryPassword = () => `Tam${Math.random().toString(36).slice(2, 7)}${Math.floor(Math.random() * 90 + 10)}`;
@@ -25,29 +25,42 @@ export const platformApi = {
     return delay(db.studios);
   },
 
-  /** POST /platform/studios — the studio with its first admin (temporary password shown once) */
+  /** POST /platform/studios (FN-PLT-01) — the studio with 1–10 managers (temporary passwords shown once) */
   create(req: CreateStudioRequest): Promise<CreatedStudio> {
     if (!env.useMock) return http.post('/platform/studios', req);
     if (!req.name.trim()) throw new ApiError(400, 'BAD_REQUEST', 'Cần tên studio');
-    const admin = mockAdmin(req.adminEmail, req.adminName);
+    if (req.admins.length < 1 || req.admins.length > 10) throw new ApiError(400, 'BAD_REQUEST', 'Cần từ 1 đến 10 quản lý');
+    const emails = req.admins.map((a) => a.email.trim().toLowerCase());
+    if (new Set(emails).size !== emails.length) throw new ApiError(400, 'BAD_REQUEST', 'Email quản lý bị trùng trong danh sách');
+    checkMockLogo(req.logo);
+    // Check every email before creating anything, like the backend's single transaction
+    if (db.users.some((u) => emails.includes(u.email.toLowerCase()))) {
+      throw new ApiError(409, 'EMAIL_EXISTS', 'Email đã được dùng cho một tài khoản khác');
+    }
+    const admins = req.admins.map((a) => mockAdmin(a.email, a.name));
     const studio: Studio = {
       id: nextId('st'),
       name: req.name.trim(),
+      logo: req.logo || null,
       status: 'ACTIVE',
       subscriptionExpiresAt: req.subscriptionExpiresAt,
       usable: usable({ status: 'ACTIVE', subscriptionExpiresAt: req.subscriptionExpiresAt }),
-      adminCount: 1,
+      adminCount: admins.length,
       createdAt: new Date().toISOString(),
     };
     db.studios.push(studio);
-    return delay({ studio, admin });
+    return delay({ studio, admins });
   },
 
-  /** PATCH /platform/studios/{id} — status and subscription end (null = no end) */
+  /** PATCH /platform/studios/{id} (FN-PLT-02) — status, subscription end (null = no end); name/logo left out = keep, logo '' = remove */
   update(id: string, req: UpdateStudioRequest): Promise<Studio> {
     if (!env.useMock) return http.patch(`/platform/studios/${id}`, req);
+    if (req.name !== undefined && !req.name.trim()) throw new ApiError(400, 'BAD_REQUEST', 'Cần tên studio');
+    checkMockLogo(req.logo);
     const studio = db.studios.find((s) => s.id === id)!;
-    Object.assign(studio, req, { usable: usable(req) });
+    Object.assign(studio, { status: req.status, subscriptionExpiresAt: req.subscriptionExpiresAt, usable: usable(req) });
+    if (req.name !== undefined) studio.name = req.name.trim();
+    if (req.logo != null) studio.logo = req.logo || null;
     return delay(studio);
   },
 

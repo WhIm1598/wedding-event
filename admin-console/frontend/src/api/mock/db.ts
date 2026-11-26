@@ -1,6 +1,8 @@
 // In-memory mock database seeded from docs/templates/lumi_re_studios_admin_dashboard.tsx.
 // Dates are relative to today so the demo always has "today" data. Data resets on page reload.
+import { ApiError } from '../http';
 import { addDays, todayISO } from '@/lib/date';
+import { MAX_LOGO_BYTES } from '@/lib/image';
 import type {
   AppNotification,
   Asset,
@@ -43,8 +45,8 @@ export const db = {
 
   // Studios of the platform (FN-PLT-01); the demo studio is the first one
   studios: [
-    { id: 'st-1', name: 'LUMIÈRE STUDIOS', status: 'ACTIVE', subscriptionExpiresAt: null, usable: true, adminCount: 1, createdAt: minutesAgo(60 * 24 * 90) },
-    { id: 'st-2', name: 'Studio Hoa Biển', status: 'SUSPENDED', subscriptionExpiresAt: addDays(today, -5), usable: false, adminCount: 1, createdAt: minutesAgo(60 * 24 * 30) },
+    { id: 'st-1', name: 'LUMIÈRE STUDIOS', status: 'ACTIVE', subscriptionExpiresAt: null, usable: true, logo: null, adminCount: 1, createdAt: minutesAgo(60 * 24 * 90) },
+    { id: 'st-2', name: 'Studio Hoa Biển', status: 'SUSPENDED', subscriptionExpiresAt: addDays(today, -5), usable: false, logo: null, adminCount: 1, createdAt: minutesAgo(60 * 24 * 30) },
   ] as Studio[],
 
   // Login accounts (FN-ADM-USER-01); ids match the demo users in auth.api.ts
@@ -115,6 +117,7 @@ export const db = {
     taxCode: '0312345678',
     legalRepresentative: 'Nguyễn Văn A',
     bankInfo: 'Vietcombank - Chi nhánh HCM\nSTK: 0123456789\nChủ TK: NGUYEN VAN A',
+    logo: null,
   } as StudioSettings,
 
   // Zalo OA of the studio (FN-ADM-SET-02); the mock keeps it connected so "Gửi Zalo" works in the demo
@@ -150,4 +153,13 @@ export function applyMockPayment(contract: Contract, amount: number): void {
   if (contract.status === 'DEPOSITED' && started) contract.status = 'IN_PROGRESS';
   if (contract.remainingAmount === 0 && contract.deliveredAt) contract.status = 'COMPLETED';
   syncCustomerStage(contract);
+}
+
+const LOGO = /^data:(image\/png|image\/jpeg);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/** Same rule as the backend's StudioLogo: PNG/JPEG data URL, ≤ 200 KB decoded */
+export function checkMockLogo(logo: string | null | undefined) {
+  if (logo && (!LOGO.test(logo) || (logo.length - logo.indexOf(',') - 1) * 0.75 > MAX_LOGO_BYTES)) {
+    throw new ApiError(400, 'BAD_REQUEST', 'Logo phải là ảnh PNG hoặc JPEG, tối đa 200 KB');
+  }
 }

@@ -227,6 +227,8 @@ export interface StudioSettings {
   bankInfo: string;
   /** v1.1.3: Zalo number couples open from the WedPlanner app (FN-SVC-02); empty = no Zalo link */
   zaloPhone?: string | null;
+  /** data URL (PNG/JPEG ≤ 200 KB); the form always sends the current one, null removes it */
+  logo: string | null;
 }
 
 export interface SearchResult {
@@ -312,7 +314,7 @@ export interface Installment {
 
 export interface PublicContract {
   contractNumber: string;
-  studio: { name: string; address: string; bankInfo: string };
+  studio: { name: string; address: string; bankInfo: string; logo: string | null };
   customerName: string;
   /** masked */
   phone: string;
@@ -333,6 +335,7 @@ export type StudioStatus = 'ACTIVE' | 'SUSPENDED';
 export interface Studio {
   id: string;
   name: string | null;
+  logo: string | null;
   status: StudioStatus;
   subscriptionExpiresAt: string | null;
   /** active and not past the subscription: its people can sign in */
@@ -341,19 +344,32 @@ export interface Studio {
   createdAt: string;
 }
 
+export interface NewStudioAdmin {
+  email: string;
+  name: string;
+}
+
+/** FN-PLT-01: 1–10 managers; blank contract details stay "Chưa cập nhật" */
 export interface CreateStudioRequest {
   name: string;
   subscriptionExpiresAt: string | null;
-  adminEmail: string;
-  adminName: string;
+  logo: string | null;
+  address?: string;
+  taxCode?: string;
+  legalRepresentative?: string;
+  bankInfo?: string;
+  admins: NewStudioAdmin[];
 }
 
 export interface CreatedStudio {
   studio: Studio;
-  admin: CreatedAccount;
+  admins: CreatedAccount[];
 }
 
+/** FN-PLT-02: name/logo left out = keep; logo '' = remove */
 export interface UpdateStudioRequest {
   status: StudioStatus;
   subscriptionExpiresAt: string | null;
+  name?: string;
+  logo?: string | null;
 }
