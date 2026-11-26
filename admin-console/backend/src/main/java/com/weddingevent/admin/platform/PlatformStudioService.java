@@ -55,7 +55,7 @@ public class PlatformStudioService {
             @Size(max = 20) String taxCode,
             @Size(max = 100) String legalRepresentative,
             @Size(max = 500) String bankInfo,
-            @NotNull @Size(min = 1, max = 10) List<@Valid NewAdmin> admins) {}
+            @NotNull @Size(min = 1, max = 10) List<@NotNull @Valid NewAdmin> admins) {}
 
     public record CreatedStudioDto(StudioDto studio, List<CreatedAccountDto> admins) {}
 
@@ -93,7 +93,7 @@ public class PlatformStudioService {
         return all.stream().map(s -> toDto(s, profiles.get(s.getId()))).toList();
     }
 
-    /** Studio, its settings row and its first admin (temporary password) in one transaction */
+    /** Studio, its settings row and its managers (temporary passwords) in one transaction */
     @Transactional
     public CreatedStudioDto create(CreateStudioRequest req) {
         Set<String> emails = new HashSet<>();

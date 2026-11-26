@@ -204,6 +204,7 @@ class StudioIsolationApiTest extends IntegrationTest {
     void badManagerListsAre400() throws Exception {
         int before = studioCount();
         postStudio("{'name':'Studio E','admins':[]}").andExpect(status().isBadRequest());
+        postStudio("{'name':'Studio E','admins':[null]}").andExpect(status().isBadRequest());
         String eleven = java.util.stream.IntStream.range(0, 11)
                 .mapToObj(i -> "{'email':'e%d-%s@x.vn','name':'N'}".formatted(i, UUID.randomUUID())).collect(java.util.stream.Collectors.joining(","));
         postStudio("{'name':'Studio E','admins':[" + eleven + "]}").andExpect(status().isBadRequest());
