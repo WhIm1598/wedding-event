@@ -35,7 +35,7 @@ class StudioIsolationApiTest extends IntegrationTest {
 
     private ResultActions createStudio(String token, String name, String adminEmail) throws Exception {
         return mvc.perform(authed(post("/api/v1/platform/studios"), token)
-                .content(json("{'name':'%s','adminEmail':'%s','adminName':'Chủ Studio B'}".formatted(name, adminEmail))));
+                .content(json("{'name':'%s','admins':[{'email':'%s','name':'Chủ Studio B'}]}".formatted(name, adminEmail))));
     }
 
     /** A new studio with its first admin signed in (temporary password already changed) */
@@ -43,7 +43,7 @@ class StudioIsolationApiTest extends IntegrationTest {
         String email = "owner-" + UUID.randomUUID() + "@studio-b.vn";
         String created = createStudio(platformToken(), "Studio B " + email.substring(6, 12), email)
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        String temporary = read(created, "$.data.admin.temporaryPassword");
+        String temporary = read(created, "$.data.admins[0].temporaryPassword");
         String first = login(email, temporary);
         String changed = body(post("/api/v1/admin/auth/change-password")
                 .content(json("{'currentPassword':'%s','newPassword':'%s'}".formatted(temporary, NEW_PASSWORD))), first);
@@ -148,6 +148,100 @@ class StudioIsolationApiTest extends IntegrationTest {
         mvc.perform(authed(put("/api/v1/admin/settings/studio"), b.token()).content(json("{" + B_SETTINGS + ",'logo':'" + png(8) + "'}")))
                 .andExpect(status().isOk());
         mvc.perform(authed(get("/api/v1/admin/settings/studio"), adminToken())).andExpect(jsonPath("$.data.logo").doesNotExist());
+    }
+
+    private int studioCount() throws Exception {
+        return JsonPath.read(body(get("/api/v1/platform/studios"), platformToken()), "$.data.length()");
+    }
+
+    private ResultActions postStudio(String jsonBody) throws Exception {
+        return mvc.perform(authed(post("/api/v1/platform/studios"), platformToken()).content(json(jsonBody)));
+    }
+
+    /** FN-PLT-01: several managers, contract details and the logo in one step */
+    @Test
+    void aStudioIsCreatedWithTwoManagersDetailsAndLogo() throws Exception {
+        String one = "m1-" + UUID.randomUUID() + "@studio-c.vn";
+        String two = "m2-" + UUID.randomUUID() + "@studio-c.vn";
+        String logo = png(10);
+        String created = postStudio("""
+                {'name':'Studio C','logo':'%s','address':'12 Lê Lợi',
+                 'admins':[{'email':'%s','name':'Quản Lý Một'},{'email':'%s','name':'Quản Lý Hai'}]}
+                """.formatted(logo, one, two))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.admins.length()").value(2))
+                .andExpect(jsonPath("$.data.admins[0].user.role").value("ROLE_ADMIN"))
+                .andExpect(jsonPath("$.data.admins[1].user.role").value("ROLE_ADMIN"))
+                .andExpect(jsonPath("$.data.studio.adminCount").value(2))
+                .andExpect(jsonPath("$.data.studio.logo").value(logo))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        for (int i = 0; i < 2; i++) {
+            String token = login(i == 0 ? one : two, read(created, "$.data.admins[" + i + "].temporaryPassword"));
+            String changed = body(post("/api/v1/admin/auth/change-password")
+                    .content(json("{'currentPassword':'%s','newPassword':'%s'}".formatted(
+                            read(created, "$.data.admins[" + i + "].temporaryPassword"), NEW_PASSWORD))), token);
+            mvc.perform(authed(get("/api/v1/admin/settings/studio"), read(changed, "$.data.accessToken")))
+                    .andExpect(jsonPath("$.data.address").value("12 Lê Lợi"))
+                    .andExpect(jsonPath("$.data.taxCode").value("Chưa cập nhật"))
+                    .andExpect(jsonPath("$.data.logo").value(logo));
+        }
+        String list = body(get("/api/v1/platform/studios"), platformToken());
+        assertThat(first(list, "$.data[?(@.id=='%s')].logo".formatted(read(created, "$.data.studio.id")))).isEqualTo(logo);
+    }
+
+    @Test
+    void anExistingEmailCreatesNothing() throws Exception {
+        int before = studioCount();
+        String fresh = "new-" + UUID.randomUUID() + "@studio-d.vn";
+        postStudio("{'name':'Studio D','admins':[{'email':'%s','name':'Mới'},{'email':'%s','name':'Cũ'}]}".formatted(fresh, ADMIN_EMAIL))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EMAIL_EXISTS"));
+        assertThat(studioCount()).isEqualTo(before);
+        loginAttempt(fresh, "anything1").andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void badManagerListsAre400() throws Exception {
+        int before = studioCount();
+        postStudio("{'name':'Studio E','admins':[]}").andExpect(status().isBadRequest());
+        String eleven = java.util.stream.IntStream.range(0, 11)
+                .mapToObj(i -> "{'email':'e%d-%s@x.vn','name':'N'}".formatted(i, UUID.randomUUID())).collect(java.util.stream.Collectors.joining(","));
+        postStudio("{'name':'Studio E','admins':[" + eleven + "]}").andExpect(status().isBadRequest());
+        String dup = UUID.randomUUID() + "@x.vn";
+        postStudio("{'name':'Studio E','admins':[{'email':'A%s','name':'A'},{'email':'a%s','name':'B'}]}".formatted(dup, dup))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("admins"));
+        assertThat(studioCount()).isEqualTo(before);
+    }
+
+    @Test
+    void badLogoOnCreateIs400() throws Exception {
+        int before = studioCount();
+        postStudio("{'name':'Studio F','logo':'data:image/webp;base64,AAAA','admins':[{'email':'%s@x.vn','name':'F'}]}"
+                        .formatted(UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("logo"));
+        assertThat(studioCount()).isEqualTo(before);
+    }
+
+    /** FN-PLT-02: name and logo are optional; null keeps them, "" removes the logo */
+    @Test
+    void platformEditsNameAndLogo() throws Exception {
+        StudioB b = studioB();
+        String url = "/api/v1/platform/studios/" + b.id();
+        String logo = png(4);
+        mvc.perform(authed(patch(url), platformToken())
+                        .content(json("{'status':'ACTIVE','subscriptionExpiresAt':null,'name':'Tên Mới','logo':'%s'}".formatted(logo))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Tên Mới"))
+                .andExpect(jsonPath("$.data.logo").value(logo));
+        setStatus(b.id(), "ACTIVE", null)
+                .andExpect(jsonPath("$.data.name").value("Tên Mới"))
+                .andExpect(jsonPath("$.data.logo").value(logo));
+        mvc.perform(authed(patch(url), platformToken()).content(json("{'status':'ACTIVE','subscriptionExpiresAt':null,'logo':''}")))
+                .andExpect(jsonPath("$.data.logo").doesNotExist());
+        mvc.perform(authed(patch(url), platformToken()).content(json("{'status':'ACTIVE','subscriptionExpiresAt':null,'name':'  '}")))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
