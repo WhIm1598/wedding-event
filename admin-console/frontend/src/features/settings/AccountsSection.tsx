@@ -161,26 +161,35 @@ function AccountFormModal({ account, onClose, onSaved }: { account: UserAccount 
   );
 }
 
-export function TemporaryPasswordModal({ issued, onClose }: { issued: CreatedAccount; onClose: () => void }) {
+/** One account, or every manager of a new studio (FN-PLT-01); passwords are shown only here */
+export function TemporaryPasswordModal({ issued, onClose }: { issued: CreatedAccount | CreatedAccount[]; onClose: () => void }) {
   const showToast = useToast();
-  const copy = () =>
-    navigator.clipboard.writeText(issued.temporaryPassword).then(
+  const accounts = Array.isArray(issued) ? issued : [issued];
+  const copy = (password: string) =>
+    navigator.clipboard.writeText(password).then(
       () => showToast('Đã sao chép mật khẩu tạm'),
       () => showToast('Không sao chép được, hãy chép tay', 'error'),
     );
 
   return (
-    <Modal isOpen onClose={onClose} title="Mật khẩu tạm">
+    <Modal isOpen onClose={onClose} title={accounts.length > 1 ? 'Mật khẩu tạm của các quản lý' : 'Mật khẩu tạm'}>
       <div className="space-y-4 text-sm text-slate-600">
         <p>
-          Gửi cho <b>{issued.user.name}</b> ({issued.user.email}). Mật khẩu này <b>chỉ hiện một lần</b>; người dùng phải đổi khi đăng nhập lần đầu.
+          Mật khẩu <b>chỉ hiện một lần</b>; người dùng phải đổi khi đăng nhập lần đầu.
         </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 px-4 py-3 bg-slate-100 rounded-lg text-lg font-mono text-slate-900 select-all">{issued.temporaryPassword}</code>
-          <Button type="button" variant="ghost" onClick={copy} aria-label="Sao chép mật khẩu tạm">
-            <Copy size={18} />
-          </Button>
-        </div>
+        {accounts.map((a) => (
+          <div key={a.user.id}>
+            <p className="mb-1">
+              Gửi cho <b>{a.user.name}</b> ({a.user.email})
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-4 py-3 bg-slate-100 rounded-lg text-lg font-mono text-slate-900 select-all">{a.temporaryPassword}</code>
+              <Button type="button" variant="ghost" onClick={() => copy(a.temporaryPassword)} aria-label={`Sao chép mật khẩu tạm của ${a.user.email}`}>
+                <Copy size={18} />
+              </Button>
+            </div>
+          </div>
+        ))}
         <div className="flex justify-end">
           <Button onClick={onClose}>Đã lưu lại</Button>
         </div>
