@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Camera, KeyRound, LogOut, X } from 'lucide-react';
-import { settingsApi } from '@/api/system.api';
+import { STUDIO_SETTINGS_CHANGED, settingsApi } from '@/api/system.api';
 import { NAVIGATION } from '@/app/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal';
@@ -13,7 +13,14 @@ export function Sidebar({ isMobileOpen, onClose }: { isMobileOpen: boolean; onCl
   const [changingPassword, setChangingPassword] = useState(false);
   // The platform admin has no studio (that call answers 403); a failed load keeps the default brand
   const inStudio = !!user && user.role !== 'ROLE_PLATFORM_ADMIN';
-  const { data: studio, loading: studioLoading } = useAsync(() => (inStudio ? settingsApi.get() : Promise.resolve(null)), [inStudio]);
+  const { data: studio, loading: studioLoading, reload: reloadStudio } = useAsync(
+    () => (inStudio ? settingsApi.get() : Promise.resolve(null)),
+    [inStudio],
+  );
+  useEffect(() => {
+    window.addEventListener(STUDIO_SETTINGS_CHANGED, reloadStudio);
+    return () => window.removeEventListener(STUDIO_SETTINGS_CHANGED, reloadStudio);
+  }, [reloadStudio]);
   if (!user) return null;
 
   const items = NAVIGATION.filter((nav) => nav.roles.includes(user.role));

@@ -160,6 +160,6 @@ const LOGO = /^data:(image\/png|image\/jpeg);base64,[A-Za-z0-9+/]+={0,2}$/;
 /** Same rule as the backend's StudioLogo: PNG/JPEG data URL, ≤ 200 KB decoded */
 export function checkMockLogo(logo: string | null | undefined) {
   if (logo && (!LOGO.test(logo) || (logo.length - logo.indexOf(',') - 1) * 0.75 > MAX_LOGO_BYTES)) {
-    throw new ApiError(400, 'BAD_REQUEST', 'Logo phải là ảnh PNG hoặc JPEG, tối đa 200 KB');
+    throw new ApiError(400, 'BAD_REQUEST', 'Logo phải là ảnh PNG hoặc JPEG, tối đa 200 KB và 1024 px mỗi cạnh');
   }
 }

@@ -108,7 +108,7 @@ class StudioIsolationApiTest extends IntegrationTest {
     }
 
     private static String png(int bytes) {
-        return "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(new byte[bytes]);
+        return TestImages.png(bytes);
     }
 
     private static final String B_SETTINGS =

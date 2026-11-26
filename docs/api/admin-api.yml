@@ -2999,7 +2999,7 @@ components:
       type: [string, 'null']
       description: >-
         v1.2.1: studio logo as a data URL, `data:image/png;base64,…` or `data:image/jpeg;base64,…` (no WebP: the
-        contract PDF can't draw it), at most 204 800 bytes decoded. Anything else → `400 BAD_REQUEST` on `logo`.
+        contract PDF can't draw it), at most 204 800 bytes decoded, a readable image header and at most 1024 px per side. Anything else → `400 BAD_REQUEST` on `logo`.
       example: "data:image/png;base64,iVBORw0KGgo="
     StudioDto:
       type: object

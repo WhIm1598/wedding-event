@@ -3,10 +3,13 @@ package com.weddingevent.admin.settings;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import static com.weddingevent.admin.TestImages.dataUrl;
+import static com.weddingevent.admin.TestImages.image;
+import static com.weddingevent.admin.TestImages.png;
+
 import com.weddingevent.common.api.ApiResponse;
 import com.weddingevent.common.domain.StudioSettings;
 import com.weddingevent.common.exception.AppException;
-import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -14,23 +17,19 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class StudioLogoTest {
 
-    private static String png(int bytes) {
-        return "data:image/png;base64," + Base64.getEncoder().encodeToString(new byte[bytes]);
-    }
-
     @Test
     void pngRoundTrips() {
         var s = new StudioSettings();
-        StudioLogo.apply(s, png(10));
+        StudioLogo.apply(s, png(100));
         assertThat(s.getLogoContentType()).isEqualTo("image/png");
-        assertThat(s.getLogo()).hasSize(10);
-        assertThat(StudioLogo.dataUrl(s)).isEqualTo(png(10));
+        assertThat(s.getLogo()).hasSize(100);
+        assertThat(StudioLogo.dataUrl(s)).isEqualTo(png(100));
     }
 
     @Test
     void jpegIsAccepted() {
         var s = new StudioSettings();
-        StudioLogo.apply(s, "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(new byte[3]));
+        StudioLogo.apply(s, dataUrl("image/jpeg", image("jpg", 2, 2)));
         assertThat(s.getLogoContentType()).isEqualTo("image/jpeg");
     }
 
@@ -59,6 +58,23 @@ class StudioLogoTest {
         assertThatThrownBy(() -> StudioLogo.apply(new StudioSettings(), value))
                 .isInstanceOfSatisfying(AppException.class, e -> assertThat(e.getErrors())
                         .extracting(ApiResponse.FieldError::field).containsExactly("logo"));
+    }
+
+    /** Final review: a small file must not make every contract PDF decode a huge raster on the shared server */
+    @Test
+    void bytesThatAreNotAnImageAreRejected() {
+        assertThatThrownBy(() -> StudioLogo.apply(new StudioSettings(), dataUrl("image/png", new byte[100])))
+                .isInstanceOfSatisfying(AppException.class, e -> assertThat(e.getErrors())
+                        .extracting(ApiResponse.FieldError::field).containsExactly("logo"));
+    }
+
+    @Test
+    void anImageWiderOrTallerThan1024PxIsRejected() {
+        assertThatThrownBy(() -> StudioLogo.apply(new StudioSettings(), dataUrl("image/png", image("png", 1025, 1))))
+                .isInstanceOf(AppException.class);
+        assertThatThrownBy(() -> StudioLogo.apply(new StudioSettings(), dataUrl("image/png", image("png", 1, 1025))))
+                .isInstanceOf(AppException.class);
+        StudioLogo.apply(new StudioSettings(), dataUrl("image/png", image("png", 1024, 1)));
     }
 
     @Test

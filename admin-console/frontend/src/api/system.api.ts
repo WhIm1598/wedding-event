@@ -37,6 +37,9 @@ export const searchApi = {
   },
 };
 
+/** Fired after the studio settings are saved, so the sidebar shows the new name and logo */
+export const STUDIO_SETTINGS_CHANGED = 'studio-settings-changed';
+
 export const settingsApi = {
   /** GET /admin/settings/studio */
   get(): Promise<StudioSettings> {
@@ -45,14 +48,10 @@ export const settingsApi = {
   },
 
   /** PUT /admin/settings/studio */
-  update(settings: StudioSettings): Promise<StudioSettings> {
-    if (!env.useMock) return http.put('/admin/settings/studio', settings);
-    if (settings.zaloPhone && !/^0(3|5|7|8|9)[0-9]{8}$/.test(settings.zaloPhone)) {
-      throw new ApiError(400, 'BAD_REQUEST', 'Số Zalo không hợp lệ');
-    }
-    checkMockLogo(settings.logo);
-    db.settings = { ...settings, zaloPhone: settings.zaloPhone || null };
-    return delay(settings);
+  async update(settings: StudioSettings): Promise<StudioSettings> {
+    const saved = await (env.useMock ? mockUpdateSettings(settings) : http.put<StudioSettings>('/admin/settings/studio', settings));
+    window.dispatchEvent(new Event(STUDIO_SETTINGS_CHANGED));
+    return saved;
   },
 
   /** GET /admin/settings/zalo-oa (FN-ADM-SET-02) — secrets are never returned */
@@ -78,3 +77,12 @@ export const settingsApi = {
     return delay(db.zaloOa);
   },
 };
+
+function mockUpdateSettings(settings: StudioSettings): Promise<StudioSettings> {
+  if (settings.zaloPhone && !/^0(3|5|7|8|9)[0-9]{8}$/.test(settings.zaloPhone)) {
+    throw new ApiError(400, 'BAD_REQUEST', 'Số Zalo không hợp lệ');
+  }
+  checkMockLogo(settings.logo);
+  db.settings = { ...settings, zaloPhone: settings.zaloPhone || null };
+  return delay(settings);
+}
