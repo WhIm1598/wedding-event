@@ -8,6 +8,7 @@ import { NAVIGATION } from '@/app/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Field, Input, Textarea } from '@/components/ui/Form';
+import { LogoInput } from '@/components/ui/LogoInput';
 import { Spinner } from '@/components/ui/States';
 import { cn } from '@/lib/cn';
 import { AccountsSection } from './AccountsSection';
@@ -64,8 +65,11 @@ export function SettingsPage() {
 function StudioForm() {
   const showToast = useToast();
   const [saving, setSaving] = useState(false);
+  // undefined = not touched yet: the saved logo is sent back unchanged
+  const [logo, setLogo] = useState<string | null | undefined>(undefined);
   const { data, loading } = useAsync(() => settingsApi.get());
   if (loading || !data) return <Spinner />;
+  const currentLogo = logo === undefined ? data.logo : logo;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -79,6 +83,7 @@ function StudioForm() {
         legalRepresentative: String(fd.get('legalRepresentative')),
         bankInfo: String(fd.get('bankInfo')),
         zaloPhone: String(fd.get('zaloPhone') || '').trim() || null,
+        logo: currentLogo,
       });
       showToast('Đã lưu cấu hình');
     } catch (err) {
@@ -93,6 +98,9 @@ function StudioForm() {
       <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2">Thông tin Studio (Hiển thị trên HĐ)</h3>
       <Field label="Tên Studio">
         <Input name="name" defaultValue={data.name} />
+      </Field>
+      <Field label="Logo (hiện ở menu và trên hợp đồng; PNG/JPEG, tự thu nhỏ)">
+        <LogoInput value={currentLogo} onChange={setLogo} />
       </Field>
       <Field label="Địa chỉ kinh doanh">
         <Input name="address" defaultValue={data.address} />

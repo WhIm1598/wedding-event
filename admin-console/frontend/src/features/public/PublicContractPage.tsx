@@ -64,6 +64,7 @@ export function PublicContractPage() {
     <main className="min-h-screen bg-slate-50 py-6 px-4">
       <div className="max-w-xl mx-auto space-y-4">
         <header className="text-center">
+          {data.studio.logo && <img src={data.studio.logo} alt="" className="h-12 w-auto mx-auto mb-2 object-contain" />}
           <p className="text-xs tracking-widest text-slate-400">HỢP ĐỒNG DỊCH VỤ CƯỚI</p>
           <h1 className="text-2xl font-bold text-slate-900">{data.studio.name}</h1>
           <p className="text-sm text-slate-500">{data.studio.address}</p>

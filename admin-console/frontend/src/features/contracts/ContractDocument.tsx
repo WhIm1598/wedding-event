@@ -16,9 +16,13 @@ export function ContractDocument({ contract, studio }: { contract: Contract; stu
       <div className="absolute top-0 left-0 w-full h-2 bg-rose-600" />
       <div className="flex justify-between items-start border-b-2 border-slate-100 pb-6 mb-6">
         <div className="flex items-center gap-3">
-          <div className="bg-rose-600 text-white p-2 rounded-lg">
-            <Camera size={24} />
-          </div>
+          {studio?.logo ? (
+            <img src={studio.logo} alt="" className="h-12 w-auto object-contain" />
+          ) : (
+            <div className="bg-rose-600 text-white p-2 rounded-lg">
+              <Camera size={24} />
+            </div>
+          )}
           <div>
             <h1 className="font-bold text-2xl tracking-tight text-slate-900">{studio?.name ?? 'LUMIÈRE STUDIOS'}</h1>
             <p className="text-xs text-slate-500 uppercase tracking-widest">Lưu Giữ Khoảnh Khắc</p>

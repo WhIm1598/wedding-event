@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Camera, KeyRound, LogOut, X } from 'lucide-react';
+import { settingsApi } from '@/api/system.api';
 import { NAVIGATION } from '@/app/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal';
+import { useAsync } from '@/hooks/useAsync';
 import { cn } from '@/lib/cn';
 
 export function Sidebar({ isMobileOpen, onClose }: { isMobileOpen: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
   const [changingPassword, setChangingPassword] = useState(false);
+  // The platform admin has no studio (that call answers 403); a failed load keeps the default brand
+  const inStudio = !!user && user.role !== 'ROLE_PLATFORM_ADMIN';
+  const { data: studio, loading: studioLoading } = useAsync(() => (inStudio ? settingsApi.get() : Promise.resolve(null)), [inStudio]);
   if (!user) return null;
 
   const items = NAVIGATION.filter((nav) => nav.roles.includes(user.role));
@@ -23,13 +28,30 @@ export function Sidebar({ isMobileOpen, onClose }: { isMobileOpen: boolean; onCl
       )}
     >
       <div className="p-6 flex items-center gap-3">
-        <div className="bg-rose-600 text-white p-2 rounded-lg shadow-sm">
-          <Camera size={24} />
-        </div>
-        <div>
-          <h1 className="font-bold text-xl tracking-tight leading-tight">Lumière</h1>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Studios</p>
-        </div>
+        {inStudio && studioLoading ? (
+          <div className="w-10 h-10 rounded-lg bg-slate-100 animate-pulse" aria-hidden />
+        ) : studio ? (
+          <>
+            {studio.logo ? (
+              <img src={studio.logo} alt="" className="w-10 h-10 rounded-lg object-contain shrink-0" />
+            ) : (
+              <div className="bg-rose-600 text-white w-10 h-10 rounded-lg shadow-sm font-bold flex items-center justify-center shrink-0">
+                {studio.name.charAt(0)}
+              </div>
+            )}
+            <h1 className="font-bold text-lg tracking-tight leading-tight min-w-0 break-words">{studio.name}</h1>
+          </>
+        ) : (
+          <>
+            <div className="bg-rose-600 text-white p-2 rounded-lg shadow-sm">
+              <Camera size={24} />
+            </div>
+            <div>
+              <h1 className="font-bold text-xl tracking-tight leading-tight">Lumière</h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Studios</p>
+            </div>
+          </>
+        )}
         <button className="md:hidden ml-auto text-slate-400 hover:text-slate-600" onClick={onClose} aria-label="Đóng menu">
           <X size={20} />
         </button>
